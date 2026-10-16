@@ -4,7 +4,7 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
   "rustVersion": "1.97.1",
   "sdkVersion": "0.1.0",
   "abiVersion": 0,
-  "contentHash": "c219690850999e82f66ce369a7aa13a65b48e3fcd6bfa786f0c05011650ed020",
+  "contentHash": "ee2ede452d216671472b089bc9d6e43b5afcc9debe4d8e9ea2be4f041a282485",
   "crates": [
     {
       "name": "alloc",
@@ -13,8 +13,8 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "name": "ckx-sdk",
-      "version": "0.7.0",
-      "sourceHash": "b4583d898c102c2ff1ea677470cc41b1c72dc49dd5f14c1e9c17d13da1bb0733"
+      "version": "0.12.1",
+      "sourceHash": "d286cb4b12326cbaf7c78c10a593f393d28cbdaa248a3507a179c5c4843ce5aa"
     },
     {
       "name": "core",
@@ -24,7 +24,7 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     {
       "name": "crowdy-client-sdk",
       "version": "0.1.0",
-      "sourceHash": "2d21f7c4f1fee650437edbce435b3c50609be4ee49c646916be504ac2be8f6e9"
+      "sourceHash": "f176bc8c68bcb60dda2104b2270ca2b41ec33c299b03c9eec1c4cd1d1a479098"
     }
   ],
   "symbols": [
@@ -184,6 +184,13 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "ckx_sdk",
+      "name": "Ctx::access",
+      "kind": "method",
+      "signature": "pub fn access(&self) -> node::Access<'_>",
+      "docs": "Players' access to this app: read, grant, revoke, suspend (scopes `access.read`, `access.write`)."
+    },
+    {
+      "module": "ckx_sdk",
       "name": "Ctx::app",
       "kind": "field",
       "signature": "pub app: u64",
@@ -250,7 +257,7 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "name": "Ctx::grids",
       "kind": "method",
       "signature": "pub fn grids(&self) -> node::Grids<'_>",
-      "docs": "This app's grids and their permissions (scope `grids.read`)."
+      "docs": "This app's grids and their permissions (scopes `grids.read`, `grids.write`)."
     },
     {
       "module": "ckx_sdk",
@@ -285,7 +292,7 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "name": "Ctx::node",
       "kind": "method",
       "signature": "pub fn node(&self, op: &str, payload: &[u8]) -> Result<Vec<u8>, CallError>",
-      "docs": "A raw node API request: `op` and a JSON body, answered with JSON. The typed operations behind [`Ctx::world`], [`Ctx::grids`], [`Ctx::players`] and [`Ctx::permissions`] use it."
+      "docs": "A raw node API request: `op` and a JSON body, answered with JSON. The typed operations behind [`Ctx::world`], [`Ctx::grids`], [`Ctx::players`], [`Ctx::permissions`] and [`Ctx::access`] use it."
     },
     {
       "module": "ckx_sdk",
@@ -772,6 +779,13 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "ckx_sdk",
+      "name": "Status::as_u8",
+      "kind": "method",
+      "signature": "pub fn as_u8(self) -> u8",
+      "docs": "The wire status code: [`Status::from_u8`] reversed."
+    },
+    {
+      "module": "ckx_sdk",
       "name": "Status::from_u8",
       "kind": "method",
       "signature": "pub fn from_u8(v: u8) -> Self",
@@ -912,6 +926,20 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "ckx_sdk",
+      "name": "kit",
+      "kind": "module",
+      "signature": "pub mod kit;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "limits",
+      "kind": "module",
+      "signature": "pub mod limits;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
       "name": "model",
       "kind": "module",
       "signature": "pub mod model;",
@@ -1026,7 +1054,7 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "module": "ckx_sdk::emit",
       "name": "Spatial",
       "kind": "enum",
-      "signature": "pub enum Spatial<'a> { /// An actor's state: a server-driven actor appears and moves like a player's. Actor { state: &'a [u8] }, /// A voxel edit at `(x, y, z)` within the chunk, folded into the live mesh. The durable /// write is `ctx.world().set_voxels`, which already shows it; this is for effects. Voxel { x: i16, y: i16, z: i16, voxel_type: u16, state: &'a [u8] }, /// A server event (`event_type`, then `state`), as games route server events. Event { event_type: u16, state: &'a [u8] }, /// An app-defined payload. Generic { payload: &'a [u8] }, /// A message to the one actor named as the event's actor. ActorMessage { payload: &'a [u8] }, }",
+      "signature": "pub enum Spatial<'a> { /// An actor's state: a server-driven actor appears and moves like a player's. Actor { state: &'a [u8] }, /// A voxel edit at `(x, y, z)` within the chunk, folded into the live mesh. The durable /// write is `ctx.world().set_voxels`, which already shows it; this is for effects. Voxel { x: i16, y: i16, z: i16, voxel_type: i16, state: &'a [u8] }, /// A server event (`event_type`, then `state`), as games route server events. Event { event_type: u16, state: &'a [u8] }, /// An app-defined payload. Generic { payload: &'a [u8] }, /// A message to the one actor named as the event's actor. ActorMessage { payload: &'a [u8] }, }",
       "docs": "What a spatial event is to the players who receive it."
     },
     {
@@ -1061,7 +1089,7 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "module": "ckx_sdk::emit",
       "name": "Spatial::Voxel",
       "kind": "variant",
-      "signature": "Voxel { x: i16, y: i16, z: i16, voxel_type: u16, state: &'a [u8] }",
+      "signature": "Voxel { x: i16, y: i16, z: i16, voxel_type: i16, state: &'a [u8] }",
       "docs": "A voxel edit at `(x, y, z)` within the chunk, folded into the live mesh. The durable write is `ctx.world().set_voxels`, which already shows it; this is for effects."
     },
     {
@@ -1070,6 +1098,6124 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "kind": "function",
       "signature": "pub fn actor_id(uuid: &str) -> [u8; 32]",
       "docs": "A 32-byte actor id, as the realtime tier addresses actors. Players' actors use their 32-character uuid; a server-driven actor (an NPC, a mob) can use any 32 bytes."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "ACTION_ID_MAX",
+      "kind": "const",
+      "signature": "pub const ACTION_ID_MAX: usize = 64;",
+      "docs": "The longest `action_id` a call may carry, in bytes."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Changed",
+      "kind": "struct",
+      "signature": "pub struct Changed { /// The players who should read again. pub who: Vec<u64>, /// What changed for them, as the hub's endpoints name it. pub what: String, }",
+      "docs": "The body of a `changed` message."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Changed::what",
+      "kind": "field",
+      "signature": "pub what: String",
+      "docs": "What changed for them, as the hub's endpoints name it."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Changed::who",
+      "kind": "field",
+      "signature": "pub who: Vec<u64>",
+      "docs": "The players who should read again."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Containers",
+      "kind": "struct",
+      "signature": "pub struct Containers { pub containers: Vec<Published>, }",
+      "docs": "The body of a collection's snapshot: every member as a `delta` would show it."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Containers::containers",
+      "kind": "field",
+      "signature": "pub containers: Vec<Published>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Header",
+      "kind": "struct",
+      "signature": "pub struct Header { pub v: u8, pub epoch: u64, pub seq: u64, pub kind: MessageKind, }",
+      "docs": "The reserved fields of every kit message."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Header::epoch",
+      "kind": "field",
+      "signature": "pub epoch: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Header::kind",
+      "kind": "field",
+      "signature": "pub kind: MessageKind",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Header::seq",
+      "kind": "field",
+      "signature": "pub seq: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Header::v",
+      "kind": "field",
+      "signature": "pub v: u8",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Message",
+      "kind": "struct",
+      "signature": "pub struct Message<T> { #[serde(flatten)] pub header: Header, #[serde(flatten)] pub body: T, }",
+      "docs": "A kit message as it is read back: its header, and the body's own fields beside it."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Message::body",
+      "kind": "field",
+      "signature": "pub body: T",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Message::header",
+      "kind": "field",
+      "signature": "pub header: Header",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "MessageKind",
+      "kind": "enum",
+      "signature": "pub enum MessageKind { Snapshot, Delta, Changed, Event, }",
+      "docs": "What a [`Message`] is."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "MessageKind::Changed",
+      "kind": "variant",
+      "signature": "Changed",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "MessageKind::Delta",
+      "kind": "variant",
+      "signature": "Delta",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "MessageKind::Event",
+      "kind": "variant",
+      "signature": "Event",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "MessageKind::Snapshot",
+      "kind": "variant",
+      "signature": "Snapshot",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "PROTOCOL",
+      "kind": "const",
+      "signature": "pub const PROTOCOL: u8 = 1;",
+      "docs": "The protocol version kit messages carry in `v`."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Publisher",
+      "kind": "struct",
+      "signature": "pub struct Publisher { #[serde(default)] seqs: BTreeMap<String, u64>, }",
+      "docs": "A hub's topics and how far each has got. Keep it in the hub's state, so `seq` carries on after a snapshot; a client that sees another `epoch` asks for a snapshot again anyway."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Publisher::changed",
+      "kind": "method",
+      "signature": "pub fn changed(&mut self, ctx: &Ctx, topic: &str, who: &[u64], what: &str) -> Result<()>",
+      "docs": "Tells `who` that `what` changed for them; nothing private goes on the topic. Does nothing when `who` is empty."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Publisher::delta",
+      "kind": "method",
+      "signature": "pub fn delta<T: Serialize + ?Sized>(&mut self, ctx: &Ctx, topic: &str, body: &T) -> Result<()>",
+      "docs": "Publishes one change to the topic's collection."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Publisher::event",
+      "kind": "method",
+      "signature": "pub fn event<T: Serialize + ?Sized>(&mut self, ctx: &Ctx, topic: &str, body: &T) -> Result<()>",
+      "docs": "Publishes something that happened."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Publisher::model_changes",
+      "kind": "method",
+      "signature": "pub fn model_changes(&mut self, ctx: &Ctx, model: &mut Model, schema: &Schema, topic: &str) -> Result<usize>",
+      "docs": "Publishes the model's public changes since the last call ([`Model::public_changes`]) as deltas on `topic`, one container each, and returns how many went out. Owner and hidden properties are never published."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Publisher::model_snapshot_reply",
+      "kind": "method",
+      "signature": "pub fn model_snapshot_reply(&self, ctx: &Ctx, model: &Model, schema: &Schema, topic: &str) -> Result<Vec<u8>>",
+      "docs": "The reply to [`SNAPSHOT_METHOD`] for a topic [`Publisher::model_changes`] feeds: every container's public view, as [`Containers`]."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Publisher::new",
+      "kind": "method",
+      "signature": "pub fn new() -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Publisher::publish",
+      "kind": "method",
+      "signature": "pub fn publish<T: Serialize + ?Sized>(&mut self, ctx: &Ctx, topic: &str, kind: MessageKind, body: &T) -> Result<()>",
+      "docs": "Publishes one message on `topic`."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Publisher::seq",
+      "kind": "method",
+      "signature": "pub fn seq(&self, topic: &str) -> u64",
+      "docs": "The topic's last `seq`; 0 before its first message."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Publisher::snapshot",
+      "kind": "method",
+      "signature": "pub fn snapshot<T: Serialize + ?Sized>(&mut self, ctx: &Ctx, topic: &str, body: &T) -> Result<()>",
+      "docs": "Publishes the topic's whole state."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Publisher::snapshot_reply",
+      "kind": "method",
+      "signature": "pub fn snapshot_reply<T: Serialize + ?Sized>(&self, ctx: &Ctx, topic: &str, body: &T) -> Result<Vec<u8>>",
+      "docs": "The reply to [`SNAPSHOT_METHOD`] for `topic`: its state now, at its last `seq`."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "RECEIPTS_MAX",
+      "kind": "const",
+      "signature": "pub const RECEIPTS_MAX: usize = 256;",
+      "docs": "Receipts a hub keeps at most; the oldest go first."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "RECEIPT_REPLY_MAX",
+      "kind": "const",
+      "signature": "pub const RECEIPT_REPLY_MAX: usize = 1024;",
+      "docs": "The largest reply a receipt keeps. A call sent again whose first reply was larger is refused with [`codes::ALREADY_DONE`]: it ran, and the hub's state has its result."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "RECEIPT_TTL_MS",
+      "kind": "const",
+      "signature": "pub const RECEIPT_TTL_MS: u64 = 10 * 60 * 1000;",
+      "docs": "How long a receipt is kept."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "RESERVED_FIELDS",
+      "kind": "const",
+      "signature": "pub const RESERVED_FIELDS: [&str; 4] = [\"v\", \"epoch\", \"seq\", \"kind\"];",
+      "docs": "The fields a kit message's header owns; a body may not use them (they sit side by side)."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Receipts",
+      "kind": "struct",
+      "signature": "pub struct Receipts { #[serde(default)] kept: VecDeque<Receipt>, }",
+      "docs": "What each caller's recent actions were answered, by `action_id`. Keep it in the hub's state: an action sent again after the hub restarted from its last snapshot is answered from it, if that snapshot came after the action."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Receipts::action_id",
+      "kind": "method",
+      "signature": "pub fn action_id(payload: &[u8]) -> Result<Option<String>>",
+      "docs": "The `action_id` a call's arguments carry: a map's `action_id` string. `None` when the arguments are not a map or carry none; refused when it is empty or too long."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Receipts::is_empty",
+      "kind": "method",
+      "signature": "pub fn is_empty(&self) -> bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Receipts::len",
+      "kind": "method",
+      "signature": "pub fn len(&self) -> usize",
+      "docs": "How many receipts are kept."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Receipts::new",
+      "kind": "method",
+      "signature": "pub fn new() -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Receipts::record",
+      "kind": "method",
+      "signature": "pub fn record(&mut self, caller: Caller, action_id: Option<&str>, result: &Result<Vec<u8>>, now: u64)",
+      "docs": "Keeps what `caller` got for `action_id`; nothing without an action id, and nothing for a refusal coded [`codes::UNAVAILABLE`], which says the action did not finish."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Receipts::replay",
+      "kind": "method",
+      "signature": "pub fn replay(&self, caller: Caller, action_id: Option<&str>, now: u64) -> Option<Result<Vec<u8>>>",
+      "docs": "The answer `caller` got for `action_id`, if it is kept."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Receipts::run",
+      "kind": "method",
+      "signature": "pub fn run<H>( hub: &mut H, receipts: fn(&mut H) -> &mut Receipts, call: &Call<'_>, now: u64, act: impl FnOnce(&mut H) -> Result<Vec<u8>>, ) -> Result<Vec<u8>>",
+      "docs": "Runs `act` on `hub` once per (caller, `action_id`): a call sent again gets the first answer. `receipts` finds the hub's receipts; a call without an action id just runs."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "Rng",
+      "kind": "reexport",
+      "signature": "pub use rng::Rng;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "SNAPSHOT_METHOD",
+      "kind": "const",
+      "signature": "pub const SNAPSHOT_METHOD: &str = \"snapshot\";",
+      "docs": "The method every kit hub answers with a topic's snapshot."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "ai",
+      "kind": "module",
+      "signature": "pub mod ai;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "args",
+      "kind": "function",
+      "signature": "pub fn args<T: DeserializeOwned>(call: &Call<'_>) -> Result<T>",
+      "docs": "A call's arguments, refused with [`codes::BAD_REQUEST`] when they do not decode."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "args_or_default",
+      "kind": "function",
+      "signature": "pub fn args_or_default<T: DeserializeOwned + Default>(call: &Call<'_>) -> Result<T>",
+      "docs": "A call's arguments when it may send none: an empty payload or a nil (what a client sends for no arguments) is `T::default()`."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "codes",
+      "kind": "module",
+      "signature": "pub mod codes",
+      "docs": "The refusal codes kit hubs share. A hub may add its own: lowercase letters, digits and `_`."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "econ",
+      "kind": "module",
+      "signature": "pub mod econ;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "error",
+      "kind": "function",
+      "signature": "pub fn error(code: &str, text: impl std::fmt::Display) -> Error",
+      "docs": "A refusal with a code: its message is `kit:<code>: <text>`."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "error_code",
+      "kind": "function",
+      "signature": "pub fn error_code(message: &str) -> Option<(&str, &str)>",
+      "docs": "The code and text of a refusal [`error`] made, or `None` for any other message."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "message",
+      "kind": "function",
+      "signature": "pub fn message<T: Serialize + ?Sized>(ctx: &Ctx, kind: MessageKind, seq: u64, body: &T) -> Result<Vec<u8>>",
+      "docs": "Encodes one kit message from this instance. `body` must serialize as a struct or a map, and none of its fields may be one of [`RESERVED_FIELDS`]: a debug build (`cargo test`) refuses a body that uses one, which would leave a client two `kind`s to choose from."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "play",
+      "kind": "module",
+      "signature": "pub mod play;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "presence",
+      "kind": "module",
+      "signature": "pub mod presence;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "public_containers",
+      "kind": "function",
+      "signature": "pub fn public_containers(model: &Model, schema: &Schema) -> Result<Containers>",
+      "docs": "Every container's public view, as a collection snapshot carries it."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "rng",
+      "kind": "module",
+      "signature": "pub mod rng;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "shard",
+      "kind": "module",
+      "signature": "pub mod shard;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "sim",
+      "kind": "module",
+      "signature": "pub mod sim;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "snapshot_topic",
+      "kind": "function",
+      "signature": "pub fn snapshot_topic(call: &Call<'_>, default: &str) -> String",
+      "docs": "The `topic` a [`SNAPSHOT_METHOD`] call names, or `default` when it names none."
+    },
+    {
+      "module": "ckx_sdk::kit",
+      "name": "wire",
+      "kind": "module",
+      "signature": "pub mod wire;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai",
+      "name": "brain",
+      "kind": "module",
+      "signature": "pub mod brain;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai",
+      "name": "flow",
+      "kind": "module",
+      "signature": "pub mod flow;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai",
+      "name": "path",
+      "kind": "module",
+      "signature": "pub mod path;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai",
+      "name": "steering",
+      "kind": "module",
+      "signature": "pub mod steering;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai",
+      "name": "turn",
+      "kind": "module",
+      "signature": "pub mod turn;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::brain",
+      "name": "AgentMemory",
+      "kind": "struct",
+      "signature": "pub struct AgentMemory { pub target: Option<(f32, f32)>, pub retarget_at_ms: u64, pub patrol_index: usize, pub pause_until_ms: u64, }",
+      "docs": "Per-agent mutable memory the tree reads/writes across ticks (serde-able into the hub's state)."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::brain",
+      "name": "AgentMemory::patrol_index",
+      "kind": "field",
+      "signature": "pub patrol_index: usize",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::brain",
+      "name": "AgentMemory::pause_until_ms",
+      "kind": "field",
+      "signature": "pub pause_until_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::brain",
+      "name": "AgentMemory::retarget_at_ms",
+      "kind": "field",
+      "signature": "pub retarget_at_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::brain",
+      "name": "AgentMemory::target",
+      "kind": "field",
+      "signature": "pub target: Option<(f32, f32)>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::brain",
+      "name": "Decision",
+      "kind": "enum",
+      "signature": "pub enum Decision { Idle, /// Move by this bounded step. Step(Vec2), /// Nothing matched / tree invalid — caller may fall back. None, }",
+      "docs": "What the agent decided to do this tick."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::brain",
+      "name": "Decision::Idle",
+      "kind": "variant",
+      "signature": "Idle",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::brain",
+      "name": "Decision::None",
+      "kind": "variant",
+      "signature": "None",
+      "docs": "Nothing matched / tree invalid — caller may fall back."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::brain",
+      "name": "Decision::Step",
+      "kind": "variant",
+      "signature": "Step(Vec2)",
+      "docs": "Move by this bounded step."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::brain",
+      "name": "Perception",
+      "kind": "struct",
+      "signature": "pub struct Perception { pub pos: Vec2, pub home: Vec2, /// Nearest player position, when one is visible. pub nearest_player: Option<Vec2>, /// Owner position (pets), when known. pub owner: Option<Vec2>, pub is_night: bool, pub speed: f32, pub dt: f32, pub now_ms: u64, /// Two uniform rolls in [0,1) for this tick (from the hub's seeded RNG). pub roll: (f32, f32), /// World half-extent for wander clamping. pub bounds: f32, }",
+      "docs": "Everything a tree evaluation may look at (the hub fills this in)."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::brain",
+      "name": "Perception::bounds",
+      "kind": "field",
+      "signature": "pub bounds: f32",
+      "docs": "World half-extent for wander clamping."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::brain",
+      "name": "Perception::dt",
+      "kind": "field",
+      "signature": "pub dt: f32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::brain",
+      "name": "Perception::home",
+      "kind": "field",
+      "signature": "pub home: Vec2",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::brain",
+      "name": "Perception::is_night",
+      "kind": "field",
+      "signature": "pub is_night: bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::brain",
+      "name": "Perception::nearest_player",
+      "kind": "field",
+      "signature": "pub nearest_player: Option<Vec2>",
+      "docs": "Nearest player position, when one is visible."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::brain",
+      "name": "Perception::now_ms",
+      "kind": "field",
+      "signature": "pub now_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::brain",
+      "name": "Perception::owner",
+      "kind": "field",
+      "signature": "pub owner: Option<Vec2>",
+      "docs": "Owner position (pets), when known."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::brain",
+      "name": "Perception::pos",
+      "kind": "field",
+      "signature": "pub pos: Vec2",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::brain",
+      "name": "Perception::roll",
+      "kind": "field",
+      "signature": "pub roll: (f32, f32)",
+      "docs": "Two uniform rolls in [0,1) for this tick (from the hub's seeded RNG)."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::brain",
+      "name": "Perception::speed",
+      "kind": "field",
+      "signature": "pub speed: f32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::brain",
+      "name": "builtin_tree",
+      "kind": "function",
+      "signature": "pub fn builtin_tree(name: &str) -> Option<Value>",
+      "docs": "Canonical trees for the built-in behavior names a game's agent definitions use (`wander_passive`, `wander_hostile`, `chase_hostile`)."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::brain",
+      "name": "evaluate",
+      "kind": "function",
+      "signature": "pub fn evaluate(tree: &Value, p: &Perception, memory: &mut AgentMemory) -> Decision",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::flow",
+      "name": "FlowField",
+      "kind": "struct",
+      "signature": "pub struct FlowField { pub min_x: i32, pub min_z: i32, pub width: i32, pub height: i32, /// Distance to the nearest goal per cell; u32::MAX = unreachable/blocked. distances: Vec<u32>, }",
+      "docs": "A baked distance field over a bounded grid window. Serde-able so hubs can persist it, but rebuilding from the provider is usually cheaper than storing it durably."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::flow",
+      "name": "FlowField::build",
+      "kind": "method",
+      "signature": "pub fn build( provider: &impl CostProvider, window: (i32, i32, i32, i32), // min_x, min_z, width, height goals: &[(i32, i32)], max_cells: usize, ) -> Self",
+      "docs": "Build the field inside the window from the goal cells outward, respecting the provider's blocked cells. Cost = uniform 1 per step (weighted providers still gate walkability; weighting the descent is deliberately v2). `max_cells` caps the BFS for fuel safety."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::flow",
+      "name": "FlowField::distance",
+      "kind": "method",
+      "signature": "pub fn distance(&self, x: i32, z: i32) -> Option<u32>",
+      "docs": "Distance to the nearest goal (None outside the window or unreachable)."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::flow",
+      "name": "FlowField::height",
+      "kind": "field",
+      "signature": "pub height: i32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::flow",
+      "name": "FlowField::min_x",
+      "kind": "field",
+      "signature": "pub min_x: i32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::flow",
+      "name": "FlowField::min_z",
+      "kind": "field",
+      "signature": "pub min_z: i32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::flow",
+      "name": "FlowField::step",
+      "kind": "method",
+      "signature": "pub fn step(&self, x: i32, z: i32) -> Option<(i32, i32)>",
+      "docs": "The descending step from (x, z): the 4-neighbor with the smallest distance, when strictly smaller than here. None at goals/unreachable."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::flow",
+      "name": "FlowField::walk",
+      "kind": "method",
+      "signature": "pub fn walk(&self, mut x: i32, mut z: i32, max_steps: usize) -> Vec<(i32, i32)>",
+      "docs": "Follow the field from (x, z) for up to `max_steps`, returning the walked cells (excluding the start). Agents usually take 1 per tick; this helper powers tests and catch-up moves."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::flow",
+      "name": "FlowField::width",
+      "kind": "field",
+      "signature": "pub width: i32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::path",
+      "name": "CostProvider",
+      "kind": "trait",
+      "signature": "pub trait CostProvider",
+      "docs": "Walkability/cost source. Implement over your world representation (obstacle grids, voxel columns, nav data in a hub's state)."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::path",
+      "name": "CostProvider::cost",
+      "kind": "method",
+      "signature": "fn cost(&self, x: i32, z: i32) -> Option<u32>;",
+      "docs": "Cost to ENTER (x, z); `None` = blocked. Uniform worlds return Some(1)."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::path",
+      "name": "GridProvider",
+      "kind": "struct",
+      "signature": "pub struct GridProvider<'a> { pub width: i32, pub height: i32, pub blocked: &'a dyn Fn(i32, i32) -> bool, }",
+      "docs": "A grid of booleans (true = blocked) — the simplest provider, also the test fixture."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::path",
+      "name": "GridProvider::blocked",
+      "kind": "field",
+      "signature": "pub blocked: &'a dyn Fn(i32, i32) -> bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::path",
+      "name": "GridProvider::cost",
+      "kind": "method",
+      "signature": "fn cost(&self, x: i32, z: i32) -> Option<u32>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::path",
+      "name": "GridProvider::height",
+      "kind": "field",
+      "signature": "pub height: i32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::path",
+      "name": "GridProvider::width",
+      "kind": "field",
+      "signature": "pub width: i32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::path",
+      "name": "PathCache",
+      "kind": "struct",
+      "signature": "pub struct PathCache { generation: u64, entries: std::collections::BTreeMap<Route, (u64, Vec<(i32, i32)>)>, }",
+      "docs": "A generation-keyed path cache: repeated queries between the same cells reuse the stored path until the world changes (`invalidate()` on any voxel/tower edit bumps the generation and lazily discards entries)."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::path",
+      "name": "PathCache::get",
+      "kind": "method",
+      "signature": "pub fn get(&mut self, provider: &impl CostProvider, from: (i32, i32), to: (i32, i32), config: &PathConfig) -> Vec<(i32, i32)>",
+      "docs": "Cached path or compute-and-store via [`a_star`]."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::path",
+      "name": "PathCache::invalidate",
+      "kind": "method",
+      "signature": "pub fn invalidate(&mut self)",
+      "docs": "Drop every cached path (world changed)."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::path",
+      "name": "PathCache::new",
+      "kind": "method",
+      "signature": "pub fn new() -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::path",
+      "name": "PathConfig",
+      "kind": "struct",
+      "signature": "pub struct PathConfig { /// Max nodes expanded before giving up (the fuel guard). ~4x the /// manhattan distance is plenty for sane worlds. pub max_expanded: usize, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::path",
+      "name": "PathConfig::default",
+      "kind": "method",
+      "signature": "fn default() -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::path",
+      "name": "PathConfig::max_expanded",
+      "kind": "field",
+      "signature": "pub max_expanded: usize",
+      "docs": "Max nodes expanded before giving up (the fuel guard). ~4x the manhattan distance is plenty for sane worlds."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::path",
+      "name": "a_star",
+      "kind": "function",
+      "signature": "pub fn a_star(provider: &impl CostProvider, from: (i32, i32), to: (i32, i32), config: &PathConfig) -> Vec<(i32, i32)>",
+      "docs": "4-connected A*. Returns the path INCLUDING both endpoints, or empty when unreachable / budget-exhausted / endpoints blocked."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::steering",
+      "name": "Vec2",
+      "kind": "struct",
+      "signature": "pub struct Vec2 { pub x: f32, pub z: f32, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::steering",
+      "name": "Vec2::clamped",
+      "kind": "method",
+      "signature": "pub fn clamped(self, max: f32) -> Vec2",
+      "docs": "Clamp this displacement to at most `max` length."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::steering",
+      "name": "Vec2::dist",
+      "kind": "method",
+      "signature": "pub fn dist(&self, other: Vec2) -> f32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::steering",
+      "name": "Vec2::len",
+      "kind": "method",
+      "signature": "pub fn len(&self) -> f32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::steering",
+      "name": "Vec2::new",
+      "kind": "method",
+      "signature": "pub fn new(x: f32, z: f32) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::steering",
+      "name": "Vec2::to",
+      "kind": "method",
+      "signature": "pub fn to(self, other: Vec2) -> Vec2",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::steering",
+      "name": "Vec2::x",
+      "kind": "field",
+      "signature": "pub x: f32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::steering",
+      "name": "Vec2::yaw",
+      "kind": "method",
+      "signature": "pub fn yaw(&self) -> f32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::steering",
+      "name": "Vec2::z",
+      "kind": "field",
+      "signature": "pub z: f32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::steering",
+      "name": "arrive",
+      "kind": "function",
+      "signature": "pub fn arrive(pos: Vec2, target: Vec2, speed: f32, dt: f32, slow_radius: f32) -> Vec2",
+      "docs": "Seek that decelerates inside `slow_radius` (smooth stops)."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::steering",
+      "name": "flee",
+      "kind": "function",
+      "signature": "pub fn flee(pos: Vec2, threat: Vec2, speed: f32, dt: f32) -> Vec2",
+      "docs": "Step directly away from `threat`."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::steering",
+      "name": "leash",
+      "kind": "function",
+      "signature": "pub fn leash(pos: Vec2, home: Vec2, leash_radius: f32, speed: f32, dt: f32) -> Option<Vec2>",
+      "docs": "Return-home pull when beyond `leash_radius`; `None` inside the leash."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::steering",
+      "name": "seek",
+      "kind": "function",
+      "signature": "pub fn seek(pos: Vec2, target: Vec2, speed: f32, dt: f32, stop_at: f32) -> Vec2",
+      "docs": "Step toward `target` at up to `speed*dt`, stopping within `stop_at`."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::steering",
+      "name": "separate",
+      "kind": "function",
+      "signature": "pub fn separate(pos: Vec2, neighbors: &[Vec2], min_dist: f32, speed: f32, dt: f32) -> Vec2",
+      "docs": "Push away from any neighbor closer than `min_dist` (crowd separation)."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::steering",
+      "name": "wander_target",
+      "kind": "function",
+      "signature": "pub fn wander_target(anchor: Vec2, range: f32, roll_x: f32, roll_z: f32, bounds: f32) -> Vec2",
+      "docs": "A wander target picker: a point within `range` of `anchor`, clamped to `bounds` (half-extent box around origin). Pure — feed it your RNG rolls."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::turn",
+      "name": "Candidate",
+      "kind": "struct",
+      "signature": "pub struct Candidate { pub x: i32, pub z: i32, /// Movement cost spent to reach it. pub cost: u32, }",
+      "docs": "One candidate destination for a turn move."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::turn",
+      "name": "Candidate::cost",
+      "kind": "field",
+      "signature": "pub cost: u32",
+      "docs": "Movement cost spent to reach it."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::turn",
+      "name": "Candidate::x",
+      "kind": "field",
+      "signature": "pub x: i32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::turn",
+      "name": "Candidate::z",
+      "kind": "field",
+      "signature": "pub z: i32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::turn",
+      "name": "TurnMove",
+      "kind": "struct",
+      "signature": "pub struct TurnMove { pub to: (i32, i32), pub score: f32, }",
+      "docs": "The chosen move for a turn."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::turn",
+      "name": "TurnMove::score",
+      "kind": "field",
+      "signature": "pub score: f32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::turn",
+      "name": "TurnMove::to",
+      "kind": "field",
+      "signature": "pub to: (i32, i32)",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::ai::turn",
+      "name": "approach_scorer",
+      "kind": "function",
+      "signature": "pub fn approach_scorer(targets: Vec<(i32, i32)>) -> impl FnMut(&Candidate) -> f32",
+      "docs": "The classic melee-enemy heuristic: get adjacent to the closest target, preferring cells that minimize distance to ANY target. Returns a score function for [`best_move`]."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::turn",
+      "name": "best_move",
+      "kind": "function",
+      "signature": "pub fn best_move( provider: &impl CostProvider, from: (i32, i32), move_points: u32, max_expanded: usize, mut score: impl FnMut(&Candidate) -> f32, ) -> Option<TurnMove>",
+      "docs": "Pick the best reachable cell under `move_points` by `score` (higher wins; ties prefer cheaper movement, then stable coordinate order). Returns None only when even standing still is impossible (blocked origin)."
+    },
+    {
+      "module": "ckx_sdk::kit::ai::turn",
+      "name": "reachable",
+      "kind": "function",
+      "signature": "pub fn reachable(provider: &impl CostProvider, from: (i32, i32), move_points: u32, max_expanded: usize) -> Vec<Candidate>",
+      "docs": "Enumerate the cells reachable from `from` with at most `move_points` total entry cost (BFS/Dijkstra-lite over the provider, 4-connected), including standing still. Expansion stops at `max_expanded` cells."
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "ALREADY_DONE",
+      "kind": "const",
+      "signature": "pub const ALREADY_DONE: &str = \"already_done\";",
+      "docs": "The action already ran; its reply was too large to keep ([`super::RECEIPT_REPLY_MAX`])."
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "BAD_REQUEST",
+      "kind": "const",
+      "signature": "pub const BAD_REQUEST: &str = \"bad_request\";",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "CONFLICT",
+      "kind": "const",
+      "signature": "pub const CONFLICT: &str = \"conflict\";",
+      "docs": "The state does not allow it now."
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "COOLDOWN",
+      "kind": "const",
+      "signature": "pub const COOLDOWN: &str = \"cooldown\";",
+      "docs": "Too soon after the last time."
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "EMPTY",
+      "kind": "const",
+      "signature": "pub const EMPTY: &str = \"empty\";",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "EXPIRED",
+      "kind": "const",
+      "signature": "pub const EXPIRED: &str = \"expired\";",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "FINISHED",
+      "kind": "const",
+      "signature": "pub const FINISHED: &str = \"finished\";",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "FORBIDDEN",
+      "kind": "const",
+      "signature": "pub const FORBIDDEN: &str = \"forbidden\";",
+      "docs": "The caller may not do this."
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "FULL",
+      "kind": "const",
+      "signature": "pub const FULL: &str = \"full\";",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "INSUFFICIENT",
+      "kind": "const",
+      "signature": "pub const INSUFFICIENT: &str = \"insufficient\";",
+      "docs": "Not enough of something the caller spends."
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "LIMIT",
+      "kind": "const",
+      "signature": "pub const LIMIT: &str = \"limit\";",
+      "docs": "A bound the hub keeps (how many, how large)."
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "NOT_FOUND",
+      "kind": "const",
+      "signature": "pub const NOT_FOUND: &str = \"not_found\";",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "NOT_MEMBER",
+      "kind": "const",
+      "signature": "pub const NOT_MEMBER: &str = \"not_member\";",
+      "docs": "The caller has not joined."
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "NOT_READY",
+      "kind": "const",
+      "signature": "pub const NOT_READY: &str = \"not_ready\";",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "NOT_YOUR_TURN",
+      "kind": "const",
+      "signature": "pub const NOT_YOUR_TURN: &str = \"not_your_turn\";",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "OUT_OF_REACH",
+      "kind": "const",
+      "signature": "pub const OUT_OF_REACH: &str = \"out_of_reach\";",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "RESERVED",
+      "kind": "const",
+      "signature": "pub const RESERVED: &str = \"reserved\";",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "STARTED",
+      "kind": "const",
+      "signature": "pub const STARTED: &str = \"started\";",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::codes",
+      "name": "UNAVAILABLE",
+      "kind": "const",
+      "signature": "pub const UNAVAILABLE: &str = \"unavailable\";",
+      "docs": "Another hub this call needs did not answer in time, so the call did not finish: send it again with the same `action_id`. Receipts never keep it."
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "ID_MAX",
+      "kind": "const",
+      "signature": "pub const ID_MAX: usize = 64;",
+      "docs": "The longest item id or currency the economy takes."
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "REFERENCE_MAX",
+      "kind": "const",
+      "signature": "pub const REFERENCE_MAX: usize = 128;",
+      "docs": "The longest reference [`Holds`] and [`Applied`] take: room for a driver's key, a counter and the suffixes of the steps it derives from one."
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "Wallet",
+      "kind": "reexport",
+      "signature": "pub use wallet::Wallet;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "holdings",
+      "kind": "module",
+      "signature": "pub mod holdings;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "holdings::{Bundle, Holdings}",
+      "kind": "reexport",
+      "signature": "pub use holdings::{Bundle, Holdings};",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "holds",
+      "kind": "module",
+      "signature": "pub mod holds;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "holds::{Applied, Holds}",
+      "kind": "reexport",
+      "signature": "pub use holds::{Applied, Holds};",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "items",
+      "kind": "module",
+      "signature": "pub mod items;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "items::{Catalog, Inventory, ItemDef, Stack}",
+      "kind": "reexport",
+      "signature": "pub use items::{Catalog, Inventory, ItemDef, Stack};",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "loot",
+      "kind": "module",
+      "signature": "pub mod loot;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "orderbook",
+      "kind": "module",
+      "signature": "pub mod orderbook;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "production",
+      "kind": "module",
+      "signature": "pub mod production;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "progression",
+      "kind": "module",
+      "signature": "pub mod progression;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "recipes",
+      "kind": "module",
+      "signature": "pub mod recipes;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "vendor",
+      "kind": "module",
+      "signature": "pub mod vendor;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ",
+      "name": "wallet",
+      "kind": "module",
+      "signature": "pub mod wallet;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Bundle",
+      "kind": "struct",
+      "signature": "pub struct Bundle { /// Item id to how many. pub items: BTreeMap<String, u64>, /// Currency to how much. pub currency: BTreeMap<String, i64>, }",
+      "docs": "Items and currency moved together: a price, a reward, a hold."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Bundle::check",
+      "kind": "method",
+      "signature": "pub fn check(&self) -> Result<()>",
+      "docs": "`bad_request` for an id the economy does not take or a negative amount."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Bundle::coins",
+      "kind": "method",
+      "signature": "pub fn coins(currency: &str, amount: i64) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Bundle::currency",
+      "kind": "field",
+      "signature": "pub currency: BTreeMap<String, i64>",
+      "docs": "Currency to how much."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Bundle::is_empty",
+      "kind": "method",
+      "signature": "pub fn is_empty(&self) -> bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Bundle::item",
+      "kind": "method",
+      "signature": "pub fn item(id: &str, count: u64) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Bundle::items",
+      "kind": "field",
+      "signature": "pub items: BTreeMap<String, u64>",
+      "docs": "Item id to how many."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Bundle::minus",
+      "kind": "method",
+      "signature": "pub fn minus(&self, part: &Bundle) -> Result<Bundle>",
+      "docs": "What is left of `self` once `part` is taken out of it; `insufficient` when it holds less."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Bundle::plus",
+      "kind": "method",
+      "signature": "pub fn plus(&self, other: &Bundle) -> Result<Bundle>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Bundle::times",
+      "kind": "method",
+      "signature": "pub fn times(&self, n: u64) -> Result<Bundle>",
+      "docs": "`n` of it."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Bundle::trimmed",
+      "kind": "method",
+      "signature": "pub fn trimmed(mut self) -> Bundle",
+      "docs": "Without its zero entries."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Holdings",
+      "kind": "struct",
+      "signature": "pub struct Holdings { pub inventory: Inventory, pub wallet: Wallet, pub mail: BTreeMap<String, u64>, }",
+      "docs": "A player's inventory and wallet, and their mail: items given to them that did not fit, kept until they make room ([`Holdings::take_mail`])."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Holdings::give",
+      "kind": "method",
+      "signature": "pub fn give(&mut self, catalog: &Catalog, b: &Bundle) -> Result<()>",
+      "docs": "Gives `b`, or nothing: `full` when its items do not fit, `not_found` for an item the catalog lacks."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Holdings::give_or_mail",
+      "kind": "method",
+      "signature": "pub fn give_or_mail(&mut self, catalog: &Catalog, b: &Bundle) -> Result<()>",
+      "docs": "Gives `b`, its items as far as they fit and the rest to the mail. It fails only for a bundle the economy does not take: what another hub delivers always arrives."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Holdings::has",
+      "kind": "method",
+      "signature": "pub fn has(&self, b: &Bundle) -> bool",
+      "docs": "Whether `b` could be taken."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Holdings::inventory",
+      "kind": "field",
+      "signature": "pub inventory: Inventory",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Holdings::mail",
+      "kind": "field",
+      "signature": "pub mail: BTreeMap<String, u64>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Holdings::new",
+      "kind": "method",
+      "signature": "pub fn new(slots: u32) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Holdings::swap",
+      "kind": "method",
+      "signature": "pub fn swap(&mut self, catalog: &Catalog, pay: &Bundle, get: &Bundle) -> Result<()>",
+      "docs": "Takes `pay` and gives `get` together, or neither."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Holdings::take",
+      "kind": "method",
+      "signature": "pub fn take(&mut self, b: &Bundle) -> Result<()>",
+      "docs": "Takes `b`, or nothing: `insufficient`."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Holdings::take_mail",
+      "kind": "method",
+      "signature": "pub fn take_mail(&mut self, catalog: &Catalog) -> Bundle",
+      "docs": "Moves what fits from the mail into the inventory; answers what moved."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holdings",
+      "name": "Holdings::wallet",
+      "kind": "field",
+      "signature": "pub wallet: Wallet",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holds",
+      "name": "APPLIED_MAX",
+      "kind": "const",
+      "signature": "pub const APPLIED_MAX: usize = 4_096;",
+      "docs": "How many references' answers are kept."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holds",
+      "name": "APPLIED_TTL_MS",
+      "kind": "const",
+      "signature": "pub const APPLIED_TTL_MS: u64 = 7 * 24 * 3_600_000;",
+      "docs": "How long a reference's answer is kept."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holds",
+      "name": "Applied",
+      "kind": "struct",
+      "signature": "pub struct Applied { #[serde(default)] kept: VecDeque<Done>, }",
+      "docs": "The answer each reference got, so a step asked for again is answered as it was the first time. Keep it in the hub's state. A refusal coded `unavailable` is not kept: it says the step did not run."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holds",
+      "name": "Applied::is_empty",
+      "kind": "method",
+      "signature": "pub fn is_empty(&self) -> bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holds",
+      "name": "Applied::len",
+      "kind": "method",
+      "signature": "pub fn len(&self) -> usize",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holds",
+      "name": "Applied::record",
+      "kind": "method",
+      "signature": "pub fn record(&mut self, reference: &str, result: &Result<Vec<u8>>, now: u64)",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holds",
+      "name": "Applied::replay",
+      "kind": "method",
+      "signature": "pub fn replay(&self, reference: &str, now: u64) -> Option<Result<Vec<u8>>>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holds",
+      "name": "Applied::run",
+      "kind": "method",
+      "signature": "pub fn run<H>( hub: &mut H, applied: fn(&mut H) -> &mut Applied, reference: &str, now: u64, act: impl FnOnce(&mut H) -> Result<Vec<u8>>, ) -> Result<Vec<u8>>",
+      "docs": "Runs `act` once per `reference`: asked again, it answers what it answered first."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holds",
+      "name": "Holds",
+      "kind": "struct",
+      "signature": "pub struct Holds { pub held: BTreeMap<String, Bundle>, }",
+      "docs": "Goods held under references, out of their owner's holdings until settled or released."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holds",
+      "name": "Holds::held",
+      "kind": "field",
+      "signature": "pub held: BTreeMap<String, Bundle>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holds",
+      "name": "Holds::hold",
+      "kind": "method",
+      "signature": "pub fn hold(&mut self, holdings: &mut Holdings, reference: &str, bundle: &Bundle) -> Result<()>",
+      "docs": "Moves `bundle` out of `holdings` into a hold under `reference`. The same reference with the same bundle again is the hold already made; with another, `conflict`."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holds",
+      "name": "Holds::release",
+      "kind": "method",
+      "signature": "pub fn release(&mut self, holdings: &mut Holdings, catalog: &Catalog, reference: &str) -> Result<Bundle>",
+      "docs": "Gives what the hold still has back to its owner (items that do not fit go to the mail); answers what came back, nothing for a reference not held."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holds",
+      "name": "Holds::settle",
+      "kind": "method",
+      "signature": "pub fn settle(&mut self, reference: &str, part: &Bundle) -> Result<()>",
+      "docs": "Takes `part` out of the hold for good; the rest stays held, and an emptied hold is gone. `not_found` for a reference not held, `insufficient` when it holds less."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::holds",
+      "name": "Holds::total",
+      "kind": "method",
+      "signature": "pub fn total(&self) -> Bundle",
+      "docs": "Everything held, together."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Catalog",
+      "kind": "struct",
+      "signature": "pub struct Catalog { items: BTreeMap<String, ItemDef>, }",
+      "docs": "The game's items, by id."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Catalog::from",
+      "kind": "method",
+      "signature": "fn from(items: Vec<ItemDef>) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Catalog::get",
+      "kind": "method",
+      "signature": "pub fn get(&self, id: &str) -> Option<&ItemDef>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Catalog::is_empty",
+      "kind": "method",
+      "signature": "pub fn is_empty(&self) -> bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Catalog::item",
+      "kind": "method",
+      "signature": "pub fn item(&self, id: &str) -> Result<&ItemDef>",
+      "docs": "The item, or `not_found`."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Catalog::iter",
+      "kind": "method",
+      "signature": "pub fn iter(&self) -> impl Iterator<Item = &ItemDef>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Catalog::len",
+      "kind": "method",
+      "signature": "pub fn len(&self) -> usize",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Inventory",
+      "kind": "struct",
+      "signature": "pub struct Inventory { pub slots: u32, pub stacks: Vec<Stack>, }",
+      "docs": "Stacks of items in a number of slots. Adding fills the item's stacks before starting new ones; a stack holds at most its item's `max_stack`."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Inventory::add",
+      "kind": "method",
+      "signature": "pub fn add(&mut self, catalog: &Catalog, item: &str, count: u64) -> Result<()>",
+      "docs": "Adds `count` of `item`, or nothing: `not_found` for an item the catalog lacks, `full` when they do not fit."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Inventory::add_what_fits",
+      "kind": "method",
+      "signature": "pub fn add_what_fits(&mut self, catalog: &Catalog, item: &str, count: u64) -> u64",
+      "docs": "Adds what fits; answers how many did not."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Inventory::count",
+      "kind": "method",
+      "signature": "pub fn count(&self, item: &str) -> u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Inventory::new",
+      "kind": "method",
+      "signature": "pub fn new(slots: u32) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Inventory::remove",
+      "kind": "method",
+      "signature": "pub fn remove(&mut self, item: &str, count: u64) -> Result<()>",
+      "docs": "Removes `count` of `item`, from its last stacks first, or nothing: `insufficient`."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Inventory::room",
+      "kind": "method",
+      "signature": "pub fn room(&self, catalog: &Catalog, item: &str) -> u64",
+      "docs": "How many of `item` still fit."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Inventory::slots",
+      "kind": "field",
+      "signature": "pub slots: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Inventory::stacks",
+      "kind": "field",
+      "signature": "pub stacks: Vec<Stack>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Inventory::totals",
+      "kind": "method",
+      "signature": "pub fn totals(&self) -> BTreeMap<String, u64>",
+      "docs": "Every item's total, by id."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "ItemDef",
+      "kind": "struct",
+      "signature": "pub struct ItemDef { pub id: String, /// What one slot holds; 1 for an item that does not stack. #[serde(default = \"one\")] pub max_stack: u64, /// Whether it may change hands (a market's order book, a trade). #[serde(default = \"yes\")] pub tradable: bool, #[serde(default)] pub name: String, }",
+      "docs": "One kind of item."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "ItemDef::id",
+      "kind": "field",
+      "signature": "pub id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "ItemDef::max_stack",
+      "kind": "field",
+      "signature": "pub max_stack: u64",
+      "docs": "What one slot holds; 1 for an item that does not stack."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "ItemDef::name",
+      "kind": "field",
+      "signature": "pub name: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "ItemDef::tradable",
+      "kind": "field",
+      "signature": "pub tradable: bool",
+      "docs": "Whether it may change hands (a market's order book, a trade)."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Stack",
+      "kind": "struct",
+      "signature": "pub struct Stack { pub item: String, pub count: u64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Stack::count",
+      "kind": "field",
+      "signature": "pub count: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Stack::item",
+      "kind": "field",
+      "signature": "pub item: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::items",
+      "name": "Vec::from",
+      "kind": "method",
+      "signature": "fn from(c: Catalog) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootBook",
+      "kind": "struct",
+      "signature": "pub struct LootBook { pub rolls: u64, pub pity: BTreeMap<String, u32>, /// The last rolls: `(roll number, item)`. pub recent: Vec<(u64, String)>, }",
+      "docs": "What a player's rolls on one table have been."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootBook::pity",
+      "kind": "field",
+      "signature": "pub pity: BTreeMap<String, u32>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootBook::recent",
+      "kind": "field",
+      "signature": "pub recent: Vec<(u64, String)>",
+      "docs": "The last rolls: `(roll number, item)`."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootBook::rolls",
+      "kind": "field",
+      "signature": "pub rolls: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootEntry",
+      "kind": "struct",
+      "signature": "pub struct LootEntry { pub item: String, #[serde(default = \"one\")] pub count: u64, pub weight: u64, /// Entries in one pity group tick its counter together. #[serde(default)] pub pity_group: Option<String>, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootEntry::count",
+      "kind": "field",
+      "signature": "pub count: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootEntry::item",
+      "kind": "field",
+      "signature": "pub item: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootEntry::pity_group",
+      "kind": "field",
+      "signature": "pub pity_group: Option<String>",
+      "docs": "Entries in one pity group tick its counter together."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootEntry::weight",
+      "kind": "field",
+      "signature": "pub weight: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootRoll",
+      "kind": "struct",
+      "signature": "pub struct LootRoll { pub item: String, pub count: u64, /// Pity picked it. pub pity: bool, pub roll: u64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootRoll::count",
+      "kind": "field",
+      "signature": "pub count: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootRoll::item",
+      "kind": "field",
+      "signature": "pub item: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootRoll::pity",
+      "kind": "field",
+      "signature": "pub pity: bool",
+      "docs": "Pity picked it."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootRoll::roll",
+      "kind": "field",
+      "signature": "pub roll: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootTable",
+      "kind": "struct",
+      "signature": "pub struct LootTable { pub entries: Vec<LootEntry>, /// A pity group, and the rolls within which it is guaranteed. pub pity_within: BTreeMap<String, u32>, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootTable::entries",
+      "kind": "field",
+      "signature": "pub entries: Vec<LootEntry>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "LootTable::pity_within",
+      "kind": "field",
+      "signature": "pub pity_within: BTreeMap<String, u32>",
+      "docs": "A pity group, and the rolls within which it is guaranteed."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "RECENT_KEEP",
+      "kind": "const",
+      "signature": "pub const RECENT_KEEP: usize = 32;",
+      "docs": "How many of a book's rolls it keeps."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::loot",
+      "name": "roll",
+      "kind": "function",
+      "signature": "pub fn roll(table: &LootTable, book: &mut LootBook, rng: &mut Rng) -> Option<LootRoll>",
+      "docs": "Rolls once; `None` for a table with no weight. A due pity group picks its rarest entry."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Fill",
+      "kind": "struct",
+      "signature": "pub struct Fill { pub buyer: u64, pub seller: u64, pub buy_order: u64, pub sell_order: u64, pub price: i64, pub count: u64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Fill::buy_order",
+      "kind": "field",
+      "signature": "pub buy_order: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Fill::buyer",
+      "kind": "field",
+      "signature": "pub buyer: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Fill::count",
+      "kind": "field",
+      "signature": "pub count: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Fill::price",
+      "kind": "field",
+      "signature": "pub price: i64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Fill::sell_order",
+      "kind": "field",
+      "signature": "pub sell_order: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Fill::seller",
+      "kind": "field",
+      "signature": "pub seller: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Order",
+      "kind": "struct",
+      "signature": "pub struct Order { pub id: u64, pub player: u64, pub side: Side, /// The limit, per unit. pub price: i64, /// What is still open. pub count: u64, pub at: u64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Order::at",
+      "kind": "field",
+      "signature": "pub at: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Order::count",
+      "kind": "field",
+      "signature": "pub count: u64",
+      "docs": "What is still open."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Order::id",
+      "kind": "field",
+      "signature": "pub id: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Order::player",
+      "kind": "field",
+      "signature": "pub player: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Order::price",
+      "kind": "field",
+      "signature": "pub price: i64",
+      "docs": "The limit, per unit."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Order::side",
+      "kind": "field",
+      "signature": "pub side: Side",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "OrderBook",
+      "kind": "struct",
+      "signature": "pub struct OrderBook { pub bids: Vec<Order>, pub asks: Vec<Order>, }",
+      "docs": "Bids best (highest) first, asks best (lowest) first, earlier first at a price."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "OrderBook::asks",
+      "kind": "field",
+      "signature": "pub asks: Vec<Order>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "OrderBook::bids",
+      "kind": "field",
+      "signature": "pub bids: Vec<Order>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "OrderBook::cancel",
+      "kind": "method",
+      "signature": "pub fn cancel(&mut self, id: u64, player: u64) -> Option<Order>",
+      "docs": "Takes `player`'s order `id` off the book."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "OrderBook::depth",
+      "kind": "method",
+      "signature": "pub fn depth(&self, side: Side, levels: usize) -> Vec<(i64, u64)>",
+      "docs": "`(price, count)` a level, best first."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "OrderBook::of",
+      "kind": "method",
+      "signature": "pub fn of(&self, player: u64) -> Vec<Order>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "OrderBook::order",
+      "kind": "method",
+      "signature": "pub fn order(&self, id: u64) -> Option<&Order>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "OrderBook::place",
+      "kind": "method",
+      "signature": "pub fn place(&mut self, id: u64, player: u64, side: Side, price: i64, count: u64, now: u64) -> Result<Vec<Fill>>",
+      "docs": "Places order `id` and matches it at once; whatever is left rests on the book."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Side",
+      "kind": "enum",
+      "signature": "pub enum Side { Buy, Sell, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Side::Buy",
+      "kind": "variant",
+      "signature": "Buy",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::orderbook",
+      "name": "Side::Sell",
+      "kind": "variant",
+      "signature": "Sell",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::production",
+      "name": "Chain",
+      "kind": "struct",
+      "signature": "pub struct Chain { pub producers: Vec<Producer>, pub stock: BTreeMap<String, u64>, pub capacity: BTreeMap<String, u64>, /// When it last caught up; 0 before it starts. pub at: u64, }",
+      "docs": "Producers in order (an upstream producer before the ones it feeds), their stock, and how much of each resource the stock holds at most."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::production",
+      "name": "Chain::advance",
+      "kind": "method",
+      "signature": "pub fn advance(&mut self, now: u64) -> BTreeMap<String, u64>",
+      "docs": "Catches up to `now`; answers what was made. A producer short of inputs or out of storage runs as many whole cycles as it can and loses the rest of the time."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::production",
+      "name": "Chain::at",
+      "kind": "field",
+      "signature": "pub at: u64",
+      "docs": "When it last caught up; 0 before it starts."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::production",
+      "name": "Chain::capacity",
+      "kind": "field",
+      "signature": "pub capacity: BTreeMap<String, u64>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::production",
+      "name": "Chain::producers",
+      "kind": "field",
+      "signature": "pub producers: Vec<Producer>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::production",
+      "name": "Chain::start",
+      "kind": "method",
+      "signature": "pub fn start(&mut self, now: u64)",
+      "docs": "Starts the clock."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::production",
+      "name": "Chain::stock",
+      "kind": "field",
+      "signature": "pub stock: BTreeMap<String, u64>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::production",
+      "name": "Chain::take",
+      "kind": "method",
+      "signature": "pub fn take(&mut self, resource: &str, count: u64) -> u64",
+      "docs": "Takes up to `count` of `resource` out of the stock; answers how many."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::production",
+      "name": "Producer",
+      "kind": "struct",
+      "signature": "pub struct Producer { pub id: String, /// What a cycle takes from the chain's stock. pub inputs: BTreeMap<String, u64>, /// What a cycle adds to it. pub outputs: BTreeMap<String, u64>, pub per_minute: f64, /// A cycle begun and not finished, from 0 to 1. pub progress: f64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::production",
+      "name": "Producer::id",
+      "kind": "field",
+      "signature": "pub id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::production",
+      "name": "Producer::inputs",
+      "kind": "field",
+      "signature": "pub inputs: BTreeMap<String, u64>",
+      "docs": "What a cycle takes from the chain's stock."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::production",
+      "name": "Producer::outputs",
+      "kind": "field",
+      "signature": "pub outputs: BTreeMap<String, u64>",
+      "docs": "What a cycle adds to it."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::production",
+      "name": "Producer::per_minute",
+      "kind": "field",
+      "signature": "pub per_minute: f64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::production",
+      "name": "Producer::progress",
+      "kind": "field",
+      "signature": "pub progress: f64",
+      "docs": "A cycle begun and not finished, from 0 to 1."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "AchievementDef",
+      "kind": "struct",
+      "signature": "pub struct AchievementDef { pub id: String, pub counter: String, pub target: u64, #[serde(default)] pub reward: Bundle, #[serde(default)] pub xp: u64, /// Not shown until unlocked. #[serde(default)] pub hidden: bool, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "AchievementDef::counter",
+      "kind": "field",
+      "signature": "pub counter: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "AchievementDef::hidden",
+      "kind": "field",
+      "signature": "pub hidden: bool",
+      "docs": "Not shown until unlocked."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "AchievementDef::id",
+      "kind": "field",
+      "signature": "pub id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "AchievementDef::reward",
+      "kind": "field",
+      "signature": "pub reward: Bundle",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "AchievementDef::target",
+      "kind": "field",
+      "signature": "pub target: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "AchievementDef::xp",
+      "kind": "field",
+      "signature": "pub xp: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Levels",
+      "kind": "struct",
+      "signature": "pub struct Levels { pub base: u64, pub growth: f64, pub max: u32, }",
+      "docs": "Experience to go from level `n` to `n + 1` is `base * growth^(n - 1)`, up to `max`."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Levels::base",
+      "kind": "field",
+      "signature": "pub base: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Levels::default",
+      "kind": "method",
+      "signature": "fn default() -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Levels::growth",
+      "kind": "field",
+      "signature": "pub growth: f64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Levels::max",
+      "kind": "field",
+      "signature": "pub max: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Levels::to_next",
+      "kind": "method",
+      "signature": "pub fn to_next(&self, level: u32) -> Option<u64>",
+      "docs": "What level `level` takes to finish; `None` at the top."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Objective",
+      "kind": "struct",
+      "signature": "pub struct Objective { pub counter: String, pub target: u64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Objective::counter",
+      "kind": "field",
+      "signature": "pub counter: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Objective::target",
+      "kind": "field",
+      "signature": "pub target: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Progress",
+      "kind": "struct",
+      "signature": "pub struct Progress { pub level: u32, /// Toward the next level. pub xp: u64, pub total_xp: u64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Progress::default",
+      "kind": "method",
+      "signature": "fn default() -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Progress::gain",
+      "kind": "method",
+      "signature": "pub fn gain(&mut self, levels: &Levels, xp: u64) -> u32",
+      "docs": "Adds experience; answers how many levels it gained."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Progress::level",
+      "kind": "field",
+      "signature": "pub level: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Progress::total_xp",
+      "kind": "field",
+      "signature": "pub total_xp: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Progress::xp",
+      "kind": "field",
+      "signature": "pub xp: u64",
+      "docs": "Toward the next level."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "QuestDef",
+      "kind": "struct",
+      "signature": "pub struct QuestDef { pub id: String, pub objectives: Vec<Objective>, #[serde(default)] pub reward: Bundle, #[serde(default)] pub xp: u64, /// Quests done first. #[serde(default)] pub requires: Vec<String>, #[serde(default)] pub level: u32, /// A first-session tutorial: taken on as the player starts. #[serde(default)] pub tutorial: bool, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "QuestDef::id",
+      "kind": "field",
+      "signature": "pub id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "QuestDef::level",
+      "kind": "field",
+      "signature": "pub level: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "QuestDef::objectives",
+      "kind": "field",
+      "signature": "pub objectives: Vec<Objective>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "QuestDef::requires",
+      "kind": "field",
+      "signature": "pub requires: Vec<String>",
+      "docs": "Quests done first."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "QuestDef::reward",
+      "kind": "field",
+      "signature": "pub reward: Bundle",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "QuestDef::tutorial",
+      "kind": "field",
+      "signature": "pub tutorial: bool",
+      "docs": "A first-session tutorial: taken on as the player starts."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "QuestDef::xp",
+      "kind": "field",
+      "signature": "pub xp: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Record",
+      "kind": "struct",
+      "signature": "pub struct Record { pub counters: BTreeMap<String, u64>, /// Achievement to when it unlocked. pub unlocked: BTreeMap<String, u64>, /// Quest taken on, to each objective's count since. pub active: BTreeMap<String, Vec<u64>>, /// Done, waiting for its reward to be claimed. pub complete: BTreeSet<String>, /// Claimed, to when. pub done: BTreeMap<String, u64>, }",
+      "docs": "What a player did and what it earned them."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Record::accept",
+      "kind": "method",
+      "signature": "pub fn accept(&mut self, q: &QuestDef, level: u32) -> Result<()>",
+      "docs": "Takes on quest `q`: `conflict` when it is taken, done or waits for another, `forbidden` below its level."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Record::active",
+      "kind": "field",
+      "signature": "pub active: BTreeMap<String, Vec<u64>>",
+      "docs": "Quest taken on, to each objective's count since."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Record::claim",
+      "kind": "method",
+      "signature": "pub fn claim(&mut self, id: &str, now: u64) -> Result<()>",
+      "docs": "Claims quest `id`'s reward: `not_ready` until it is complete."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Record::complete",
+      "kind": "field",
+      "signature": "pub complete: BTreeSet<String>",
+      "docs": "Done, waiting for its reward to be claimed."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Record::count",
+      "kind": "method",
+      "signature": "pub fn count(&mut self, achievements: &[AchievementDef], quests: &[QuestDef], counter: &str, n: u64, now: u64) -> Unlocks",
+      "docs": "Counts `n` of `counter`: the achievements it unlocks and the quests it completes."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Record::counters",
+      "kind": "field",
+      "signature": "pub counters: BTreeMap<String, u64>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Record::done",
+      "kind": "field",
+      "signature": "pub done: BTreeMap<String, u64>",
+      "docs": "Claimed, to when."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Record::unlocked",
+      "kind": "field",
+      "signature": "pub unlocked: BTreeMap<String, u64>",
+      "docs": "Achievement to when it unlocked."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Unlocks",
+      "kind": "struct",
+      "signature": "pub struct Unlocks { pub achievements: Vec<String>, pub quests: Vec<String>, }",
+      "docs": "What one count changed."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Unlocks::achievements",
+      "kind": "field",
+      "signature": "pub achievements: Vec<String>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::progression",
+      "name": "Unlocks::quests",
+      "kind": "field",
+      "signature": "pub quests: Vec<String>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::recipes",
+      "name": "CRAFT_MAX",
+      "kind": "const",
+      "signature": "pub const CRAFT_MAX: u64 = 100;",
+      "docs": "The most crafts one call makes."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::recipes",
+      "name": "Recipe",
+      "kind": "struct",
+      "signature": "pub struct Recipe { pub id: String, pub inputs: Bundle, pub outputs: Bundle, /// The level a player needs; 0 for none. #[serde(default)] pub level: u32, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::recipes",
+      "name": "Recipe::id",
+      "kind": "field",
+      "signature": "pub id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::recipes",
+      "name": "Recipe::inputs",
+      "kind": "field",
+      "signature": "pub inputs: Bundle",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::recipes",
+      "name": "Recipe::level",
+      "kind": "field",
+      "signature": "pub level: u32",
+      "docs": "The level a player needs; 0 for none."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::recipes",
+      "name": "Recipe::outputs",
+      "kind": "field",
+      "signature": "pub outputs: Bundle",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::recipes",
+      "name": "craft",
+      "kind": "function",
+      "signature": "pub fn craft(holdings: &mut Holdings, catalog: &Catalog, recipe: &Recipe, times: u64, level: u32) -> Result<Bundle>",
+      "docs": "Crafts `recipe` `times` times into `holdings`; answers what it made. `insufficient` without the inputs, `full` without room for the outputs (the inputs' room counts, since they go first), `forbidden` below the recipe's level."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Offer",
+      "kind": "struct",
+      "signature": "pub struct Offer { pub item: String, /// What one costs. pub price: Bundle, /// How many a restock puts on the shelf; none for no limit. #[serde(default)] pub stock: Option<u64>, /// How many one player may buy between restocks; none for no limit. #[serde(default)] pub per_player: Option<u64>, /// What the vendor pays for one; none when it does not buy them. #[serde(default)] pub buys_for: Option<Bundle>, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Offer::buys_for",
+      "kind": "field",
+      "signature": "pub buys_for: Option<Bundle>",
+      "docs": "What the vendor pays for one; none when it does not buy them."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Offer::item",
+      "kind": "field",
+      "signature": "pub item: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Offer::per_player",
+      "kind": "field",
+      "signature": "pub per_player: Option<u64>",
+      "docs": "How many one player may buy between restocks; none for no limit."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Offer::price",
+      "kind": "field",
+      "signature": "pub price: Bundle",
+      "docs": "What one costs."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Offer::stock",
+      "kind": "field",
+      "signature": "pub stock: Option<u64>",
+      "docs": "How many a restock puts on the shelf; none for no limit."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Shelf",
+      "kind": "struct",
+      "signature": "pub struct Shelf { pub stock: BTreeMap<String, u64>, /// `\"<player>:<item>\"` to how many. pub bought: BTreeMap<String, u64>, pub restocked_at: u64, }",
+      "docs": "A vendor's shelf and who bought what since the last restock."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Shelf::bought",
+      "kind": "field",
+      "signature": "pub bought: BTreeMap<String, u64>",
+      "docs": "`\"<player>:<item>\"` to how many."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Shelf::check",
+      "kind": "method",
+      "signature": "pub fn check(&self, offer: &Offer, player: u64, count: u64) -> Result<()>",
+      "docs": "Whether `player` may buy `count` of `offer` now: `insufficient` (stock), `limit`."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Shelf::restock",
+      "kind": "method",
+      "signature": "pub fn restock(&mut self, vendor: &Vendor, now: u64)",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Shelf::restocked_at",
+      "kind": "field",
+      "signature": "pub restocked_at: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Shelf::sold",
+      "kind": "method",
+      "signature": "pub fn sold(&mut self, offer: &Offer, player: u64, count: u64)",
+      "docs": "Records a sale `check` allowed."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Shelf::stock",
+      "kind": "field",
+      "signature": "pub stock: BTreeMap<String, u64>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Vendor",
+      "kind": "struct",
+      "signature": "pub struct Vendor { pub id: String, pub offers: Vec<Offer>, /// When it restocks (cron), or never. #[serde(default)] pub restock: Option<String>, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Vendor::id",
+      "kind": "field",
+      "signature": "pub id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Vendor::offer",
+      "kind": "method",
+      "signature": "pub fn offer(&self, item: &str) -> Result<&Offer>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Vendor::offers",
+      "kind": "field",
+      "signature": "pub offers: Vec<Offer>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::vendor",
+      "name": "Vendor::restock",
+      "kind": "field",
+      "signature": "pub restock: Option<String>",
+      "docs": "When it restocks (cron), or never."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::wallet",
+      "name": "Wallet",
+      "kind": "struct",
+      "signature": "pub struct Wallet { pub balances: BTreeMap<String, i64>, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::wallet",
+      "name": "Wallet::balance",
+      "kind": "method",
+      "signature": "pub fn balance(&self, currency: &str) -> i64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::wallet",
+      "name": "Wallet::balances",
+      "kind": "field",
+      "signature": "pub balances: BTreeMap<String, i64>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::econ::wallet",
+      "name": "Wallet::credit",
+      "kind": "method",
+      "signature": "pub fn credit(&mut self, currency: &str, amount: i64) -> Result<i64>",
+      "docs": "Adds `amount`; answers the balance. `bad_request` for a negative amount, `limit` past the largest balance."
+    },
+    {
+      "module": "ckx_sdk::kit::econ::wallet",
+      "name": "Wallet::debit",
+      "kind": "method",
+      "signature": "pub fn debit(&mut self, currency: &str, amount: i64) -> Result<i64>",
+      "docs": "Takes `amount`; answers the balance. `insufficient` when there is not that much."
+    },
+    {
+      "module": "ckx_sdk::kit::play",
+      "name": "abilities",
+      "kind": "module",
+      "signature": "pub mod abilities;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play",
+      "name": "cards",
+      "kind": "module",
+      "signature": "pub mod cards;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play",
+      "name": "combat",
+      "kind": "module",
+      "signature": "pub mod combat;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play",
+      "name": "movement",
+      "kind": "module",
+      "signature": "pub mod movement;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play",
+      "name": "score",
+      "kind": "module",
+      "signature": "pub mod score;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play",
+      "name": "timing",
+      "kind": "module",
+      "signature": "pub mod timing;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play",
+      "name": "turns",
+      "kind": "module",
+      "signature": "pub mod turns;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "AbilityKind",
+      "kind": "enum",
+      "signature": "pub enum AbilityKind { /// Immediate hit on a target in range (hitscan). Instant { damage: i64 }, /// A stepped projectile along a direction; first actor within /// `hit_radius` takes the damage. Projectile { speed: f32, damage: i64, max_range: f32, hit_radius: f32 }, /// A delayed explosion at a target point; damage within `radius`, /// optionally scaled down linearly with distance. Aoe { radius: f32, damage: i64, delay_ms: u64, falloff: bool }, }",
+      "docs": "What a cast does once validated."
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "AbilityKind::Aoe",
+      "kind": "variant",
+      "signature": "Aoe { radius: f32, damage: i64, delay_ms: u64, falloff: bool }",
+      "docs": "A delayed explosion at a target point; damage within `radius`, optionally scaled down linearly with distance."
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "AbilityKind::Instant",
+      "kind": "variant",
+      "signature": "Instant { damage: i64 }",
+      "docs": "Immediate hit on a target in range (hitscan)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "AbilityKind::Projectile",
+      "kind": "variant",
+      "signature": "Projectile { speed: f32, damage: i64, max_range: f32, hit_radius: f32 }",
+      "docs": "A stepped projectile along a direction; first actor within `hit_radius` takes the damage."
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "AbilitySpec",
+      "kind": "struct",
+      "signature": "pub struct AbilitySpec { pub ability_id: String, pub cooldown_ms: u64, pub resource_cost: i64, /// Max cast distance (target point / initial direction anchor). pub range: f32, pub kind: AbilityKind, }",
+      "docs": "One ability's rules (usually from the hub's config)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "AbilitySpec::ability_id",
+      "kind": "field",
+      "signature": "pub ability_id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "AbilitySpec::cooldown_ms",
+      "kind": "field",
+      "signature": "pub cooldown_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "AbilitySpec::kind",
+      "kind": "field",
+      "signature": "pub kind: AbilityKind",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "AbilitySpec::range",
+      "kind": "field",
+      "signature": "pub range: f32",
+      "docs": "Max cast distance (target point / initial direction anchor)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "AbilitySpec::resource_cost",
+      "kind": "field",
+      "signature": "pub resource_cost: i64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "CasterBook",
+      "kind": "struct",
+      "signature": "pub struct CasterBook { /// ability id -> earliest next cast (ms). pub ready_at: BTreeMap<String, u64>, pub resource: i64, pub resource_max: i64, /// Resource points regenerated per second. pub regen_per_sec: i64, pub last_regen_ms: u64, }",
+      "docs": "Per-caster server-held book: cooldown stamps + a regenerating resource pool. One book per user, kept in the hub's state."
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "CasterBook::default",
+      "kind": "method",
+      "signature": "fn default() -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "CasterBook::last_regen_ms",
+      "kind": "field",
+      "signature": "pub last_regen_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "CasterBook::ready_at",
+      "kind": "field",
+      "signature": "pub ready_at: BTreeMap<String, u64>",
+      "docs": "ability id -> earliest next cast (ms)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "CasterBook::regen",
+      "kind": "method",
+      "signature": "pub fn regen(&mut self, now_ms: u64)",
+      "docs": "Apply resource regeneration up to `now_ms`."
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "CasterBook::regen_per_sec",
+      "kind": "field",
+      "signature": "pub regen_per_sec: i64",
+      "docs": "Resource points regenerated per second."
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "CasterBook::resource",
+      "kind": "field",
+      "signature": "pub resource: i64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "CasterBook::resource_max",
+      "kind": "field",
+      "signature": "pub resource_max: i64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "PendingAoe",
+      "kind": "struct",
+      "signature": "pub struct PendingAoe { pub ability_id: String, pub caster_id: String, pub x: f32, pub z: f32, pub radius: f32, pub damage: i64, pub falloff: bool, pub detonate_at_ms: u64, }",
+      "docs": "A delayed area effect awaiting detonation."
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "PendingAoe::ability_id",
+      "kind": "field",
+      "signature": "pub ability_id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "PendingAoe::caster_id",
+      "kind": "field",
+      "signature": "pub caster_id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "PendingAoe::damage",
+      "kind": "field",
+      "signature": "pub damage: i64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "PendingAoe::detonate_at_ms",
+      "kind": "field",
+      "signature": "pub detonate_at_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "PendingAoe::falloff",
+      "kind": "field",
+      "signature": "pub falloff: bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "PendingAoe::from_cast",
+      "kind": "method",
+      "signature": "pub fn from_cast(spec: &AbilitySpec, caster_id: &str, cast: &ValidCast, now_ms: u64) -> Option<Self>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "PendingAoe::radius",
+      "kind": "field",
+      "signature": "pub radius: f32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "PendingAoe::ready",
+      "kind": "method",
+      "signature": "pub fn ready(&self, now_ms: u64) -> bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "PendingAoe::resolve",
+      "kind": "method",
+      "signature": "pub fn resolve(&self, victims: &[(String, (f32, f32))]) -> Vec<(String, i64)>",
+      "docs": "Damage per victim inside the radius (linear falloff to 25% at the edge when enabled). Victims = (id, position); the caster is exempt."
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "PendingAoe::x",
+      "kind": "field",
+      "signature": "pub x: f32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "PendingAoe::z",
+      "kind": "field",
+      "signature": "pub z: f32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "Projectile",
+      "kind": "struct",
+      "signature": "pub struct Projectile { pub ability_id: String, pub caster_id: String, pub x: f32, pub z: f32, pub dir: (f32, f32), pub speed: f32, pub damage: i64, pub hit_radius: f32, pub traveled: f32, pub max_range: f32, pub launched_at_ms: u64, }",
+      "docs": "A live projectile the hub steps each tick."
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "Projectile::ability_id",
+      "kind": "field",
+      "signature": "pub ability_id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "Projectile::caster_id",
+      "kind": "field",
+      "signature": "pub caster_id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "Projectile::damage",
+      "kind": "field",
+      "signature": "pub damage: i64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "Projectile::dir",
+      "kind": "field",
+      "signature": "pub dir: (f32, f32)",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "Projectile::hit_radius",
+      "kind": "field",
+      "signature": "pub hit_radius: f32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "Projectile::launch",
+      "kind": "method",
+      "signature": "pub fn launch(spec: &AbilitySpec, caster_id: &str, from: (f32, f32), cast: &ValidCast, now_ms: u64) -> Option<Self>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "Projectile::launched_at_ms",
+      "kind": "field",
+      "signature": "pub launched_at_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "Projectile::max_range",
+      "kind": "field",
+      "signature": "pub max_range: f32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "Projectile::speed",
+      "kind": "field",
+      "signature": "pub speed: f32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "Projectile::step",
+      "kind": "method",
+      "signature": "pub fn step( &mut self, dt_ms: u64, hit_test: &mut impl FnMut(f32, f32, f32) -> Option<String>, blocked: &mut impl FnMut(f32, f32) -> bool, ) -> ProjectileStep",
+      "docs": "Advance `dt_ms`, sub-stepping so tick-rate simulation cannot tunnel through targets (tolerance window = hit_radius per sub-step). `hit_test(x, z, radius)` returns a hit target (never the caster) or None; `blocked(x, z)` marks walls."
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "Projectile::traveled",
+      "kind": "field",
+      "signature": "pub traveled: f32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "Projectile::x",
+      "kind": "field",
+      "signature": "pub x: f32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "Projectile::z",
+      "kind": "field",
+      "signature": "pub z: f32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "ProjectileStep",
+      "kind": "enum",
+      "signature": "pub enum ProjectileStep { /// Still flying (new position recorded on the projectile). Flying, /// Hit `target_id` at the recorded position; despawn. Hit { target_id: String }, /// Ran out of range or was blocked; despawn. Expired, }",
+      "docs": "The outcome of one projectile step."
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "ProjectileStep::Expired",
+      "kind": "variant",
+      "signature": "Expired",
+      "docs": "Ran out of range or was blocked; despawn."
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "ProjectileStep::Flying",
+      "kind": "variant",
+      "signature": "Flying",
+      "docs": "Still flying (new position recorded on the projectile)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "ProjectileStep::Hit",
+      "kind": "variant",
+      "signature": "Hit { target_id: String }",
+      "docs": "Hit `target_id` at the recorded position; despawn."
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "ValidCast",
+      "kind": "struct",
+      "signature": "pub struct ValidCast { pub ability_id: String, /// Normalized aim direction (projectiles). pub dir: (f32, f32), /// Clamped target point (instant/AoE). pub target: (f32, f32), }",
+      "docs": "A validated cast, ready for the hub to act on."
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "ValidCast::ability_id",
+      "kind": "field",
+      "signature": "pub ability_id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "ValidCast::dir",
+      "kind": "field",
+      "signature": "pub dir: (f32, f32)",
+      "docs": "Normalized aim direction (projectiles)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "ValidCast::target",
+      "kind": "field",
+      "signature": "pub target: (f32, f32)",
+      "docs": "Clamped target point (instant/AoE)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::abilities",
+      "name": "validate_cast",
+      "kind": "function",
+      "signature": "pub fn validate_cast( spec: &AbilitySpec, book: &mut CasterBook, caster_pos: (f32, f32), target: (f32, f32), now_ms: u64, ) -> Result<ValidCast, &'static str>",
+      "docs": "Validate a cast against the book: cooldown, resource, range. On success the cooldown is armed and the resource deducted (the cast is committed)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::cards",
+      "name": "CardId",
+      "kind": "type",
+      "signature": "pub type CardId = String;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::cards",
+      "name": "CardTable",
+      "kind": "struct",
+      "signature": "pub struct CardTable { pub draw: Pile, pub discard: Pile, pub hands: BTreeMap<String, Vec<CardId>>, /// Named public zones (battlefield, trick, melds, ...), in play order. pub zones: BTreeMap<String, Vec<(String, CardId)>>, pub seed: u64, }",
+      "docs": "The full table: draw pile, discard, per-actor hidden hands, and named public zones. Everything serde — one `CardTable` per match partition."
+    },
+    {
+      "module": "ckx_sdk::kit::play::cards",
+      "name": "CardTable::clear_zone",
+      "kind": "method",
+      "signature": "pub fn clear_zone(&mut self, zone: &str) -> Vec<(String, CardId)>",
+      "docs": "Move every card in a zone to the discard (trick taken, turn over)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::cards",
+      "name": "CardTable::deal",
+      "kind": "method",
+      "signature": "pub fn deal(&mut self, actors: &[String], count: usize)",
+      "docs": "Deal `count` cards to each actor (round-robin, deterministic order)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::cards",
+      "name": "CardTable::discard",
+      "kind": "field",
+      "signature": "pub discard: Pile",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::cards",
+      "name": "CardTable::draw",
+      "kind": "field",
+      "signature": "pub draw: Pile",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::cards",
+      "name": "CardTable::draw_to_hand",
+      "kind": "method",
+      "signature": "pub fn draw_to_hand(&mut self, actor_id: &str) -> Option<CardId>",
+      "docs": "Draw one card into an actor's hidden hand. Recycles the discard (reshuffled with the table seed + draw count) when the deck empties."
+    },
+    {
+      "module": "ckx_sdk::kit::play::cards",
+      "name": "CardTable::hand",
+      "kind": "method",
+      "signature": "pub fn hand(&self, actor_id: &str) -> &[CardId]",
+      "docs": "The caller's own hand (the ONLY read path for hidden cards)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::cards",
+      "name": "CardTable::hand_sizes",
+      "kind": "method",
+      "signature": "pub fn hand_sizes(&self) -> BTreeMap<String, usize>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::cards",
+      "name": "CardTable::hands",
+      "kind": "field",
+      "signature": "pub hands: BTreeMap<String, Vec<CardId>>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::cards",
+      "name": "CardTable::new",
+      "kind": "method",
+      "signature": "pub fn new(catalog: impl IntoIterator<Item = CardId>, seed: u64) -> Self",
+      "docs": "Build a table from a card catalog and shuffle with the given seed."
+    },
+    {
+      "module": "ckx_sdk::kit::play::cards",
+      "name": "CardTable::play",
+      "kind": "method",
+      "signature": "pub fn play(&mut self, actor_id: &str, card: &str, zone: &str) -> Result<(), &'static str>",
+      "docs": "Play (reveal) a card from a hand into a public zone. Fails when the caller does not hold the card — the legality floor every game gets."
+    },
+    {
+      "module": "ckx_sdk::kit::play::cards",
+      "name": "CardTable::public_json",
+      "kind": "method",
+      "signature": "pub fn public_json(&self) -> Value",
+      "docs": "The public view (zones + counts, NEVER hidden cards) for model sync and spectator events."
+    },
+    {
+      "module": "ckx_sdk::kit::play::cards",
+      "name": "CardTable::seed",
+      "kind": "field",
+      "signature": "pub seed: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::cards",
+      "name": "CardTable::zones",
+      "kind": "field",
+      "signature": "pub zones: BTreeMap<String, Vec<(String, CardId)>>",
+      "docs": "Named public zones (battlefield, trick, melds, ...), in play order."
+    },
+    {
+      "module": "ckx_sdk::kit::play::cards",
+      "name": "Pile",
+      "kind": "struct",
+      "signature": "pub struct Pile { /// Top of the pile is the END of the vec (pop to draw). pub cards: Vec<CardId>, }",
+      "docs": "A pile with hidden order (draw deck / discard)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::cards",
+      "name": "Pile::cards",
+      "kind": "field",
+      "signature": "pub cards: Vec<CardId>",
+      "docs": "Top of the pile is the END of the vec (pop to draw)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::cards",
+      "name": "Pile::draw",
+      "kind": "method",
+      "signature": "pub fn draw(&mut self) -> Option<CardId>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::cards",
+      "name": "Pile::is_empty",
+      "kind": "method",
+      "signature": "pub fn is_empty(&self) -> bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::cards",
+      "name": "Pile::len",
+      "kind": "method",
+      "signature": "pub fn len(&self) -> usize",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::cards",
+      "name": "Pile::put",
+      "kind": "method",
+      "signature": "pub fn put(&mut self, card: CardId)",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::cards",
+      "name": "Pile::shuffle",
+      "kind": "method",
+      "signature": "pub fn shuffle(&mut self, rng: &mut Rng)",
+      "docs": "Seeded Fisher-Yates shuffle."
+    },
+    {
+      "module": "ckx_sdk::kit::play::cards",
+      "name": "standard_52",
+      "kind": "function",
+      "signature": "pub fn standard_52() -> Vec<CardId>",
+      "docs": "Build a standard 52-card catalog (\"AS\", \"2S\", ..., \"KC\") — handy for examples and tests; a real game builds its own from its hub's config."
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "Combatant",
+      "kind": "struct",
+      "signature": "pub struct Combatant { pub health: Health, #[serde(default)] pub statuses: Vec<Status>, #[serde(default)] pub kills: u32, #[serde(default)] pub deaths: u32, }",
+      "docs": "Something that fights: health and the effects on it."
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "Combatant::afflict",
+      "kind": "method",
+      "signature": "pub fn afflict(&mut self, kind: &str, per_tick: i64, every_ms: u64, duration_ms: u64, source: Option<String>, now: u64)",
+      "docs": "Applies `kind` (replacing one of the same kind), first ticking `every_ms` from `now`."
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "Combatant::deaths",
+      "kind": "field",
+      "signature": "pub deaths: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "Combatant::has",
+      "kind": "method",
+      "signature": "pub fn has(&self, kind: &str) -> bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "Combatant::health",
+      "kind": "field",
+      "signature": "pub health: Health",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "Combatant::hit",
+      "kind": "method",
+      "signature": "pub fn hit(&mut self, amount: i64) -> DamageOutcome",
+      "docs": "Damage from `amount`; counts the death."
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "Combatant::kills",
+      "kind": "field",
+      "signature": "pub kills: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "Combatant::new",
+      "kind": "method",
+      "signature": "pub fn new(max_hp: i64) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "Combatant::statuses",
+      "kind": "field",
+      "signature": "pub statuses: Vec<Status>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "Combatant::tick",
+      "kind": "method",
+      "signature": "pub fn tick(&mut self, now: u64) -> Vec<TickEffect>",
+      "docs": "Runs every tick due by `now`, drops expired effects, and returns what each did."
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "ContactBook",
+      "kind": "struct",
+      "signature": "pub struct ContactBook { #[serde(default)] pub at: BTreeMap<String, u64>, }",
+      "docs": "A hostile's touch on a player, at most once per victim per cooldown."
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "ContactBook::at",
+      "kind": "field",
+      "signature": "pub at: BTreeMap<String, u64>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "ContactBook::touch",
+      "kind": "method",
+      "signature": "pub fn touch(&mut self, victim: &str, victim_at: (f64, f64), attacker: (f64, f64), range: f64, cooldown_ms: u64, now: u64) -> bool",
+      "docs": "Whether the hostile at `attacker` touches the victim at `victim` (within `range`) now; when it does, the victim's cooldown starts."
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "Cooldowns",
+      "kind": "struct",
+      "signature": "pub struct Cooldowns { #[serde(default)] pub last: BTreeMap<String, u64>, }",
+      "docs": "Per-actor, per-action last-use times."
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "Cooldowns::last",
+      "kind": "field",
+      "signature": "pub last: BTreeMap<String, u64>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "Cooldowns::prune",
+      "kind": "method",
+      "signature": "pub fn prune(&mut self, now: u64, older_than_ms: u64)",
+      "docs": "Forgets uses older than `older_than_ms`."
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "Cooldowns::remaining",
+      "kind": "method",
+      "signature": "pub fn remaining(&self, actor: &str, action: &str, cooldown_ms: u64, now: u64) -> u64",
+      "docs": "Milliseconds until `actor` may `action` again; 0 when it may now."
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "Cooldowns::take",
+      "kind": "method",
+      "signature": "pub fn take(&mut self, actor: &str, action: &str, cooldown_ms: u64, now: u64) -> bool",
+      "docs": "Whether `actor` may `action` at `now` with `cooldown_ms` between uses; when it may, the use is taken."
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "DamageOutcome",
+      "kind": "struct",
+      "signature": "pub struct DamageOutcome { /// Health after it. pub health: i64, /// Damage actually taken (never more than the health it had). pub dealt: i64, pub killed: bool, }",
+      "docs": "What damage did."
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "DamageOutcome::dealt",
+      "kind": "field",
+      "signature": "pub dealt: i64",
+      "docs": "Damage actually taken (never more than the health it had)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "DamageOutcome::health",
+      "kind": "field",
+      "signature": "pub health: i64",
+      "docs": "Health after it."
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "DamageOutcome::killed",
+      "kind": "field",
+      "signature": "pub killed: bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "Health",
+      "kind": "struct",
+      "signature": "pub struct Health { pub current: i64, pub max: i64, }",
+      "docs": "Hit points with a maximum."
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "Health::alive",
+      "kind": "method",
+      "signature": "pub fn alive(&self) -> bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "Health::apply",
+      "kind": "method",
+      "signature": "pub fn apply(&mut self, amount: i64) -> DamageOutcome",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "Health::current",
+      "kind": "field",
+      "signature": "pub current: i64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "Health::heal",
+      "kind": "method",
+      "signature": "pub fn heal(&mut self, amount: i64) -> i64",
+      "docs": "Heals up to the maximum; a dead one stays dead. Returns what was healed."
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "Health::max",
+      "kind": "field",
+      "signature": "pub max: i64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "Health::new",
+      "kind": "method",
+      "signature": "pub fn new(max: i64) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "Health::revive",
+      "kind": "method",
+      "signature": "pub fn revive(&mut self)",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "KillRecord",
+      "kind": "struct",
+      "signature": "pub struct KillRecord { pub killer: String, pub at_ms: u64, pub respawn_at_ms: u64, }",
+      "docs": "A kill: who did it, when, and when the victim comes back."
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "KillRecord::at_ms",
+      "kind": "field",
+      "signature": "pub at_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "KillRecord::killer",
+      "kind": "field",
+      "signature": "pub killer: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "KillRecord::respawn_at_ms",
+      "kind": "field",
+      "signature": "pub respawn_at_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "RespawnBook",
+      "kind": "struct",
+      "signature": "pub struct RespawnBook { #[serde(default)] pub kills: BTreeMap<String, KillRecord>, }",
+      "docs": "Kill credit and respawn timers, by victim id."
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "RespawnBook::due",
+      "kind": "method",
+      "signature": "pub fn due(&mut self, now: u64) -> Vec<String>",
+      "docs": "Victims whose respawn came due, taken out of the book."
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "RespawnBook::is_down",
+      "kind": "method",
+      "signature": "pub fn is_down(&self, victim: &str) -> bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "RespawnBook::kills",
+      "kind": "field",
+      "signature": "pub kills: BTreeMap<String, KillRecord>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "RespawnBook::record_kill",
+      "kind": "method",
+      "signature": "pub fn record_kill(&mut self, victim: &str, killer: &str, now: u64, respawn_ms: u64)",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "Status",
+      "kind": "struct",
+      "signature": "pub struct Status { pub kind: String, pub until_ms: u64, pub per_tick: i64, pub every_ms: u64, pub next_ms: u64, /// Who applied it, for kill credit. #[serde(default)] pub source: Option<String>, }",
+      "docs": "A status effect: `per_tick` damage (negative heals) every `every_ms` until `until_ms`."
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "Status::every_ms",
+      "kind": "field",
+      "signature": "pub every_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "Status::kind",
+      "kind": "field",
+      "signature": "pub kind: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "Status::next_ms",
+      "kind": "field",
+      "signature": "pub next_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "Status::per_tick",
+      "kind": "field",
+      "signature": "pub per_tick: i64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "Status::source",
+      "kind": "field",
+      "signature": "pub source: Option<String>",
+      "docs": "Who applied it, for kill credit."
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "Status::until_ms",
+      "kind": "field",
+      "signature": "pub until_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "TickEffect",
+      "kind": "struct",
+      "signature": "pub struct TickEffect { pub kind: String, pub outcome: DamageOutcome, pub source: Option<String>, }",
+      "docs": "What a status tick did to a combatant."
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "TickEffect::kind",
+      "kind": "field",
+      "signature": "pub kind: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "TickEffect::outcome",
+      "kind": "field",
+      "signature": "pub outcome: DamageOutcome",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "TickEffect::source",
+      "kind": "field",
+      "signature": "pub source: Option<String>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::combat",
+      "name": "in_reach",
+      "kind": "function",
+      "signature": "pub fn in_reach(attacker: (f64, f64), target: (f64, f64), range: f64) -> bool",
+      "docs": "Whether `target` is within `range` chunks of `attacker` on the ground."
+    },
+    {
+      "module": "ckx_sdk::kit::play::movement",
+      "name": "Rules",
+      "kind": "struct",
+      "signature": "pub struct Rules { /// Units a second. pub max_speed: f64, /// A move this far or more at once is refused. pub teleport: f64, /// `(min_x, min_z, max_x, max_z)`, when there are any. pub bounds: Option<(f64, f64, f64, f64)>, /// Slack on `max_speed` for jitter in the reports' timing (1.25 lets a report be 25% fast). pub grace: f64, }",
+      "docs": "What a player's movement may do, in the hub's own units."
+    },
+    {
+      "module": "ckx_sdk::kit::play::movement",
+      "name": "Rules::bounds",
+      "kind": "field",
+      "signature": "pub bounds: Option<(f64, f64, f64, f64)>",
+      "docs": "`(min_x, min_z, max_x, max_z)`, when there are any."
+    },
+    {
+      "module": "ckx_sdk::kit::play::movement",
+      "name": "Rules::default",
+      "kind": "method",
+      "signature": "fn default() -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::movement",
+      "name": "Rules::grace",
+      "kind": "field",
+      "signature": "pub grace: f64",
+      "docs": "Slack on `max_speed` for jitter in the reports' timing (1.25 lets a report be 25% fast)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::movement",
+      "name": "Rules::max_speed",
+      "kind": "field",
+      "signature": "pub max_speed: f64",
+      "docs": "Units a second."
+    },
+    {
+      "module": "ckx_sdk::kit::play::movement",
+      "name": "Rules::teleport",
+      "kind": "field",
+      "signature": "pub teleport: f64",
+      "docs": "A move this far or more at once is refused."
+    },
+    {
+      "module": "ckx_sdk::kit::play::movement",
+      "name": "STRIKE_WINDOW_MS",
+      "kind": "const",
+      "signature": "pub const STRIKE_WINDOW_MS: u64 = 10_000;",
+      "docs": "How long strikes are remembered after the last one."
+    },
+    {
+      "module": "ckx_sdk::kit::play::movement",
+      "name": "Verdict",
+      "kind": "struct",
+      "signature": "pub struct Verdict { pub at: (f64, f64), pub violation: Option<Violation>, }",
+      "docs": "The position the hub keeps for a report, and what was wrong with it."
+    },
+    {
+      "module": "ckx_sdk::kit::play::movement",
+      "name": "Verdict::at",
+      "kind": "field",
+      "signature": "pub at: (f64, f64)",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::movement",
+      "name": "Verdict::violation",
+      "kind": "field",
+      "signature": "pub violation: Option<Violation>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::movement",
+      "name": "Violation",
+      "kind": "struct",
+      "signature": "pub struct Violation { pub kind: ViolationKind, pub detail: String, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::movement",
+      "name": "Violation::detail",
+      "kind": "field",
+      "signature": "pub detail: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::movement",
+      "name": "Violation::kind",
+      "kind": "field",
+      "signature": "pub kind: ViolationKind",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::movement",
+      "name": "ViolationKind",
+      "kind": "enum",
+      "signature": "pub enum ViolationKind { Speed, Teleport, Bounds, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::movement",
+      "name": "ViolationKind::Bounds",
+      "kind": "variant",
+      "signature": "Bounds",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::movement",
+      "name": "ViolationKind::Speed",
+      "kind": "variant",
+      "signature": "Speed",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::movement",
+      "name": "ViolationKind::Teleport",
+      "kind": "variant",
+      "signature": "Teleport",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::movement",
+      "name": "ViolationKind::as_str",
+      "kind": "method",
+      "signature": "pub fn as_str(self) -> &'static str",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::movement",
+      "name": "Warden",
+      "kind": "struct",
+      "signature": "pub struct Warden { /// The position kept, and when. pub last: Option<(f64, f64, u64)>, pub strikes: u32, pub last_strike_ms: u64, }",
+      "docs": "One player's movement as the hub last accepted it."
+    },
+    {
+      "module": "ckx_sdk::kit::play::movement",
+      "name": "Warden::at",
+      "kind": "method",
+      "signature": "pub fn at(at: (f64, f64), now: u64) -> Self",
+      "docs": "A warden that starts from `at`: a spawn, a respawn, a place the hub moved the player to."
+    },
+    {
+      "module": "ckx_sdk::kit::play::movement",
+      "name": "Warden::check",
+      "kind": "method",
+      "signature": "pub fn check(&mut self, rules: &Rules, claimed: (f64, f64), now: u64) -> Verdict",
+      "docs": "Checks a reported position and keeps the one the rules allow."
+    },
+    {
+      "module": "ckx_sdk::kit::play::movement",
+      "name": "Warden::last",
+      "kind": "field",
+      "signature": "pub last: Option<(f64, f64, u64)>",
+      "docs": "The position kept, and when."
+    },
+    {
+      "module": "ckx_sdk::kit::play::movement",
+      "name": "Warden::last_strike_ms",
+      "kind": "field",
+      "signature": "pub last_strike_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::movement",
+      "name": "Warden::place",
+      "kind": "method",
+      "signature": "pub fn place(&mut self, at: (f64, f64), now: u64)",
+      "docs": "Moves the player where the hub says, with no check."
+    },
+    {
+      "module": "ckx_sdk::kit::play::movement",
+      "name": "Warden::position",
+      "kind": "method",
+      "signature": "pub fn position(&self) -> Option<(f64, f64)>",
+      "docs": "The position kept."
+    },
+    {
+      "module": "ckx_sdk::kit::play::movement",
+      "name": "Warden::strikes",
+      "kind": "field",
+      "signature": "pub strikes: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::movement",
+      "name": "Warden::strikes",
+      "kind": "method",
+      "signature": "pub fn strikes(&self, now: u64) -> u32",
+      "docs": "Strikes in the current window."
+    },
+    {
+      "module": "ckx_sdk::kit::play::score",
+      "name": "MatchSummary",
+      "kind": "struct",
+      "signature": "pub struct MatchSummary { pub winner_id: Option<String>, pub standings: Vec<Standing>, pub rounds_played: u32, pub decided_by: String, }",
+      "docs": "The published result of a decided match."
+    },
+    {
+      "module": "ckx_sdk::kit::play::score",
+      "name": "MatchSummary::decided_by",
+      "kind": "field",
+      "signature": "pub decided_by: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::score",
+      "name": "MatchSummary::rounds_played",
+      "kind": "field",
+      "signature": "pub rounds_played: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::score",
+      "name": "MatchSummary::standings",
+      "kind": "field",
+      "signature": "pub standings: Vec<Standing>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::score",
+      "name": "MatchSummary::winner_id",
+      "kind": "field",
+      "signature": "pub winner_id: Option<String>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::score",
+      "name": "ScoreBook",
+      "kind": "struct",
+      "signature": "pub struct ScoreBook { pub scores: BTreeMap<String, i64>, /// Actors still in the running (forfeits/eliminations remove). pub active: Vec<String>, pub decided: Option<MatchSummary>, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::score",
+      "name": "ScoreBook::active",
+      "kind": "field",
+      "signature": "pub active: Vec<String>",
+      "docs": "Actors still in the running (forfeits/eliminations remove)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::score",
+      "name": "ScoreBook::award",
+      "kind": "method",
+      "signature": "pub fn award(&mut self, actor_id: &str, points: i64) -> i64",
+      "docs": "Add points (the hub calls this from validated moves only)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::score",
+      "name": "ScoreBook::decided",
+      "kind": "field",
+      "signature": "pub decided: Option<MatchSummary>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::score",
+      "name": "ScoreBook::eliminate",
+      "kind": "method",
+      "signature": "pub fn eliminate(&mut self, actor_id: &str)",
+      "docs": "Remove an actor from contention (death/forfeit/disconnect)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::score",
+      "name": "ScoreBook::evaluate",
+      "kind": "method",
+      "signature": "pub fn evaluate(&mut self, condition: &WinCondition, rounds_played: u32, now_ms: u64) -> Option<&MatchSummary>",
+      "docs": "Evaluate the condition; the first decision sticks (idempotent after)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::score",
+      "name": "ScoreBook::new",
+      "kind": "method",
+      "signature": "pub fn new(actors: impl IntoIterator<Item = String>) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::score",
+      "name": "ScoreBook::score",
+      "kind": "method",
+      "signature": "pub fn score(&self, actor_id: &str) -> i64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::score",
+      "name": "ScoreBook::scores",
+      "kind": "field",
+      "signature": "pub scores: BTreeMap<String, i64>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::score",
+      "name": "ScoreBook::standings",
+      "kind": "method",
+      "signature": "pub fn standings(&self) -> Vec<Standing>",
+      "docs": "Standings ordered by score desc (stable; rank is 1-based, ties share the earlier rank's position order but distinct ranks — simple v1)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::score",
+      "name": "Standing",
+      "kind": "struct",
+      "signature": "pub struct Standing { pub actor_id: String, pub score: i64, pub rank: u32, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::score",
+      "name": "Standing::actor_id",
+      "kind": "field",
+      "signature": "pub actor_id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::score",
+      "name": "Standing::rank",
+      "kind": "field",
+      "signature": "pub rank: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::score",
+      "name": "Standing::score",
+      "kind": "field",
+      "signature": "pub score: i64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::score",
+      "name": "WinCondition",
+      "kind": "enum",
+      "signature": "pub enum WinCondition { /// First to reach `target` points. ScoreReached { target: i64 }, /// Highest score when round `final_round` completes. BestOfRounds { final_round: u32 }, /// Last active participant standing (driven by forfeits/eliminations). LastStanding, /// Survive until the timer: highest score at `ends_at_ms`. TimeLimit { ends_at_ms: u64 }, }",
+      "docs": "When is the match decided?"
+    },
+    {
+      "module": "ckx_sdk::kit::play::score",
+      "name": "WinCondition::BestOfRounds",
+      "kind": "variant",
+      "signature": "BestOfRounds { final_round: u32 }",
+      "docs": "Highest score when round `final_round` completes."
+    },
+    {
+      "module": "ckx_sdk::kit::play::score",
+      "name": "WinCondition::LastStanding",
+      "kind": "variant",
+      "signature": "LastStanding",
+      "docs": "Last active participant standing (driven by forfeits/eliminations)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::score",
+      "name": "WinCondition::ScoreReached",
+      "kind": "variant",
+      "signature": "ScoreReached { target: i64 }",
+      "docs": "First to reach `target` points."
+    },
+    {
+      "module": "ckx_sdk::kit::play::score",
+      "name": "WinCondition::TimeLimit",
+      "kind": "variant",
+      "signature": "TimeLimit { ends_at_ms: u64 }",
+      "docs": "Survive until the timer: highest score at `ends_at_ms`."
+    },
+    {
+      "module": "ckx_sdk::kit::play::score",
+      "name": "summary_json",
+      "kind": "function",
+      "signature": "pub fn summary_json(summary: &MatchSummary) -> Value",
+      "docs": "The summary as the JSON shape clients/events consume."
+    },
+    {
+      "module": "ckx_sdk::kit::play::timing",
+      "name": "Course",
+      "kind": "struct",
+      "signature": "pub struct Course { pub gates: Vec<Gate>, pub laps: u32, }",
+      "docs": "A course: ordered gates; a lap = passing every gate in order (gate 0 is the start/finish line)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::timing",
+      "name": "Course::gates",
+      "kind": "field",
+      "signature": "pub gates: Vec<Gate>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::timing",
+      "name": "Course::laps",
+      "kind": "field",
+      "signature": "pub laps: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::timing",
+      "name": "GHOST_MAX_FRAMES",
+      "kind": "const",
+      "signature": "pub const GHOST_MAX_FRAMES: usize = 600;",
+      "docs": "Ghost tracks are capped so a long run cannot blow the state budget."
+    },
+    {
+      "module": "ckx_sdk::kit::play::timing",
+      "name": "Gate",
+      "kind": "struct",
+      "signature": "pub struct Gate { pub x: f32, pub z: f32, pub radius: f32, }",
+      "docs": "One ordered gate on a course."
+    },
+    {
+      "module": "ckx_sdk::kit::play::timing",
+      "name": "Gate::radius",
+      "kind": "field",
+      "signature": "pub radius: f32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::timing",
+      "name": "Gate::x",
+      "kind": "field",
+      "signature": "pub x: f32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::timing",
+      "name": "Gate::z",
+      "kind": "field",
+      "signature": "pub z: f32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::timing",
+      "name": "GhostTrack",
+      "kind": "struct",
+      "signature": "pub struct GhostTrack { pub frames: Vec<(u32, f32, f32, f32, f32)>, pub started_at_ms: u64, }",
+      "docs": "A compact recorded pose track: (offset ms, x, y, z, yaw). Sampled at the recorder's cadence, replayed with linear interpolation."
+    },
+    {
+      "module": "ckx_sdk::kit::play::timing",
+      "name": "GhostTrack::duration_ms",
+      "kind": "method",
+      "signature": "pub fn duration_ms(&self) -> u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::timing",
+      "name": "GhostTrack::frame_at",
+      "kind": "method",
+      "signature": "pub fn frame_at(&self, offset_ms: u32) -> Option<(f32, f32, f32, f32)>",
+      "docs": "Interpolated pose at `offset_ms` into the replay (clamped to ends)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::timing",
+      "name": "GhostTrack::frames",
+      "kind": "field",
+      "signature": "pub frames: Vec<(u32, f32, f32, f32, f32)>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::timing",
+      "name": "GhostTrack::record",
+      "kind": "method",
+      "signature": "pub fn record(&mut self, now_ms: u64, x: f32, y: f32, z: f32, yaw: f32)",
+      "docs": "Record one frame (call per sample while the run is live)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::timing",
+      "name": "GhostTrack::started_at_ms",
+      "kind": "field",
+      "signature": "pub started_at_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::timing",
+      "name": "RunTimer",
+      "kind": "struct",
+      "signature": "pub struct RunTimer { pub next_gate: usize, pub lap: u32, pub started_at_ms: u64, pub lap_started_at_ms: u64, pub splits_ms: Vec<u64>, pub best_lap_ms: u64, pub finished: bool, pub total_ms: u64, }",
+      "docs": "One racer's live run state."
+    },
+    {
+      "module": "ckx_sdk::kit::play::timing",
+      "name": "RunTimer::best_lap_ms",
+      "kind": "field",
+      "signature": "pub best_lap_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::timing",
+      "name": "RunTimer::feed",
+      "kind": "method",
+      "signature": "pub fn feed(&mut self, course: &Course, pos: (f32, f32), now_ms: u64) -> Vec<TimingEvent>",
+      "docs": "Feed one pose sample; returns the timing events it produced. The run starts when the racer first touches gate 0."
+    },
+    {
+      "module": "ckx_sdk::kit::play::timing",
+      "name": "RunTimer::finished",
+      "kind": "field",
+      "signature": "pub finished: bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::timing",
+      "name": "RunTimer::lap",
+      "kind": "field",
+      "signature": "pub lap: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::timing",
+      "name": "RunTimer::lap_started_at_ms",
+      "kind": "field",
+      "signature": "pub lap_started_at_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::timing",
+      "name": "RunTimer::next_gate",
+      "kind": "field",
+      "signature": "pub next_gate: usize",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::timing",
+      "name": "RunTimer::splits_ms",
+      "kind": "field",
+      "signature": "pub splits_ms: Vec<u64>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::timing",
+      "name": "RunTimer::started_at_ms",
+      "kind": "field",
+      "signature": "pub started_at_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::timing",
+      "name": "RunTimer::total_ms",
+      "kind": "field",
+      "signature": "pub total_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::timing",
+      "name": "TimingEvent",
+      "kind": "enum",
+      "signature": "pub enum TimingEvent { Started { at_ms: u64 }, Checkpoint { gate: usize, split_ms: u64 }, LapCompleted { lap: u32, lap_ms: u64, best: bool }, Finished { total_ms: u64, best_lap_ms: u64 }, }",
+      "docs": "Events produced by feeding poses through a run timer."
+    },
+    {
+      "module": "ckx_sdk::kit::play::timing",
+      "name": "TimingEvent::Checkpoint",
+      "kind": "variant",
+      "signature": "Checkpoint { gate: usize, split_ms: u64 }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::timing",
+      "name": "TimingEvent::Finished",
+      "kind": "variant",
+      "signature": "Finished { total_ms: u64, best_lap_ms: u64 }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::timing",
+      "name": "TimingEvent::LapCompleted",
+      "kind": "variant",
+      "signature": "LapCompleted { lap: u32, lap_ms: u64, best: bool }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::timing",
+      "name": "TimingEvent::Started",
+      "kind": "variant",
+      "signature": "Started { at_ms: u64 }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "RevealRound",
+      "kind": "struct",
+      "signature": "pub struct RevealRound { pub expected: Vec<String>, pub submissions: Vec<(String, serde_json::Value)>, pub deadline_ms: u64, }",
+      "docs": "Collects one hidden submission per actor, then resolves when everyone (or the deadline) is in. Submissions stay in the hub until the reveal."
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "RevealRound::complete",
+      "kind": "method",
+      "signature": "pub fn complete(&self) -> bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "RevealRound::deadline_ms",
+      "kind": "field",
+      "signature": "pub deadline_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "RevealRound::expected",
+      "kind": "field",
+      "signature": "pub expected: Vec<String>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "RevealRound::new",
+      "kind": "method",
+      "signature": "pub fn new(expected: Vec<String>, now_ms: u64, window_ms: u64) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "RevealRound::ready",
+      "kind": "method",
+      "signature": "pub fn ready(&self, now_ms: u64) -> bool",
+      "docs": "Ready to reveal: everyone submitted, or the window closed."
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "RevealRound::reveal",
+      "kind": "method",
+      "signature": "pub fn reveal(self) -> Vec<(String, serde_json::Value)>",
+      "docs": "Consume and return all submissions (the reveal)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "RevealRound::submissions",
+      "kind": "field",
+      "signature": "pub submissions: Vec<(String, serde_json::Value)>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "RevealRound::submit",
+      "kind": "method",
+      "signature": "pub fn submit(&mut self, actor_id: &str, payload: serde_json::Value) -> Result<(), &'static str>",
+      "docs": "Record a submission. Duplicates and strangers are rejected."
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "TimeoutPolicy",
+      "kind": "enum",
+      "signature": "pub enum TimeoutPolicy { /// The actor's turn is skipped (turn passes on). #[default] Skip, /// The actor forfeits and is removed from the order. Forfeit, /// Nothing happens automatically (a human host decides). Wait, }",
+      "docs": "What happens when a turn timer expires."
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "TimeoutPolicy::Forfeit",
+      "kind": "variant",
+      "signature": "Forfeit",
+      "docs": "The actor forfeits and is removed from the order."
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "TimeoutPolicy::Skip",
+      "kind": "variant",
+      "signature": "Skip",
+      "docs": "The actor's turn is skipped (turn passes on)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "TimeoutPolicy::Wait",
+      "kind": "variant",
+      "signature": "Wait",
+      "docs": "Nothing happens automatically (a human host decides)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "TurnActor",
+      "kind": "struct",
+      "signature": "pub struct TurnActor { /// Stable id (a player id, a unit's id, ...). pub id: String, /// Higher acts first; ties keep insertion order (stable sort). pub initiative: i64, /// Forfeited/dead actors stay recorded but are skipped. pub active: bool, }",
+      "docs": "One participant in the order."
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "TurnActor::active",
+      "kind": "field",
+      "signature": "pub active: bool",
+      "docs": "Forfeited/dead actors stay recorded but are skipped."
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "TurnActor::id",
+      "kind": "field",
+      "signature": "pub id: String",
+      "docs": "Stable id (a player id, a unit's id, ...)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "TurnActor::initiative",
+      "kind": "field",
+      "signature": "pub initiative: i64",
+      "docs": "Higher acts first; ties keep insertion order (stable sort)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "TurnEvent",
+      "kind": "enum",
+      "signature": "pub enum TurnEvent { TurnStarted { actor_id: String, round: u32, turn_in_round: u32, }, RoundStarted { round: u32, }, ActorSkipped { actor_id: String, }, ActorForfeited { actor_id: String, }, /// One (or zero) active actors remain. OrderExhausted, }",
+      "docs": "An event the hub should announce (turn changed, round advanced, ...)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "TurnEvent::ActorForfeited",
+      "kind": "variant",
+      "signature": "ActorForfeited { actor_id: String, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "TurnEvent::ActorSkipped",
+      "kind": "variant",
+      "signature": "ActorSkipped { actor_id: String, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "TurnEvent::OrderExhausted",
+      "kind": "variant",
+      "signature": "OrderExhausted",
+      "docs": "One (or zero) active actors remain."
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "TurnEvent::RoundStarted",
+      "kind": "variant",
+      "signature": "RoundStarted { round: u32, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "TurnEvent::TurnStarted",
+      "kind": "variant",
+      "signature": "TurnStarted { actor_id: String, round: u32, turn_in_round: u32, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "TurnOrder",
+      "kind": "struct",
+      "signature": "pub struct TurnOrder { pub actors: Vec<TurnActor>, /// Index into `actors` of the current turn holder. pub current: usize, pub round: u32, pub turn_in_round: u32, /// Current turn deadline (0 = no timer). pub deadline_ms: u64, pub turn_duration_ms: u64, pub timeout_policy: TimeoutPolicy, started: bool, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "TurnOrder::active_count",
+      "kind": "method",
+      "signature": "pub fn active_count(&self) -> usize",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "TurnOrder::actors",
+      "kind": "field",
+      "signature": "pub actors: Vec<TurnActor>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "TurnOrder::advance",
+      "kind": "method",
+      "signature": "pub fn advance(&mut self, now_ms: u64) -> Vec<TurnEvent>",
+      "docs": "Advance to the next active actor (call when the current turn ends)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "TurnOrder::current",
+      "kind": "field",
+      "signature": "pub current: usize",
+      "docs": "Index into `actors` of the current turn holder."
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "TurnOrder::current_actor",
+      "kind": "method",
+      "signature": "pub fn current_actor(&self) -> Option<&TurnActor>",
+      "docs": "The current turn holder (None before start / after exhaustion)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "TurnOrder::deadline_ms",
+      "kind": "field",
+      "signature": "pub deadline_ms: u64",
+      "docs": "Current turn deadline (0 = no timer)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "TurnOrder::forfeit",
+      "kind": "method",
+      "signature": "pub fn forfeit(&mut self, actor_id: &str, now_ms: u64) -> Vec<TurnEvent>",
+      "docs": "Remove an actor from the running order (death, rage-quit). Advances the turn when it was theirs."
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "TurnOrder::new",
+      "kind": "method",
+      "signature": "pub fn new(actors: impl IntoIterator<Item = (String, i64)>, turn_duration_ms: u64, timeout_policy: TimeoutPolicy) -> Self",
+      "docs": "Build an order from (id, initiative) pairs; sorts by initiative descending (stable — ties keep the given order)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "TurnOrder::remaining_ms",
+      "kind": "method",
+      "signature": "pub fn remaining_ms(&self, now_ms: u64) -> Option<u64>",
+      "docs": "Milliseconds left on the current turn (None = no timer / not started)."
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "TurnOrder::round",
+      "kind": "field",
+      "signature": "pub round: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "TurnOrder::start",
+      "kind": "method",
+      "signature": "pub fn start(&mut self, now_ms: u64) -> Vec<TurnEvent>",
+      "docs": "Begin round 1, turn 1. Returns the announce events."
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "TurnOrder::tick",
+      "kind": "method",
+      "signature": "pub fn tick(&mut self, now_ms: u64) -> Vec<TurnEvent>",
+      "docs": "Apply the timeout policy if the current turn's deadline passed."
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "TurnOrder::timeout_policy",
+      "kind": "field",
+      "signature": "pub timeout_policy: TimeoutPolicy",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "TurnOrder::turn_duration_ms",
+      "kind": "field",
+      "signature": "pub turn_duration_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::play::turns",
+      "name": "TurnOrder::turn_in_round",
+      "kind": "field",
+      "signature": "pub turn_in_round: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::presence",
+      "name": "CHUNK_BLOCKS",
+      "kind": "const",
+      "signature": "pub const CHUNK_BLOCKS: f64 = 16.0;",
+      "docs": "Blocks in a chunk's edge, for the engine pose's world coordinates."
+    },
+    {
+      "module": "ckx_sdk::kit::presence",
+      "name": "POSE_BYTES",
+      "kind": "const",
+      "signature": "pub const POSE_BYTES: usize = 48;",
+      "docs": "The engine pose's length."
+    },
+    {
+      "module": "ckx_sdk::kit::presence",
+      "name": "Seen",
+      "kind": "struct",
+      "signature": "pub struct Seen { pub player: u64, pub uuid: String, pub x: f64, pub y: f64, pub z: f64, /// Placed from the actor's state, not its chunk's centre. pub precise: bool, }",
+      "docs": "One player near the place, as last seen."
+    },
+    {
+      "module": "ckx_sdk::kit::presence",
+      "name": "Seen::player",
+      "kind": "field",
+      "signature": "pub player: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::presence",
+      "name": "Seen::precise",
+      "kind": "field",
+      "signature": "pub precise: bool",
+      "docs": "Placed from the actor's state, not its chunk's centre."
+    },
+    {
+      "module": "ckx_sdk::kit::presence",
+      "name": "Seen::uuid",
+      "kind": "field",
+      "signature": "pub uuid: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::presence",
+      "name": "Seen::x",
+      "kind": "field",
+      "signature": "pub x: f64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::presence",
+      "name": "Seen::y",
+      "kind": "field",
+      "signature": "pub y: f64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::presence",
+      "name": "Seen::z",
+      "kind": "field",
+      "signature": "pub z: f64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::presence",
+      "name": "Track",
+      "kind": "struct",
+      "signature": "pub struct Track { pub x: f64, pub z: f64, pub at: u64, /// Chunks a second between the last two scans; 0 for the first. pub speed: f64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::presence",
+      "name": "Track::at",
+      "kind": "field",
+      "signature": "pub at: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::presence",
+      "name": "Track::speed",
+      "kind": "field",
+      "signature": "pub speed: f64",
+      "docs": "Chunks a second between the last two scans; 0 for the first."
+    },
+    {
+      "module": "ckx_sdk::kit::presence",
+      "name": "Track::x",
+      "kind": "field",
+      "signature": "pub x: f64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::presence",
+      "name": "Track::z",
+      "kind": "field",
+      "signature": "pub z: f64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::presence",
+      "name": "Tracker",
+      "kind": "struct",
+      "signature": "pub struct Tracker { #[serde(default)] pub last: BTreeMap<u64, Track>, }",
+      "docs": "Players' recent positions and speeds, from one scan to the next."
+    },
+    {
+      "module": "ckx_sdk::kit::presence",
+      "name": "Tracker::last",
+      "kind": "field",
+      "signature": "pub last: BTreeMap<u64, Track>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::presence",
+      "name": "Tracker::position",
+      "kind": "method",
+      "signature": "pub fn position(&self, player: u64) -> Option<(f64, f64)>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::presence",
+      "name": "Tracker::update",
+      "kind": "method",
+      "signature": "pub fn update(&mut self, seen: &[Seen], now: u64) -> BTreeMap<u64, f64>",
+      "docs": "Takes a scan at `now`; players not in it are forgotten. Returns each player's speed."
+    },
+    {
+      "module": "ckx_sdk::kit::presence",
+      "name": "ground_distance",
+      "kind": "function",
+      "signature": "pub fn ground_distance(a: (f64, f64), b: (f64, f64)) -> f64",
+      "docs": "Distance on the ground (x and z), in chunks."
+    },
+    {
+      "module": "ckx_sdk::kit::presence",
+      "name": "nearby",
+      "kind": "function",
+      "signature": "pub fn nearby(ctx: &Ctx, center: ChunkPos, radius: u8) -> Result<Vec<Seen>, CallError>",
+      "docs": "The players within `radius` chunks (at most 3 across, 1 up and down) of `center`."
+    },
+    {
+      "module": "ckx_sdk::kit::presence",
+      "name": "players_among",
+      "kind": "function",
+      "signature": "pub fn players_among(actors: &[Actor]) -> Vec<Seen>",
+      "docs": "Every player among `actors`, once each (the first actor a player has)."
+    },
+    {
+      "module": "ckx_sdk::kit::presence",
+      "name": "position_of",
+      "kind": "function",
+      "signature": "pub fn position_of(actor: &Actor) -> (f64, f64, f64, bool)",
+      "docs": "Where an actor is, in chunks, and whether that came from its state."
+    },
+    {
+      "module": "ckx_sdk::kit::rng",
+      "name": "Rng",
+      "kind": "struct",
+      "signature": "pub struct Rng { state: u64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::rng",
+      "name": "Rng::below",
+      "kind": "method",
+      "signature": "pub fn below(&mut self, n: u64) -> u64",
+      "docs": "Uniform in `[0, n)`; 0 when `n` is 0."
+    },
+    {
+      "module": "ckx_sdk::kit::rng",
+      "name": "Rng::chance",
+      "kind": "method",
+      "signature": "pub fn chance(&mut self, p: f64) -> bool",
+      "docs": "True with probability `p` (clamped to `[0, 1]`)."
+    },
+    {
+      "module": "ckx_sdk::kit::rng",
+      "name": "Rng::default",
+      "kind": "method",
+      "signature": "fn default() -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::rng",
+      "name": "Rng::f32",
+      "kind": "method",
+      "signature": "pub fn f32(&mut self) -> f32",
+      "docs": "Uniform in `[0, 1)`, single precision."
+    },
+    {
+      "module": "ckx_sdk::kit::rng",
+      "name": "Rng::f64",
+      "kind": "method",
+      "signature": "pub fn f64(&mut self) -> f64",
+      "docs": "Uniform in `[0, 1)`."
+    },
+    {
+      "module": "ckx_sdk::kit::rng",
+      "name": "Rng::next_u64",
+      "kind": "method",
+      "signature": "pub fn next_u64(&mut self) -> u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::rng",
+      "name": "Rng::pick",
+      "kind": "method",
+      "signature": "pub fn pick<'a, T>(&mut self, items: &'a [T]) -> Option<&'a T>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::rng",
+      "name": "Rng::range",
+      "kind": "method",
+      "signature": "pub fn range(&mut self, lo: i64, hi: i64) -> i64",
+      "docs": "Uniform in `[lo, hi]`, both included; `lo` when `hi` is not above it."
+    },
+    {
+      "module": "ckx_sdk::kit::rng",
+      "name": "Rng::range_i64",
+      "kind": "method",
+      "signature": "pub fn range_i64(&mut self, lo: i64, hi: i64) -> i64",
+      "docs": "Uniform in `[lo, hi]`, both included: [`Rng::range`]."
+    },
+    {
+      "module": "ckx_sdk::kit::rng",
+      "name": "Rng::seed_from",
+      "kind": "method",
+      "signature": "pub fn seed_from(text: &str) -> u64",
+      "docs": "A seed from text: a key, a name."
+    },
+    {
+      "module": "ckx_sdk::kit::rng",
+      "name": "Rng::seeded",
+      "kind": "method",
+      "signature": "pub fn seeded(seed: u64) -> Self",
+      "docs": "A generator seeded with `seed`; 0 counts as 1, which xorshift needs."
+    },
+    {
+      "module": "ckx_sdk::kit::rng",
+      "name": "Rng::shuffle",
+      "kind": "method",
+      "signature": "pub fn shuffle<T>(&mut self, items: &mut [T])",
+      "docs": "Shuffles in place (Fisher-Yates)."
+    },
+    {
+      "module": "ckx_sdk::kit::rng",
+      "name": "Rng::weighted",
+      "kind": "method",
+      "signature": "pub fn weighted(&mut self, weights: &[u64]) -> Option<usize>",
+      "docs": "The index of one weight, chosen in proportion to the weights; `None` when they sum to nothing."
+    },
+    {
+      "module": "ckx_sdk::kit::shard",
+      "name": "around",
+      "kind": "function",
+      "signature": "pub fn around(x: i64, z: i64, size: i64, radius: i64) -> Vec<String>",
+      "docs": "The keys of the shards within `radius` shards of the one holding `(x, z)`, its own first, then row by row."
+    },
+    {
+      "module": "ckx_sdk::kit::shard",
+      "name": "centre",
+      "kind": "function",
+      "signature": "pub fn centre(x: i64, z: i64, size: i64) -> (i64, i64)",
+      "docs": "The shard's centre chunk for chunk `(x, z)`. `size` is at least 1."
+    },
+    {
+      "module": "ckx_sdk::kit::shard",
+      "name": "key",
+      "kind": "function",
+      "signature": "pub fn key(x: i64, z: i64, size: i64) -> String",
+      "docs": "The key of the shard that holds chunk `(x, z)`."
+    },
+    {
+      "module": "ckx_sdk::kit::shard",
+      "name": "parse",
+      "kind": "function",
+      "signature": "pub fn parse(key: &str) -> Option<(i64, i64)>",
+      "docs": "The centre chunk a key names, or `None` when it is not `\"<x>,<z>\"`."
+    },
+    {
+      "module": "ckx_sdk::kit::sim",
+      "name": "daycycle",
+      "kind": "module",
+      "signature": "pub mod daycycle;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim",
+      "name": "nodes",
+      "kind": "module",
+      "signature": "pub mod nodes;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim",
+      "name": "waves",
+      "kind": "module",
+      "signature": "pub mod waves;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim",
+      "name": "weather",
+      "kind": "module",
+      "signature": "pub mod weather;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim",
+      "name": "zones",
+      "kind": "module",
+      "signature": "pub mod zones;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::daycycle",
+      "name": "DEFAULT_DAY_LENGTH_MS",
+      "kind": "const",
+      "signature": "pub const DEFAULT_DAY_LENGTH_MS: u64 = 1_200_000;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::daycycle",
+      "name": "DayCycle",
+      "kind": "struct",
+      "signature": "pub struct DayCycle { pub day_length_ms: u64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::daycycle",
+      "name": "DayCycle::day_index",
+      "kind": "method",
+      "signature": "pub fn day_index(&self, now_ms: u64) -> u64",
+      "docs": "Day number since epoch (season math, daily resets)."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::daycycle",
+      "name": "DayCycle::day_length_ms",
+      "kind": "field",
+      "signature": "pub day_length_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::daycycle",
+      "name": "DayCycle::default",
+      "kind": "method",
+      "signature": "fn default() -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::daycycle",
+      "name": "DayCycle::is_night",
+      "kind": "method",
+      "signature": "pub fn is_night(&self, now_ms: u64) -> bool",
+      "docs": "Night when sin(phase*TAU) dips below -0.05."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::daycycle",
+      "name": "DayCycle::new",
+      "kind": "method",
+      "signature": "pub fn new(day_length_ms: u64) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::daycycle",
+      "name": "DayCycle::phase",
+      "kind": "method",
+      "signature": "pub fn phase(&self, now_ms: u64) -> f32",
+      "docs": "Phase in [0, 1): 0 = day start, 0.5 = day/night boundary region."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::daycycle",
+      "name": "DayCycle::sun",
+      "kind": "method",
+      "signature": "pub fn sun(&self, now_ms: u64) -> f32",
+      "docs": "Sun height in [-1, 1] (drive lighting / spawn weights)."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::nodes",
+      "name": "HarvestOutcome",
+      "kind": "struct",
+      "signature": "pub struct HarvestOutcome { pub harvested: bool, pub depleted: bool, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::nodes",
+      "name": "HarvestOutcome::depleted",
+      "kind": "field",
+      "signature": "pub depleted: bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::nodes",
+      "name": "HarvestOutcome::harvested",
+      "kind": "field",
+      "signature": "pub harvested: bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::nodes",
+      "name": "Node",
+      "kind": "struct",
+      "signature": "pub struct Node { pub phase: NodePhase, /// Remaining harvests before depletion (0 = infinite until depleted /// explicitly). pub charges: u32, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::nodes",
+      "name": "Node::charges",
+      "kind": "field",
+      "signature": "pub charges: u32",
+      "docs": "Remaining harvests before depletion (0 = infinite until depleted explicitly)."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::nodes",
+      "name": "Node::phase",
+      "kind": "field",
+      "signature": "pub phase: NodePhase",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::nodes",
+      "name": "NodePhase",
+      "kind": "enum",
+      "signature": "pub enum NodePhase { #[default] Ready, /// Depleted; respawns at the embedded time. Respawning { at_ms: u64 }, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::nodes",
+      "name": "NodePhase::Ready",
+      "kind": "variant",
+      "signature": "Ready",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::nodes",
+      "name": "NodePhase::Respawning",
+      "kind": "variant",
+      "signature": "Respawning { at_ms: u64 }",
+      "docs": "Depleted; respawns at the embedded time."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::nodes",
+      "name": "NodePool",
+      "kind": "struct",
+      "signature": "pub struct NodePool { pub nodes: BTreeMap<String, Node>, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::nodes",
+      "name": "NodePool::ensure",
+      "kind": "method",
+      "signature": "pub fn ensure(&mut self, id: &str, charges: u32) -> &mut Node",
+      "docs": "Register a node (idempotent; keeps existing state)."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::nodes",
+      "name": "NodePool::harvest",
+      "kind": "method",
+      "signature": "pub fn harvest(&mut self, id: &str, now_ms: u64, respawn_ms: u64) -> HarvestOutcome",
+      "docs": "Attempt a harvest. Depletes when charges run out."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::nodes",
+      "name": "NodePool::is_ready",
+      "kind": "method",
+      "signature": "pub fn is_ready(&self, id: &str) -> bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::nodes",
+      "name": "NodePool::nodes",
+      "kind": "field",
+      "signature": "pub nodes: BTreeMap<String, Node>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::nodes",
+      "name": "NodePool::tick",
+      "kind": "method",
+      "signature": "pub fn tick(&mut self, now_ms: u64, recharge: u32) -> Vec<String>",
+      "docs": "Tick respawns: returns ids that just came back (re-arm charges)."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::waves",
+      "name": "WaveDef",
+      "kind": "struct",
+      "signature": "pub struct WaveDef { /// Entries: (unit id, count). pub units: Vec<(String, u32)>, /// Delay after the previous wave clears (or starts, for timed mode). pub delay_ms: u64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::waves",
+      "name": "WaveDef::delay_ms",
+      "kind": "field",
+      "signature": "pub delay_ms: u64",
+      "docs": "Delay after the previous wave clears (or starts, for timed mode)."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::waves",
+      "name": "WaveDef::units",
+      "kind": "field",
+      "signature": "pub units: Vec<(String, u32)>",
+      "docs": "Entries: (unit id, count)."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::waves",
+      "name": "WaveEvent",
+      "kind": "enum",
+      "signature": "pub enum WaveEvent { /// Spawn this wave's units now. Start(usize), Finished, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::waves",
+      "name": "WaveEvent::Finished",
+      "kind": "variant",
+      "signature": "Finished",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::waves",
+      "name": "WaveEvent::Start",
+      "kind": "variant",
+      "signature": "Start(usize)",
+      "docs": "Spawn this wave's units now."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::waves",
+      "name": "WavePhase",
+      "kind": "enum",
+      "signature": "pub enum WavePhase { /// Before wave `next` starts; starts at the embedded time. Countdown { next: usize, starts_at_ms: u64 }, /// Wave `index` is live. Active { index: usize }, /// All waves done. Complete, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::waves",
+      "name": "WavePhase::Active",
+      "kind": "variant",
+      "signature": "Active { index: usize }",
+      "docs": "Wave `index` is live."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::waves",
+      "name": "WavePhase::Complete",
+      "kind": "variant",
+      "signature": "Complete",
+      "docs": "All waves done."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::waves",
+      "name": "WavePhase::Countdown",
+      "kind": "variant",
+      "signature": "Countdown { next: usize, starts_at_ms: u64 }",
+      "docs": "Before wave `next` starts; starts at the embedded time."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::waves",
+      "name": "WaveSchedule",
+      "kind": "struct",
+      "signature": "pub struct WaveSchedule { pub phase: WavePhase, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::waves",
+      "name": "WaveSchedule::default",
+      "kind": "method",
+      "signature": "fn default() -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::waves",
+      "name": "WaveSchedule::phase",
+      "kind": "field",
+      "signature": "pub phase: WavePhase",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::waves",
+      "name": "WaveSchedule::start",
+      "kind": "method",
+      "signature": "pub fn start(waves: &[WaveDef], now_ms: u64) -> Self",
+      "docs": "Arm the schedule from wave 0 with the first delay."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::waves",
+      "name": "WaveSchedule::step",
+      "kind": "method",
+      "signature": "pub fn step(&mut self, waves: &[WaveDef], now_ms: u64, active_cleared: bool) -> Option<WaveEvent>",
+      "docs": "Advance. `active_cleared` = the live wave's units are all dead."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::weather",
+      "name": "EVENT_WEATHER",
+      "kind": "const",
+      "signature": "pub const EVENT_WEATHER: u16 = 90;",
+      "docs": "The platform-reserved server-event type for weather/season transitions."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::weather",
+      "name": "Transition",
+      "kind": "struct",
+      "signature": "pub struct Transition { pub from: String, pub to: String, pub until_ms: u64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::weather",
+      "name": "Transition::from",
+      "kind": "field",
+      "signature": "pub from: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::weather",
+      "name": "Transition::to",
+      "kind": "field",
+      "signature": "pub to: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::weather",
+      "name": "Transition::until_ms",
+      "kind": "field",
+      "signature": "pub until_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::weather",
+      "name": "WeatherKind",
+      "kind": "struct",
+      "signature": "pub struct WeatherKind { pub id: String, /// Relative pick weight (0 disables). pub weight: u32, pub min_ms: u64, pub max_ms: u64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::weather",
+      "name": "WeatherKind::id",
+      "kind": "field",
+      "signature": "pub id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::weather",
+      "name": "WeatherKind::max_ms",
+      "kind": "field",
+      "signature": "pub max_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::weather",
+      "name": "WeatherKind::min_ms",
+      "kind": "field",
+      "signature": "pub min_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::weather",
+      "name": "WeatherKind::weight",
+      "kind": "field",
+      "signature": "pub weight: u32",
+      "docs": "Relative pick weight (0 disables)."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::weather",
+      "name": "WeatherState",
+      "kind": "struct",
+      "signature": "pub struct WeatherState { pub current: String, pub since_ms: u64, pub until_ms: u64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::weather",
+      "name": "WeatherState::current",
+      "kind": "field",
+      "signature": "pub current: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::weather",
+      "name": "WeatherState::since_ms",
+      "kind": "field",
+      "signature": "pub since_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::weather",
+      "name": "WeatherState::until_ms",
+      "kind": "field",
+      "signature": "pub until_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::weather",
+      "name": "default_kinds",
+      "kind": "function",
+      "signature": "pub fn default_kinds() -> Vec<WeatherKind>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::weather",
+      "name": "emit_transition",
+      "kind": "function",
+      "signature": "pub fn emit_transition(ctx: &Ctx, at: ChunkPos, distance: u8, actor: &[u8; 32], state: &WeatherState, now_ms: u64) -> Result<()>",
+      "docs": "Sends a transition as a type-90 server event to the players within `distance` chunks of `at`, from the hub's `actor`."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::weather",
+      "name": "front_json",
+      "kind": "function",
+      "signature": "pub fn front_json(state: &WeatherState, now_ms: u64) -> Value",
+      "docs": "The client-facing JSON for a front (both the event body and `forecast`)."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::weather",
+      "name": "step",
+      "kind": "function",
+      "signature": "pub fn step(state: &mut WeatherState, kinds: &[WeatherKind], now_ms: u64, rng: &mut Rng) -> Option<Transition>",
+      "docs": "Advance the front. Returns the transition when the front changed (emit it to clients), `None` while the current front holds."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::zones",
+      "name": "ShrinkPhase",
+      "kind": "struct",
+      "signature": "pub struct ShrinkPhase { /// The radius this phase shrinks TO. pub radius: f32, /// How long the zone HOLDS before shrinking (the warning window). pub hold_ms: u64, /// How long the shrink itself takes (radius interpolates linearly). pub shrink_ms: u64, }",
+      "docs": "One phase of a shrinking-zone schedule."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::zones",
+      "name": "ShrinkPhase::hold_ms",
+      "kind": "field",
+      "signature": "pub hold_ms: u64",
+      "docs": "How long the zone HOLDS before shrinking (the warning window)."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::zones",
+      "name": "ShrinkPhase::radius",
+      "kind": "field",
+      "signature": "pub radius: f32",
+      "docs": "The radius this phase shrinks TO."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::zones",
+      "name": "ShrinkPhase::shrink_ms",
+      "kind": "field",
+      "signature": "pub shrink_ms: u64",
+      "docs": "How long the shrink itself takes (radius interpolates linearly)."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::zones",
+      "name": "ShrinkingZone",
+      "kind": "struct",
+      "signature": "pub struct ShrinkingZone { pub center: (f32, f32), pub initial_radius: f32, pub phases: Vec<ShrinkPhase>, pub started_at_ms: u64, /// Last phase-progress marker events were emitted for (phase, stage). announced: Vec<(usize, u8)>, }",
+      "docs": "A battle-royale circle: fixed center, radius stepping down a schedule. Pure clock math — feed it `now_ms`, read `radius()` and drain events."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::zones",
+      "name": "ShrinkingZone::center",
+      "kind": "field",
+      "signature": "pub center: (f32, f32)",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::zones",
+      "name": "ShrinkingZone::contains",
+      "kind": "method",
+      "signature": "pub fn contains(&self, pos: (f32, f32), now_ms: u64) -> bool",
+      "docs": "Is a position inside the live circle?"
+    },
+    {
+      "module": "ckx_sdk::kit::sim::zones",
+      "name": "ShrinkingZone::done",
+      "kind": "method",
+      "signature": "pub fn done(&self, now_ms: u64) -> bool",
+      "docs": "Every phase fully settled?"
+    },
+    {
+      "module": "ckx_sdk::kit::sim::zones",
+      "name": "ShrinkingZone::initial_radius",
+      "kind": "field",
+      "signature": "pub initial_radius: f32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::zones",
+      "name": "ShrinkingZone::phases",
+      "kind": "field",
+      "signature": "pub phases: Vec<ShrinkPhase>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::zones",
+      "name": "ShrinkingZone::poll",
+      "kind": "method",
+      "signature": "pub fn poll(&mut self, now_ms: u64) -> Vec<ZoneEvent>",
+      "docs": "Advance the announcer: returns the events newly due at `now_ms` (warning at hold start, shrinking at shrink start, settled at end, final once after the last phase)."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::zones",
+      "name": "ShrinkingZone::radius",
+      "kind": "method",
+      "signature": "pub fn radius(&self, now_ms: u64) -> f32",
+      "docs": "The circle's radius at `now_ms` (linear interpolation during shrinks)."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::zones",
+      "name": "ShrinkingZone::start",
+      "kind": "method",
+      "signature": "pub fn start(center: (f32, f32), initial_radius: f32, phases: Vec<ShrinkPhase>, now_ms: u64) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::zones",
+      "name": "ShrinkingZone::started_at_ms",
+      "kind": "field",
+      "signature": "pub started_at_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::zones",
+      "name": "Zone",
+      "kind": "struct",
+      "signature": "pub struct Zone { pub id: String, pub rule: String, pub min: (f32, f32, f32), pub max: (f32, f32, f32), }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::zones",
+      "name": "Zone::contains",
+      "kind": "method",
+      "signature": "pub fn contains(&self, pos: (f32, f32, f32)) -> bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::zones",
+      "name": "Zone::id",
+      "kind": "field",
+      "signature": "pub id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::zones",
+      "name": "Zone::max",
+      "kind": "field",
+      "signature": "pub max: (f32, f32, f32)",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::zones",
+      "name": "Zone::min",
+      "kind": "field",
+      "signature": "pub min: (f32, f32, f32)",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::zones",
+      "name": "Zone::rule",
+      "kind": "field",
+      "signature": "pub rule: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::zones",
+      "name": "ZoneEvent",
+      "kind": "enum",
+      "signature": "pub enum ZoneEvent { /// A hold began: the zone will start shrinking to `to_radius` at `at_ms`. Warning { phase: usize, to_radius: f32, shrink_starts_at_ms: u64 }, /// The shrink began. Shrinking { phase: usize, to_radius: f32 }, /// The phase's target radius was reached. Settled { phase: usize, radius: f32 }, /// Every phase is done (the final circle). Final { radius: f32 }, }",
+      "docs": "Announcements a shrinking zone produces as time advances."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::zones",
+      "name": "ZoneEvent::Final",
+      "kind": "variant",
+      "signature": "Final { radius: f32 }",
+      "docs": "Every phase is done (the final circle)."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::zones",
+      "name": "ZoneEvent::Settled",
+      "kind": "variant",
+      "signature": "Settled { phase: usize, radius: f32 }",
+      "docs": "The phase's target radius was reached."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::zones",
+      "name": "ZoneEvent::Shrinking",
+      "kind": "variant",
+      "signature": "Shrinking { phase: usize, to_radius: f32 }",
+      "docs": "The shrink began."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::zones",
+      "name": "ZoneEvent::Warning",
+      "kind": "variant",
+      "signature": "Warning { phase: usize, to_radius: f32, shrink_starts_at_ms: u64 }",
+      "docs": "A hold began: the zone will start shrinking to `to_radius` at `at_ms`."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::zones",
+      "name": "ZoneSet",
+      "kind": "struct",
+      "signature": "pub struct ZoneSet { pub zones: Vec<Zone>, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::sim::zones",
+      "name": "ZoneSet::at",
+      "kind": "method",
+      "signature": "pub fn at(&self, pos: (f32, f32, f32)) -> Vec<&Zone>",
+      "docs": "All zones containing the position."
+    },
+    {
+      "module": "ckx_sdk::kit::sim::zones",
+      "name": "ZoneSet::has_rule",
+      "kind": "method",
+      "signature": "pub fn has_rule(&self, pos: (f32, f32, f32), rule: &str) -> bool",
+      "docs": "Does any zone with this rule cover the position?"
+    },
+    {
+      "module": "ckx_sdk::kit::sim::zones",
+      "name": "ZoneSet::zones",
+      "kind": "field",
+      "signature": "pub zones: Vec<Zone>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ABILITY",
+      "kind": "const",
+      "signature": "pub const ABILITY: u16 = 94;",
+      "docs": "An ability was cast, or landed."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "APP_EVENTS",
+      "kind": "const",
+      "signature": "pub const APP_EVENTS: u16 = 1000;",
+      "docs": "The first number an app's own events may use."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "AbilityUse",
+      "kind": "struct",
+      "signature": "pub struct AbilityUse { /// `cast` or `impact`. pub kind: String, pub ability_id: String, pub caster_id: String, pub victim_id: Option<String>, pub damage: i64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "AbilityUse::ability_id",
+      "kind": "field",
+      "signature": "pub ability_id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "AbilityUse::caster_id",
+      "kind": "field",
+      "signature": "pub caster_id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "AbilityUse::damage",
+      "kind": "field",
+      "signature": "pub damage: i64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "AbilityUse::kind",
+      "kind": "field",
+      "signature": "pub kind: String",
+      "docs": "`cast` or `impact`."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "AbilityUse::victim_id",
+      "kind": "field",
+      "signature": "pub victim_id: Option<String>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ActorState",
+      "kind": "struct",
+      "signature": "pub struct ActorState { /// What it is: `mob`, `npc`, `pet`, `ball`, `ghost`, a game's own word. pub kind: String, /// Its id within the hub that shows it. pub id: u64, /// Where it is, in chunks. pub x: f64, #[serde(default)] pub y: f64, pub z: f64, /// Its health, when it has any. pub hp: Option<i64>, #[serde(default, skip_serializing_if = \"Option::is_none\")] pub max_hp: Option<i64>, /// What it is doing: `idle`, `chase`, `follow`, ... #[serde(default, skip_serializing_if = \"Option::is_none\")] pub mode: Option<String>, /// The player it belongs to (a pet, a summon). #[serde(default, skip_serializing_if = \"Option::is_none\")] pub owner: Option<u64>, /// Facing, in radians. #[serde(default, skip_serializing_if = \"Option::is_none\")] pub yaw: Option<f64>, #[serde(default, skip_serializing_if = \"Option::is_none\")] pub name: Option<String>, }",
+      "docs": "A server-driven actor as players near it see it."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ActorState::chunk",
+      "kind": "method",
+      "signature": "pub fn chunk(&self) -> ChunkPos",
+      "docs": "The chunk it stands in."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ActorState::hp",
+      "kind": "field",
+      "signature": "pub hp: Option<i64>",
+      "docs": "Its health, when it has any."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ActorState::id",
+      "kind": "field",
+      "signature": "pub id: u64",
+      "docs": "Its id within the hub that shows it."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ActorState::kind",
+      "kind": "field",
+      "signature": "pub kind: String",
+      "docs": "What it is: `mob`, `npc`, `pet`, `ball`, `ghost`, a game's own word."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ActorState::max_hp",
+      "kind": "field",
+      "signature": "pub max_hp: Option<i64>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ActorState::mode",
+      "kind": "field",
+      "signature": "pub mode: Option<String>",
+      "docs": "What it is doing: `idle`, `chase`, `follow`, ..."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ActorState::name",
+      "kind": "field",
+      "signature": "pub name: Option<String>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ActorState::new",
+      "kind": "method",
+      "signature": "pub fn new(kind: &str, id: u64, x: f64, z: f64) -> Self",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ActorState::owner",
+      "kind": "field",
+      "signature": "pub owner: Option<u64>",
+      "docs": "The player it belongs to (a pet, a summon)."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ActorState::x",
+      "kind": "field",
+      "signature": "pub x: f64",
+      "docs": "Where it is, in chunks."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ActorState::y",
+      "kind": "field",
+      "signature": "pub y: f64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ActorState::yaw",
+      "kind": "field",
+      "signature": "pub yaw: Option<f64>",
+      "docs": "Facing, in radians."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ActorState::z",
+      "kind": "field",
+      "signature": "pub z: f64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "CONTACT_DAMAGE",
+      "kind": "const",
+      "signature": "pub const CONTACT_DAMAGE: u16 = 77;",
+      "docs": "A mob or a trap hit a player."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "CONTROL_POINT",
+      "kind": "const",
+      "signature": "pub const CONTROL_POINT: u16 = 96;",
+      "docs": "A control point changed hands, or its capture moved."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ContactDamage",
+      "kind": "struct",
+      "signature": "pub struct ContactDamage { pub target_uuid: String, pub damage: i64, pub mob_id: String, pub mob_name: String, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ContactDamage::damage",
+      "kind": "field",
+      "signature": "pub damage: i64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ContactDamage::mob_id",
+      "kind": "field",
+      "signature": "pub mob_id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ContactDamage::mob_name",
+      "kind": "field",
+      "signature": "pub mob_name: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ContactDamage::target_uuid",
+      "kind": "field",
+      "signature": "pub target_uuid: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ControlPointChange",
+      "kind": "struct",
+      "signature": "pub struct ControlPointChange { pub point_id: String, pub owner: String, pub previous_owner: String, /// Capture progress toward the attacker, 0 to 1. pub progress: f64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ControlPointChange::owner",
+      "kind": "field",
+      "signature": "pub owner: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ControlPointChange::point_id",
+      "kind": "field",
+      "signature": "pub point_id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ControlPointChange::previous_owner",
+      "kind": "field",
+      "signature": "pub previous_owner: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ControlPointChange::progress",
+      "kind": "field",
+      "signature": "pub progress: f64",
+      "docs": "Capture progress toward the attacker, 0 to 1."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "EMOTE",
+      "kind": "const",
+      "signature": "pub const EMOTE: u16 = 101;",
+      "docs": "An emote: a client event players send each other (the kit clients' convention); a hub may send one too, for a server-driven actor."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ENCOUNTER",
+      "kind": "const",
+      "signature": "pub const ENCOUNTER: u16 = 99;",
+      "docs": "A wave began or ended, or a boss changed phase."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "Emote",
+      "kind": "struct",
+      "signature": "pub struct Emote { /// The emote's name, as the game knows it: `wave`, `cheer`, ... pub emote: String, /// The actor it is aimed at, if any. pub target_uuid: Option<String>, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "Emote::emote",
+      "kind": "field",
+      "signature": "pub emote: String",
+      "docs": "The emote's name, as the game knows it: `wave`, `cheer`, ..."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "Emote::target_uuid",
+      "kind": "field",
+      "signature": "pub target_uuid: Option<String>",
+      "docs": "The actor it is aimed at, if any."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "EncounterChange",
+      "kind": "struct",
+      "signature": "pub struct EncounterChange { /// `wave_started`, `wave_cleared`, `boss_phase` or `finished`. pub kind: String, pub encounter_id: String, pub wave: u32, pub phase: u32, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "EncounterChange::encounter_id",
+      "kind": "field",
+      "signature": "pub encounter_id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "EncounterChange::kind",
+      "kind": "field",
+      "signature": "pub kind: String",
+      "docs": "`wave_started`, `wave_cleared`, `boss_phase` or `finished`."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "EncounterChange::phase",
+      "kind": "field",
+      "signature": "pub phase: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "EncounterChange::wave",
+      "kind": "field",
+      "signature": "pub wave: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "MOVEMENT_VIOLATION",
+      "kind": "const",
+      "signature": "pub const MOVEMENT_VIOLATION: u16 = 95;",
+      "docs": "A movement the warden flagged."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "MovementViolation",
+      "kind": "struct",
+      "signature": "pub struct MovementViolation { /// `speed`, `teleport` or `bounds`. pub kind: String, pub user_id: String, pub detail: String, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "MovementViolation::detail",
+      "kind": "field",
+      "signature": "pub detail: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "MovementViolation::kind",
+      "kind": "field",
+      "signature": "pub kind: String",
+      "docs": "`speed`, `teleport` or `bounds`."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "MovementViolation::user_id",
+      "kind": "field",
+      "signature": "pub user_id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "POSSESSION",
+      "kind": "const",
+      "signature": "pub const POSSESSION: u16 = 100;",
+      "docs": "The contested object (a ball) changed hands, or a goal was scored."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "PROPOSAL",
+      "kind": "const",
+      "signature": "pub const PROPOSAL: u16 = 93;",
+      "docs": "A match was proposed to the players in it."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "PossessionChange",
+      "kind": "struct",
+      "signature": "pub struct PossessionChange { /// `claimed`, `passed`, `loose` or `goal`. pub kind: String, pub holder_id: Option<String>, pub team: Option<String>, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "PossessionChange::holder_id",
+      "kind": "field",
+      "signature": "pub holder_id: Option<String>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "PossessionChange::kind",
+      "kind": "field",
+      "signature": "pub kind: String",
+      "docs": "`claimed`, `passed`, `loose` or `goal`."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "PossessionChange::team",
+      "kind": "field",
+      "signature": "pub team: Option<String>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ProposalMade",
+      "kind": "struct",
+      "signature": "pub struct ProposalMade { pub proposal_id: String, pub mode: String, pub players: Vec<String>, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ProposalMade::mode",
+      "kind": "field",
+      "signature": "pub mode: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ProposalMade::players",
+      "kind": "field",
+      "signature": "pub players: Vec<String>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ProposalMade::proposal_id",
+      "kind": "field",
+      "signature": "pub proposal_id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "RACE_TIMING",
+      "kind": "const",
+      "signature": "pub const RACE_TIMING: u16 = 97;",
+      "docs": "A racer started, passed a checkpoint, finished a lap or the race."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "RaceTiming",
+      "kind": "struct",
+      "signature": "pub struct RaceTiming { /// `started`, `checkpoint`, `lap` or `finished`. pub kind: String, pub course_id: String, pub user_id: String, pub checkpoint: u32, pub lap: u32, pub elapsed_ms: u64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "RaceTiming::checkpoint",
+      "kind": "field",
+      "signature": "pub checkpoint: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "RaceTiming::course_id",
+      "kind": "field",
+      "signature": "pub course_id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "RaceTiming::elapsed_ms",
+      "kind": "field",
+      "signature": "pub elapsed_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "RaceTiming::kind",
+      "kind": "field",
+      "signature": "pub kind: String",
+      "docs": "`started`, `checkpoint`, `lap` or `finished`."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "RaceTiming::lap",
+      "kind": "field",
+      "signature": "pub lap: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "RaceTiming::user_id",
+      "kind": "field",
+      "signature": "pub user_id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "SCORE",
+      "kind": "const",
+      "signature": "pub const SCORE: u16 = 92;",
+      "docs": "Scores or a result."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ScoreUpdate",
+      "kind": "struct",
+      "signature": "pub struct ScoreUpdate { pub standings: Vec<Standing>, pub winner_id: Option<String>, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ScoreUpdate::standings",
+      "kind": "field",
+      "signature": "pub standings: Vec<Standing>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ScoreUpdate::winner_id",
+      "kind": "field",
+      "signature": "pub winner_id: Option<String>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "Standing",
+      "kind": "struct",
+      "signature": "pub struct Standing { pub actor_id: String, pub score: i64, pub rank: u32, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "Standing::actor_id",
+      "kind": "field",
+      "signature": "pub actor_id: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "Standing::rank",
+      "kind": "field",
+      "signature": "pub rank: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "Standing::score",
+      "kind": "field",
+      "signature": "pub score: i64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "TURN",
+      "kind": "const",
+      "signature": "pub const TURN: u16 = 91;",
+      "docs": "A turn passed to the next player."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "TurnChange",
+      "kind": "struct",
+      "signature": "pub struct TurnChange { /// Whose turn it is now: a player id, or a unit's id. pub actor_id: String, pub round: u32, pub turn_in_round: u32, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "TurnChange::actor_id",
+      "kind": "field",
+      "signature": "pub actor_id: String",
+      "docs": "Whose turn it is now: a player id, or a unit's id."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "TurnChange::round",
+      "kind": "field",
+      "signature": "pub round: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "TurnChange::turn_in_round",
+      "kind": "field",
+      "signature": "pub turn_in_round: u32",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "WEATHER",
+      "kind": "const",
+      "signature": "pub const WEATHER: u16 = 90;",
+      "docs": "The weather or the time of day turned."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "WeatherChange",
+      "kind": "struct",
+      "signature": "pub struct WeatherChange { pub weather: String, pub since_ms: u64, pub until_ms: u64, pub night: bool, pub time_of_day: f64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "WeatherChange::night",
+      "kind": "field",
+      "signature": "pub night: bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "WeatherChange::since_ms",
+      "kind": "field",
+      "signature": "pub since_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "WeatherChange::time_of_day",
+      "kind": "field",
+      "signature": "pub time_of_day: f64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "WeatherChange::until_ms",
+      "kind": "field",
+      "signature": "pub until_ms: u64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "WeatherChange::weather",
+      "kind": "field",
+      "signature": "pub weather: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ZONE_CHANGE",
+      "kind": "const",
+      "signature": "pub const ZONE_CHANGE: u16 = 98;",
+      "docs": "A play zone moved or shrank."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ZoneChange",
+      "kind": "struct",
+      "signature": "pub struct ZoneChange { /// `hold`, `shrink` or `closed`. pub kind: String, pub phase: Option<u32>, pub radius_now: f64, pub center_x: f64, pub center_z: f64, }",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ZoneChange::center_x",
+      "kind": "field",
+      "signature": "pub center_x: f64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ZoneChange::center_z",
+      "kind": "field",
+      "signature": "pub center_z: f64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ZoneChange::kind",
+      "kind": "field",
+      "signature": "pub kind: String",
+      "docs": "`hold`, `shrink` or `closed`."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ZoneChange::phase",
+      "kind": "field",
+      "signature": "pub phase: Option<u32>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "ZoneChange::radius_now",
+      "kind": "field",
+      "signature": "pub radius_now: f64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "emit_actor_state",
+      "kind": "function",
+      "signature": "pub fn emit_actor_state(ctx: &Ctx, actor: &[u8; 32], distance: u8, state: &ActorState) -> Result<()>",
+      "docs": "Shows a server-driven actor to the players within `distance` chunks of where it stands."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "emit_event",
+      "kind": "function",
+      "signature": "pub fn emit_event<T: Serialize + ?Sized>(ctx: &Ctx, at: ChunkPos, distance: u8, actor: &[u8; 32], event_type: u16, body: &T) -> Result<()>",
+      "docs": "Sends a server event to the players within `distance` chunks of `at` (at most [`MAX_DISTANCE`]). `actor` is the event's actor: the one it is about, or the hub's own."
+    },
+    {
+      "module": "ckx_sdk::kit::wire",
+      "name": "event_bytes",
+      "kind": "function",
+      "signature": "pub fn event_bytes<T: Serialize + ?Sized>(event_type: u16, body: &T) -> Result<Vec<u8>>",
+      "docs": "A server event's payload: its type, then its body as JSON."
+    },
+    {
+      "module": "ckx_sdk::limits",
+      "name": "ARTIFACT_MAX_BYTES",
+      "kind": "const",
+      "signature": "pub const ARTIFACT_MAX_BYTES: usize = 16 << 20;",
+      "docs": "The largest module an app's node type may deploy."
+    },
+    {
+      "module": "ckx_sdk::limits",
+      "name": "LOGS_PER_CALL",
+      "kind": "const",
+      "signature": "pub const LOGS_PER_CALL: u32 = 32;",
+      "docs": "Log lines one call may write (the rest are dropped), and the bytes of a line that are kept."
+    },
+    {
+      "module": "ckx_sdk::limits",
+      "name": "MAX_EMIT_BYTES",
+      "kind": "const",
+      "signature": "pub const MAX_EMIT_BYTES: usize = 70 + crate::emit::MAX_PAYLOAD;",
+      "docs": "The largest realtime inject a node may emit: a spatial event's header and its payload."
+    },
+    {
+      "module": "ckx_sdk::limits",
+      "name": "MAX_LOG_BYTES",
+      "kind": "const",
+      "signature": "pub const MAX_LOG_BYTES: usize = 4 << 10;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits",
+      "name": "MAX_PAYLOAD",
+      "kind": "const",
+      "signature": "pub const MAX_PAYLOAD: usize = 4 << 20;",
+      "docs": "The largest payload a node may send in one message, and the largest reply it may return. A larger reply is answered `Internal`."
+    },
+    {
+      "module": "ckx_sdk::limits",
+      "name": "MAX_SNAPSHOT_BYTES",
+      "kind": "const",
+      "signature": "pub const MAX_SNAPSHOT_BYTES: usize = 8 << 20;",
+      "docs": "The largest snapshot a hub may persist. A larger one fails to save, and the last one stands."
+    },
+    {
+      "module": "ckx_sdk::limits",
+      "name": "OUT_BYTES_PER_CALL",
+      "kind": "const",
+      "signature": "pub const OUT_BYTES_PER_CALL: u64 = 32 << 20;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits",
+      "name": "OUT_MSGS_PER_CALL",
+      "kind": "const",
+      "signature": "pub const OUT_MSGS_PER_CALL: u32 = 16_384;",
+      "docs": "What one call into a node may send on, in all: messages (calls, sends, publishes, emits, node API requests, subscriptions) and bytes of their payloads. Past either, calls and node API requests answer `Busy` and publishes are dropped."
+    },
+    {
+      "module": "ckx_sdk::limits",
+      "name": "crate::node::{MAX_CHUNK_STATE, MAX_VOXEL_STATE, MAX_VOXEL_WRITES}",
+      "kind": "reexport",
+      "signature": "pub use crate::node::{MAX_CHUNK_STATE, MAX_VOXEL_STATE, MAX_VOXEL_WRITES};",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits",
+      "name": "crate::rt::{MAX_TIMERS, MAX_WATCHES, MIN_TIMER_MS}",
+      "kind": "reexport",
+      "signature": "pub use crate::rt::{MAX_TIMERS, MAX_WATCHES, MIN_TIMER_MS};",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits",
+      "name": "manifest",
+      "kind": "module",
+      "signature": "pub mod manifest",
+      "docs": "What a manifest may ask for a node type, and what it gets when it asks for nothing."
+    },
+    {
+      "module": "ckx_sdk::limits",
+      "name": "mods",
+      "kind": "module",
+      "signature": "pub mod mods",
+      "docs": "What the platform gives every mod, in place of a manifest's limits."
+    },
+    {
+      "module": "ckx_sdk::limits::manifest",
+      "name": "DEADLINE_DEFAULT_MS",
+      "kind": "const",
+      "signature": "pub const DEADLINE_DEFAULT_MS: u32 = 2_000;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits::manifest",
+      "name": "DEADLINE_MAX_MS",
+      "kind": "const",
+      "signature": "pub const DEADLINE_MAX_MS: u32 = 10_000;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits::manifest",
+      "name": "FUEL_DEFAULT",
+      "kind": "const",
+      "signature": "pub const FUEL_DEFAULT: u64 = 50_000_000;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits::manifest",
+      "name": "FUEL_MAX",
+      "kind": "const",
+      "signature": "pub const FUEL_MAX: u64 = 1_000_000_000;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits::manifest",
+      "name": "MEMORY_DEFAULT_MB",
+      "kind": "const",
+      "signature": "pub const MEMORY_DEFAULT_MB: u32 = 64;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits::manifest",
+      "name": "MEMORY_MAX_MB",
+      "kind": "const",
+      "signature": "pub const MEMORY_MAX_MB: u32 = 512;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits::mods",
+      "name": "ARTIFACT_MAX_BYTES",
+      "kind": "const",
+      "signature": "pub const ARTIFACT_MAX_BYTES: usize = 4 << 20;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits::mods",
+      "name": "DEADLINE_MS",
+      "kind": "const",
+      "signature": "pub const DEADLINE_MS: u32 = 2_000;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits::mods",
+      "name": "FUEL_PER_CALL",
+      "kind": "const",
+      "signature": "pub const FUEL_PER_CALL: u64 = 20_000_000;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits::mods",
+      "name": "MEMORY_MB",
+      "kind": "const",
+      "signature": "pub const MEMORY_MB: u32 = 32;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits::mods",
+      "name": "PER_GRID_MAX",
+      "kind": "const",
+      "signature": "pub const PER_GRID_MAX: usize = 8;",
+      "docs": "Mods one grid may run, and one owner may hold."
+    },
+    {
+      "module": "ckx_sdk::limits::mods",
+      "name": "PER_OWNER_MAX",
+      "kind": "const",
+      "signature": "pub const PER_OWNER_MAX: usize = 64;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits::mods",
+      "name": "RATE_PER_SEC",
+      "kind": "const",
+      "signature": "pub const RATE_PER_SEC: u32 = 20;",
+      "docs": "Handler calls per second, per mod instance."
+    },
+    {
+      "module": "ckx_sdk::limits::mods",
+      "name": "SCOPES",
+      "kind": "const",
+      "signature": "pub const SCOPES: [&str; 3] = [\"grids.read\", \"world.read\", \"world.write\"];",
+      "docs": "The node API scopes every mod holds, each confined to its grid."
+    },
+    {
+      "module": "ckx_sdk::limits::mods",
+      "name": "TYPE_PREFIX",
+      "kind": "const",
+      "signature": "pub const TYPE_PREFIX: &str = \"mod:\";",
+      "docs": "A mod is the hub `(\"mod:<name>\", \"<grid id>\")`."
+    },
+    {
+      "module": "ckx_sdk::limits::mods",
+      "name": "WORLD_BATCH_MAX",
+      "kind": "const",
+      "signature": "pub const WORLD_BATCH_MAX: usize = 512;",
+      "docs": "World events in one `$world` call, at most."
     },
     {
       "module": "ckx_sdk::model",
@@ -1252,6 +7398,13 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "kind": "method",
       "signature": "pub fn get_str(&self, schema: &Schema, id: u64, key: &str) -> Result<String>",
       "docs": ""
+    },
+    {
+      "module": "ckx_sdk::model",
+      "name": "Model::ids",
+      "kind": "method",
+      "signature": "pub fn ids(&self) -> impl Iterator<Item = u64> + '_",
+      "docs": "Every container's id, oldest first."
     },
     {
       "module": "ckx_sdk::model",
@@ -1514,6 +7667,48 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "ckx_sdk::node",
+      "name": "Access",
+      "kind": "struct",
+      "signature": "pub struct Access<'a>(pub(crate) &'a Ctx);",
+      "docs": "Players' access to this app: [`Ctx::access`]."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Access::get",
+      "kind": "method",
+      "signature": "pub fn get(&self, player: u64) -> Result<Option<PlayerAccess>, CallError>",
+      "docs": "The player's access to the app, or `None` when they never had any. Scope `access.read`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Access::grant",
+      "kind": "method",
+      "signature": "pub fn grant(&self, player: u64, tier: Option<u64>) -> Result<PlayerAccess, CallError>",
+      "docs": "Gives the player access to the app, in access tier `tier` when one is named. Scope `access.write`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Access::revoke",
+      "kind": "method",
+      "signature": "pub fn revoke(&self, player: u64) -> Result<(), CallError>",
+      "docs": "Takes the player's access away. Scope `access.write`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Access::suspend",
+      "kind": "method",
+      "signature": "pub fn suspend(&self, player: u64, seconds: u32) -> Result<String, CallError>",
+      "docs": "Suspends the player's access for `seconds`. Returns until when (RFC 3339). Scope `access.write`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Access::unsuspend",
+      "kind": "method",
+      "signature": "pub fn unsuspend(&self, player: u64) -> Result<(), CallError>",
+      "docs": "Ends the player's suspension. Scope `access.write`."
+    },
+    {
+      "module": "ckx_sdk::node",
       "name": "Actor",
       "kind": "struct",
       "signature": "pub struct Actor { /// The 32-character actor id. pub uuid: String, pub player: Option<u64>, pub chunk: ChunkPos, /// The actor's persisted public state, where the game keeps one. pub state: Option<Vec<u8>>, }",
@@ -1628,7 +7823,7 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "module": "ckx_sdk::node",
       "name": "Grid",
       "kind": "struct",
-      "signature": "pub struct Grid { pub id: u64, pub low: ChunkPos, pub high: ChunkPos, }",
+      "signature": "pub struct Grid { pub id: u64, pub low: ChunkPos, pub high: ChunkPos, /// Who holds it, where the platform records an owner. pub owner: Option<GridOwner>, /// Permission keys every player holds on it, granted or not. pub open_permissions: Vec<String>, }",
       "docs": "A grid: a box of chunks with its own permissions."
     },
     {
@@ -1636,6 +7831,13 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "name": "Grid::contains",
       "kind": "method",
       "signature": "pub fn contains(&self, at: ChunkPos) -> bool",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Grid::from",
+      "kind": "method",
+      "signature": "fn from(g: WireGrid) -> Self",
       "docs": ""
     },
     {
@@ -1657,6 +7859,41 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "name": "Grid::low",
       "kind": "field",
       "signature": "pub low: ChunkPos",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Grid::open_permissions",
+      "kind": "field",
+      "signature": "pub open_permissions: Vec<String>",
+      "docs": "Permission keys every player holds on it, granted or not."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Grid::owner",
+      "kind": "field",
+      "signature": "pub owner: Option<GridOwner>",
+      "docs": "Who holds it, where the platform records an owner."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "GridOwner",
+      "kind": "struct",
+      "signature": "pub struct GridOwner { pub kind: String, #[serde(rename = \"ref\")] pub ref_: String, }",
+      "docs": "A grid's owner: what kind of party it is, and which."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "GridOwner::kind",
+      "kind": "field",
+      "signature": "pub kind: String",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "GridOwner::ref_",
+      "kind": "field",
+      "signature": "pub ref_: String",
       "docs": ""
     },
     {
@@ -1689,10 +7926,31 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "ckx_sdk::node",
+      "name": "GridSettings",
+      "kind": "struct",
+      "signature": "pub struct GridSettings { /// Players may write voxels outside every grid. pub wilderness_writes_open: bool, }",
+      "docs": "The app's grid rules, from [`Grids::settings`]."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "GridSettings::wilderness_writes_open",
+      "kind": "field",
+      "signature": "pub wilderness_writes_open: bool",
+      "docs": "Players may write voxels outside every grid."
+    },
+    {
+      "module": "ckx_sdk::node",
       "name": "Grids",
       "kind": "struct",
       "signature": "pub struct Grids<'a>(pub(crate) &'a Ctx);",
-      "docs": "Grid lookups: [`Ctx::grids`]."
+      "docs": "Grids and their permissions: [`Ctx::grids`]."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Grids::assign_group",
+      "kind": "method",
+      "signature": "pub fn assign_group(&self, grid: u64, group: u64, permissions: &[&str]) -> Result<(), CallError>",
+      "docs": "Gives the members of one of the app's groups `permissions` on `grid`. Scope `grids.write`."
     },
     {
       "module": "ckx_sdk::node",
@@ -1710,10 +7968,52 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "ckx_sdk::node",
+      "name": "Grids::create",
+      "kind": "method",
+      "signature": "pub fn create(&self, low: ChunkPos, high: ChunkPos) -> Result<Grid, CallError>",
+      "docs": "A new grid of the app from chunk `low` to chunk `high`, both included. Scope `grids.write`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Grids::delete",
+      "kind": "method",
+      "signature": "pub fn delete(&self, grid: u64) -> Result<(), CallError>",
+      "docs": "Removes one of the app's grids. Scope `grids.write`."
+    },
+    {
+      "module": "ckx_sdk::node",
       "name": "Grids::get",
       "kind": "method",
       "signature": "pub fn get(&self, grid: u64) -> Result<Option<Grid>, CallError>",
       "docs": "One of this app's grids. Scope `grids.read`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Grids::set_open_permissions",
+      "kind": "method",
+      "signature": "pub fn set_open_permissions(&self, grid: u64, permissions: &[&str]) -> Result<(), CallError>",
+      "docs": "Replaces the permission keys every player holds on `grid` ([`Grid::open_permissions`]). Scope `grids.write`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Grids::settings",
+      "kind": "method",
+      "signature": "pub fn settings(&self) -> Result<GridSettings, CallError>",
+      "docs": "The app's grid rules. Scope `grids.read`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Grids::unassign_group",
+      "kind": "method",
+      "signature": "pub fn unassign_group(&self, grid: u64, group: u64) -> Result<(), CallError>",
+      "docs": "Takes back what [`Grids::assign_group`] gave the group on `grid`. Scope `grids.write`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "MAX_CHUNK_STATE",
+      "kind": "const",
+      "signature": "pub const MAX_CHUNK_STATE: usize = 65_536;",
+      "docs": "A chunk's state bytes ([`World::set_chunk_state`])."
     },
     {
       "module": "ckx_sdk::node",
@@ -1754,15 +8054,15 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "module": "ckx_sdk::node",
       "name": "Player",
       "kind": "struct",
-      "signature": "pub struct Player { #[serde(deserialize_with = \"de_u64\")] pub player: u64, pub gamertag: String, pub disambiguation: String, }",
+      "signature": "pub struct Player { #[serde(deserialize_with = \"de_u64\")] pub player: u64, pub gamertag: String, /// What tells players with the same gamertag apart; most players have none. #[serde(default)] pub disambiguation: Option<String>, }",
       "docs": "A player's public identity."
     },
     {
       "module": "ckx_sdk::node",
       "name": "Player::disambiguation",
       "kind": "field",
-      "signature": "pub disambiguation: String",
-      "docs": ""
+      "signature": "pub disambiguation: Option<String>",
+      "docs": "What tells players with the same gamertag apart; most players have none."
     },
     {
       "module": "ckx_sdk::node",
@@ -1777,6 +8077,41 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "kind": "field",
       "signature": "pub player: u64",
       "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "PlayerAccess",
+      "kind": "struct",
+      "signature": "pub struct PlayerAccess { /// `active`, `revoked`, or another state the platform names. pub status: String, /// The access tier, if any. #[serde(default, rename = \"tierId\", deserialize_with = \"de_opt_u64\")] pub tier: Option<u64>, /// When it ends (RFC 3339), if it does. #[serde(default)] pub expires_at: Option<String>, /// Until when the player is suspended (RFC 3339), while they are. #[serde(default)] pub suspended_until: Option<String>, }",
+      "docs": "A player's access to the app, from [`Access::get`] and [`Access::grant`]."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "PlayerAccess::expires_at",
+      "kind": "field",
+      "signature": "pub expires_at: Option<String>",
+      "docs": "When it ends (RFC 3339), if it does."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "PlayerAccess::status",
+      "kind": "field",
+      "signature": "pub status: String",
+      "docs": "`active`, `revoked`, or another state the platform names."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "PlayerAccess::suspended_until",
+      "kind": "field",
+      "signature": "pub suspended_until: Option<String>",
+      "docs": "Until when the player is suspended (RFC 3339), while they are."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "PlayerAccess::tier",
+      "kind": "field",
+      "signature": "pub tier: Option<u64>",
+      "docs": "The access tier, if any."
     },
     {
       "module": "ckx_sdk::node",
@@ -1831,8 +8166,22 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "module": "ckx_sdk::node",
       "name": "Voxel",
       "kind": "struct",
-      "signature": "pub struct Voxel { pub x: i16, pub y: i16, pub z: i16, pub voxel_type: u16, pub state: Option<Vec<u8>>, }",
-      "docs": "A voxel written into a chunk (the edits on top of its dense grid)."
+      "signature": "pub struct Voxel { pub x: i16, pub y: i16, pub z: i16, /// What a type means is up to the app. pub voxel_type: i16, pub state: Option<Vec<u8>>, /// Who wrote it: a user id in decimal, `\"0\"` when the app's own code did. `None` from a /// platform that does not say. pub created_by: Option<String>, /// When it was written (RFC 3339). pub updated_at: Option<String>, }",
+      "docs": "A voxel written into a chunk (the edits on top of its dense grid), with who wrote it and when."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Voxel::created_by",
+      "kind": "field",
+      "signature": "pub created_by: Option<String>",
+      "docs": "Who wrote it: a user id in decimal, `\"0\"` when the app's own code did. `None` from a platform that does not say."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Voxel::from",
+      "kind": "method",
+      "signature": "fn from(v: WireVoxel) -> Self",
+      "docs": ""
     },
     {
       "module": "ckx_sdk::node",
@@ -1843,10 +8192,17 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "ckx_sdk::node",
+      "name": "Voxel::updated_at",
+      "kind": "field",
+      "signature": "pub updated_at: Option<String>",
+      "docs": "When it was written (RFC 3339)."
+    },
+    {
+      "module": "ckx_sdk::node",
       "name": "Voxel::voxel_type",
       "kind": "field",
-      "signature": "pub voxel_type: u16",
-      "docs": ""
+      "signature": "pub voxel_type: i16",
+      "docs": "What a type means is up to the app."
     },
     {
       "module": "ckx_sdk::node",
@@ -1873,7 +8229,7 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "module": "ckx_sdk::node",
       "name": "VoxelWrite",
       "kind": "struct",
-      "signature": "pub struct VoxelWrite { pub chunk: ChunkPos, pub voxel: (i16, i16, i16), pub voxel_type: u16, pub state: Option<Vec<u8>>, }",
+      "signature": "pub struct VoxelWrite { pub chunk: ChunkPos, /// `(x, y, z)` within the chunk. Positions are the app's to define; an app on the 16×16×16 /// dense grid keeps to 0 to 15 on each axis. pub voxel: (i16, i16, i16), /// What a type means is up to the app. pub voxel_type: i16, pub state: Option<Vec<u8>>, }",
       "docs": "One voxel to write: `voxel` is its position within `chunk`."
     },
     {
@@ -1895,14 +8251,14 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "name": "VoxelWrite::voxel",
       "kind": "field",
       "signature": "pub voxel: (i16, i16, i16)",
-      "docs": ""
+      "docs": "`(x, y, z)` within the chunk. Positions are the app's to define; an app on the 16×16×16 dense grid keeps to 0 to 15 on each axis."
     },
     {
       "module": "ckx_sdk::node",
       "name": "VoxelWrite::voxel_type",
       "kind": "field",
-      "signature": "pub voxel_type: u16",
-      "docs": ""
+      "signature": "pub voxel_type: i16",
+      "docs": "What a type means is up to the app."
     },
     {
       "module": "ckx_sdk::node",
@@ -1931,6 +8287,13 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "kind": "method",
       "signature": "pub fn chunk(&self, at: ChunkPos) -> Result<Option<Chunk>, CallError>",
       "docs": "The chunk at `at`, or `None` when the app never stored it. Scope `world.read`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "World::set_chunk_state",
+      "kind": "method",
+      "signature": "pub fn set_chunk_state(&self, chunk: ChunkPos, state: Option<&[u8]>) -> Result<(), CallError>",
+      "docs": "Replaces the chunk's own state blob, the one [`Chunk::chunk_state`] reads (at most [`MAX_CHUNK_STATE`] bytes; `None` clears it). Scope `world.write`."
     },
     {
       "module": "ckx_sdk::node",
@@ -2242,6 +8605,27 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "crowdy_client_sdk::api",
+      "name": "actor_despawn",
+      "kind": "function",
+      "signature": "pub fn actor_despawn(actor_id: &str) -> Result<Value, HostError>",
+      "docs": "Removes a mod-owned actor of this session."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "actor_pose",
+      "kind": "function",
+      "signature": "pub fn actor_pose(actor_id: &str, pose: Value) -> Result<Value, HostError>",
+      "docs": "Moves a mod-owned actor of this session. A position outside the grid is refused."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "actor_spawn",
+      "kind": "function",
+      "signature": "pub fn actor_spawn(actor: Value) -> Result<Value, HostError>",
+      "docs": "Places a mod-owned actor inside the grid. A live player's id is refused."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
       "name": "actors_list",
       "kind": "function",
       "signature": "pub fn actors_list(x: i64, y: i64, z: i64) -> Result<Value, HostError>",
@@ -2256,6 +8640,13 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "crowdy_client_sdk::api",
+      "name": "avatar_appearance",
+      "kind": "function",
+      "signature": "pub fn avatar_appearance(appearance: Value) -> Result<Value, HostError>",
+      "docs": "The visiting player's avatar tint."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
       "name": "avatar_state_get",
       "kind": "function",
       "signature": "pub fn avatar_state_get(avatar_id: &str) -> Result<Value, HostError>",
@@ -2263,10 +8654,24 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "crowdy_client_sdk::api",
+      "name": "avatar_state_set",
+      "kind": "function",
+      "signature": "pub fn avatar_state_set(avatar_id: &str, state_base64: &str) -> Result<Value, HostError>",
+      "docs": "The visiting player's own avatar state blob."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
       "name": "chunk_get",
       "kind": "function",
       "signature": "pub fn chunk_get(x: i64, y: i64, z: i64) -> Result<Value, HostError>",
       "docs": "One chunk inside the grid: `{ voxelsBase64 }`."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "clock",
+      "kind": "function",
+      "signature": "pub fn clock() -> Result<Value, HostError>",
+      "docs": "The page's wall clock, milliseconds."
     },
     {
       "module": "crowdy_client_sdk::api",
@@ -2298,6 +8703,13 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "crowdy_client_sdk::api",
+      "name": "events_poll",
+      "kind": "function",
+      "signature": "pub fn events_poll() -> Result<Value, HostError>",
+      "docs": "ClientEvents the visiting player's session has received since the last poll."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
       "name": "grid_info",
       "kind": "function",
       "signature": "pub fn grid_info() -> Result<Value, HostError>",
@@ -2319,6 +8731,27 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "crowdy_client_sdk::api",
+      "name": "input_axes",
+      "kind": "function",
+      "signature": "pub fn input_axes() -> Result<Value, HostError>",
+      "docs": "The visiting player's movement axes, drained by the page: `{ x, y }`."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "input_key",
+      "kind": "function",
+      "signature": "pub fn input_key(code: &str) -> Result<Value, HostError>",
+      "docs": "Whether the visiting player is holding `code` (a `KeyboardEvent.code`)."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "input_look",
+      "kind": "function",
+      "signature": "pub fn input_look() -> Result<Value, HostError>",
+      "docs": "Pointer-look delta since the last poll: `{ dx, dy }`."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
       "name": "overlay_draw",
       "kind": "function",
       "signature": "pub fn overlay_draw(payload: Value) -> Result<Value, HostError>",
@@ -2333,6 +8766,76 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "crowdy_client_sdk::api",
+      "name": "pose_get",
+      "kind": "function",
+      "signature": "pub fn pose_get() -> Result<Value, HostError>",
+      "docs": "The visiting player's body. The page answers from the mod's hold, or the walker."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "pose_release",
+      "kind": "function",
+      "signature": "pub fn pose_release() -> Result<Value, HostError>",
+      "docs": "Hands the visiting player's body back to the walker."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "pose_set",
+      "kind": "function",
+      "signature": "pub fn pose_set(pose: Value) -> Result<Value, HostError>",
+      "docs": "Moves the visiting player's body. A position outside the grid is refused."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "scene_catalog",
+      "kind": "function",
+      "signature": "pub fn scene_catalog(catalog: Value) -> Result<Value, HostError>",
+      "docs": "The mod's scene templates, kept in the page."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "scene_instances",
+      "kind": "function",
+      "signature": "pub fn scene_instances(instances: Value) -> Result<Value, HostError>",
+      "docs": "Template instances drawn in the page, inside the grid."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "send_actor_message",
+      "kind": "function",
+      "signature": "pub fn send_actor_message(actor_id: &str, payload: Value) -> Result<Value, HostError>",
+      "docs": "A message from this session to one actor inside the grid."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "send_channel_message",
+      "kind": "function",
+      "signature": "pub fn send_channel_message(channel_id: &str, payload: Value) -> Result<Value, HostError>",
+      "docs": "A channel message as the visiting player, on a channel they may send on."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "send_client_event",
+      "kind": "function",
+      "signature": "pub fn send_client_event(chunk: (i64, i64, i64), payload: Value) -> Result<Value, HostError>",
+      "docs": "A ClientEvent from the visiting player's chunk, inside the grid."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "send_text",
+      "kind": "function",
+      "signature": "pub fn send_text(chunk: (i64, i64, i64), text: &str) -> Result<Value, HostError>",
+      "docs": "A spatial text packet from the visiting player's chunk."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "teleport_request",
+      "kind": "function",
+      "signature": "pub fn teleport_request(destination: Value) -> Result<Value, HostError>",
+      "docs": "Asks the page to move the visiting player to a destination inside the grid."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
       "name": "user_state_get",
       "kind": "function",
       "signature": "pub fn user_state_get(user_id: &str) -> Result<Value, HostError>",
@@ -2344,6 +8847,20 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "kind": "function",
       "signature": "pub fn user_state_set(user_id: &str, state_base64: &str) -> Result<Value, HostError>",
       "docs": "Replaces the visiting player's app state; `state_base64` is the new bytes."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "video_set",
+      "kind": "function",
+      "signature": "pub fn video_set(enabled: bool) -> Result<Value, HostError>",
+      "docs": "Starts or stops the visiting player's camera. The page still asks the browser."
+    },
+    {
+      "module": "crowdy_client_sdk::api",
+      "name": "voice_set",
+      "kind": "function",
+      "signature": "pub fn voice_set(enabled: bool) -> Result<Value, HostError>",
+      "docs": "Starts or stops the visiting player's microphone. The page still asks the browser."
     },
     {
       "module": "crowdy_client_sdk::api",
