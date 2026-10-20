@@ -9287,7 +9287,7 @@ type Mutation {
     markupBps: Int!
   ): Int! @requiresPermission(scope: "app", permission: "manage_billing", scopeArg: "appId")
   """
-  Operator only. Credit the payer of an over-billed charge (an I3 finding: an allowance or rate was raised after the charge landed) the difference, and close the charge row. Idempotent per charge state. SIDE EFFECT: a wallet credit and a CREDIT event.
+  Operator only. Close an over-billed charge (an I3 finding: its priced total fell below what was billed and written off). The billed part of the difference is credited to the payer (a wallet credit and a CREDIT event); a written-off part (an exempt org) was never paid, so no money moves and a WRITE_OFF event of the opposite sign (reason OVERBILL_REVERSAL) offsets it. creditedMicrousd is the wallet credit only. Idempotent per charge state.
   """
   cpBillingCreditOverbill(
     """App the charge was billed under."""
@@ -10987,11 +10987,11 @@ input SetRateCardInput {
   """
   acknowledgeRepricing: Boolean
   """
-  New hourly free allowance in raw metric units, as a BigInt decimal string. Must be >= 0. Omit to leave the allowance unchanged.
+  New hourly free allowance in raw metric units, as a BigInt decimal string. Must be >= 0. Omit to leave the allowance unchanged. Like a price, it applies from a dimension's next period where a period has already been charged.
   """
   freePerHour: BigInt
   """
-  New free allowance in raw metric units per freePeriod, as a BigInt decimal string. Must be >= 0. Leaves the period as it is unless freePeriod is also given. Not combinable with freePerHour, which is the older spelling of freeUnits with freePeriod HOUR.
+  New free allowance in raw metric units per freePeriod, as a BigInt decimal string. Must be >= 0. Leaves the period as it is unless freePeriod is also given. Not combinable with freePerHour, which is the older spelling of freeUnits with freePeriod HOUR. Like a price, it applies from a dimension's next period where a period has already been charged.
   """
   freeUnits: BigInt
   """
@@ -10999,7 +10999,7 @@ input SetRateCardInput {
   """
   freePeriod: AllowancePeriod
   """
-  New monthly free allowance in raw metric units, as a BigInt decimal string. Must be >= 0. On the PLAYER card with metric player_wasm_compute_units this is the pooled monthly TRIAL BUDGET per (player, app) — the only sanctioned way to change it on a live tier. Omit to leave it unchanged.
+  New monthly free allowance in raw metric units, as a BigInt decimal string. Must be >= 0. On the PLAYER card with metric player_wasm_compute_units this is the pooled monthly TRIAL BUDGET per (player, app) — the only sanctioned way to change it on a live tier. Omit to leave it unchanged. Like a price, it applies from a dimension's next period where a period has already been charged.
   """
   freePerMonth: BigInt
   """
