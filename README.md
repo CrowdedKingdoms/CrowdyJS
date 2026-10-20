@@ -403,11 +403,26 @@ Unsubscribing stops delivery only; call `client.udp.disconnect()` to close the
 UDP proxy session.
 
 `genericSpatial` receives opcode 140 (`GENERIC_SPATIAL_1`), an app-defined spatial payload the
-server fans out without reading — what CrowdyCPP's `Connection::sendGenericSpatial` sends. It
-arrives only on the binary relay (`realtime: { binaryTransport: true }`): the GraphQL
-`udpNotifications` union has no member for it, so the GraphQL proxy drops it and a client on that
-transport never sees one. A World Stores session carries it on its bus too:
-`session.context.on('genericSpatial', …)`.
+server fans out without reading — what `client.udp.sendGenericSpatial` and CrowdyCPP's
+`Connection::sendGenericSpatial` send. It travels only on the binary relay
+(`realtime: { binaryTransport: true }`): the GraphQL `udpNotifications` union has no member for
+it, so the GraphQL proxy drops it and a client on that transport never sees one. A World Stores
+session carries it on its bus too: `session.context.on('genericSpatial', …)`.
+
+```ts
+// Binary relay only (there is no GraphQL mutation for opcode 140), after udp.subscribe.
+await client.udp.sendGenericSpatial({
+  appId,
+  chunk: { x: '0', y: '0', z: '0' },
+  uuid: myActorUuid, // 32 ASCII characters
+  payload: encodeBase64(bytes), // at most 1,123 bytes decoded
+  // distance defaults to 8, decayRate to 0
+});
+```
+
+Off the relay `sendGenericSpatial` throws `CrowdyRealtimeError` (`BINARY_RELAY_UNAVAILABLE`,
+`retryable: false`) and sends nothing; a payload over `GENERIC_SPATIAL_MAX_PAYLOAD_BYTES`
+throws `RangeError`.
 
 ### Surviving the loss of an instance (direct connect)
 

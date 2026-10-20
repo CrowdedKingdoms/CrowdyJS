@@ -120,6 +120,23 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.15.0: sending opcode 140
+
+No breaking change. `client.udp.sendGenericSpatial({ appId, chunk, uuid, payload })` sends an
+app-defined spatial message (`GENERIC_SPATIAL_1`, opcode 140), what CrowdyCPP's
+`Connection::sendGenericSpatial` sends: the server fans it out to the actors near `chunk`
+without reading `payload` (base64, at most `GENERIC_SPATIAL_MAX_PAYLOAD_BYTES`, 1,123 bytes
+decoded), and they receive it on `genericSpatial` (18.7.0). `distance` defaults to 8 and
+`decayRate` to 0, as CrowdyCPP's `SpatialSend` does.
+
+It needs the binary relay (`realtime: { binaryTransport: true }`) and an active
+`udp.subscribe`: the GraphQL API has no mutation for opcode 140, so there is nothing to fall
+back to. Off the relay it throws `CrowdyRealtimeError` with `code: 'BINARY_RELAY_UNAVAILABLE'`
+and `retryable: false`; with the relay configured but not connected (yet), the same code with
+`retryable: true`. Nothing is sent in either case. A payload over the limit throws `RangeError`.
+`serializeGenericSpatial` is the serializer, byte for byte CrowdyCPP's (the golden vector in
+`test/unit/generic-spatial.test.mjs` is CrowdyCPP's `kGoldenSpatial`).
+
 ## 18.14.0: billing descriptions, and `playerWallet.charges()` deprecated
 
 No breaking change. The schema is cks-game-api `dev`'s after #550: the billing descriptions say

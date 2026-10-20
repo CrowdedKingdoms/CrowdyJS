@@ -2,7 +2,8 @@
  * Opcode 140 (GENERIC_SPATIAL_1), an app-defined spatial payload, reaches the app on the binary
  * relay: parseRelayFrame reads it, RealtimeClient dispatches it to `genericSpatial` (and `any`),
  * and the World Stores bus carries it. The GraphQL `udpNotifications` union has no member for it,
- * so the GraphQL transport cannot deliver one.
+ * so the GraphQL transport cannot deliver one. Since 18.15.0 `udp.sendGenericSpatial` sends one,
+ * on the relay only: there is no GraphQL mutation to fall back to.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -15,6 +16,8 @@ const wire = await import('../../dist/binary-wire.js');
 const { RealtimeClient } = await import('../../dist/realtime.js');
 const { RealtimeMetrics } = await import('../../dist/metrics.js');
 const { WorldSessionCore } = await import('../../dist/stores/session.js');
+const { UdpAPI } = await import('../../dist/domains/udp.js');
+const { CrowdyRealtimeError } = await import('../../dist/errors.js');
 
 // CrowdyCPP's golden GENERIC_SPATIAL_1 datagram (tests/wire_test.cpp, computed independently from
 // the public wire-format and HMAC docs): appId 7, chunk (1,-2,3), distance 8, decay 1, uuid
@@ -172,4 +175,110 @@ test('the World Stores bus carries genericSpatial', () => {
   handlers.genericSpatial({ __typename: 'GenericSpatialNotification', payload: 'AA==' });
   assert.deepEqual(heard, ['AA==']);
   session.dispose();
+});
+
+// ---- Sending (18.15.0) ------------------------------------------------------------------------
+
+const TOKEN = 'abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ+/';
+const SEND = { appId: '7', chunk: { x: '1', y: '-2', z: '3' }, uuid: '0123456789abcdef0123456789abcdef' };
+
+test('serializeGenericSpatial writes CrowdyCPP sendGenericSpatial\'s golden bytes', async () => {
+  const ctx = await wire.createSignContext(123456789n, TOKEN);
+  const bytes = await wire.serializeGenericSpatial(ctx, {
+    ...SEND,
+    payload: Buffer.from([0xde, 0xad, 0xbe, 0xef]).toString('base64'),
+    distance: 8,
+    decayRate: 1,
+    sequenceNumber: 42,
+  });
+  assert.equal(Buffer.from(bytes).toString('hex'), Buffer.from(GOLDEN).toString('hex'));
+});
+
+test('serializeGenericSpatial defaults to distance 8 and no decay, as SpatialSend does', async () => {
+  const ctx = await wire.createSignContext(1n, TOKEN);
+  const bytes = await wire.serializeGenericSpatial(ctx, SEND);
+  assert.equal(bytes[0], wire.WireMessageType.GENERIC_SPATIAL_1);
+  assert.equal(bytes[33], 8);
+  assert.equal(bytes[34], 0);
+  assert.equal(bytes[35], 1);
+  assert.equal(bytes.length, 68 + 41);
+});
+
+test('a generic spatial payload fills one datagram and no more', async () => {
+  const ctx = await wire.createSignContext(1n, TOKEN);
+  assert.equal(wire.GENERIC_SPATIAL_MAX_PAYLOAD_BYTES, 1123);
+  const full = await wire.serializeGenericSpatial(ctx, {
+    ...SEND,
+    payload: Buffer.alloc(1123, 7).toString('base64'),
+  });
+  assert.equal(full.length, wire.RELAY_MAX_DATAGRAM_BYTES);
+  await assert.rejects(
+    wire.serializeGenericSpatial(ctx, { ...SEND, payload: Buffer.alloc(1124).toString('base64') }),
+    RangeError,
+  );
+});
+
+test('udp.sendGenericSpatial sends opcode 140 on the relay and counts it', async () => {
+  const ctx = await wire.createSignContext(1n, TOKEN);
+  const frames = [];
+  const subs = {
+    usingBinaryTransport: () => true,
+    binarySendReady: () => true,
+    sendBinaryFrame: async (serialize) => (frames.push(await serialize(ctx)), true),
+  };
+  const gql = { request: async () => assert.fail('no GraphQL for opcode 140') };
+  const metrics = new RealtimeMetrics();
+  const udp = new UdpAPI(gql, subs, metrics);
+  assert.equal(await udp.sendGenericSpatial({ ...SEND, payload: 'AQID', sequenceNumber: 5 }), true);
+  assert.equal(frames.length, 1);
+  assert.equal(frames[0][0], 140);
+  assert.equal(frames[0][frames[0].length - 1], 5);
+  assert.equal(metrics.snapshot().perKind.genericSpatial.sent.messages, 1);
+});
+
+test('udp.sendGenericSpatial refuses off the relay (no mutation exists) and sends nothing', async () => {
+  const gql = { request: async () => assert.fail('no GraphQL for opcode 140') };
+  const udp = new UdpAPI(gql, { usingBinaryTransport: () => false });
+  await assert.rejects(udp.sendGenericSpatial({ ...SEND, payload: 'AQID' }), (err) => {
+    assert.ok(err instanceof CrowdyRealtimeError);
+    assert.equal(err.code, 'BINARY_RELAY_UNAVAILABLE');
+    assert.equal(err.retryable, false);
+    return true;
+  });
+});
+
+test('udp.sendGenericSpatial reports a relay that is not connected yet as retryable', async () => {
+  const subs = {
+    usingBinaryTransport: () => true,
+    binarySendReady: () => false,
+    ensureBinaryReady: async () => false,
+    sendBinaryFrame: async () => {
+      throw new CrowdyRealtimeError('Binary relay is not connected', {
+        code: 'BINARY_RELAY_UNAVAILABLE',
+        retryable: true,
+      });
+    },
+  };
+  const udp = new UdpAPI({ request: async () => assert.fail('no GraphQL') }, subs);
+  await assert.rejects(udp.sendGenericSpatial(SEND), (err) => {
+    assert.equal(err.code, 'BINARY_RELAY_UNAVAILABLE');
+    assert.equal(err.retryable, true);
+    return true;
+  });
+});
+
+test('udp.sendGenericSpatial surfaces an oversized payload instead of a relay error', async () => {
+  const ctx = await wire.createSignContext(1n, TOKEN);
+  const frames = [];
+  const subs = {
+    usingBinaryTransport: () => true,
+    binarySendReady: () => true,
+    sendBinaryFrame: async (serialize) => (frames.push(await serialize(ctx)), true),
+  };
+  const udp = new UdpAPI({ request: async () => assert.fail('no GraphQL') }, subs);
+  await assert.rejects(
+    udp.sendGenericSpatial({ ...SEND, payload: Buffer.alloc(1124).toString('base64') }),
+    RangeError,
+  );
+  assert.equal(frames.length, 0);
 });
