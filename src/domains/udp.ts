@@ -41,6 +41,7 @@ import {
   serializeChannelAudio,
   serializeChannelMessage,
   serializeClientEvent,
+  serializeGenericSpatial,
   serializeRangedChannelMessage,
   serializeSingleActorMessage,
   serializeTextPacket,
@@ -49,6 +50,8 @@ import {
   assertVoxelEdit,
   type RelaySignContext,
 } from '../binary-wire.js';
+import { CrowdyRealtimeError } from '../errors.js';
+import type { GenericSpatialInput } from '../types.js';
 import { fragmentFrame, type VideoCodec } from '../media/video-frames.js';
 import { encodeBase64 } from '../utils.js';
 
@@ -771,6 +774,44 @@ export class UdpAPI {
     });
     this.record('singleActorMessage', input);
     return data.sendSingleActorMessage;
+  }
+
+  /**
+   * Send an app-defined spatial message (`GENERIC_SPATIAL_1`, opcode 140): the server fans it
+   * out to the actors near `chunk` without reading `payload`, and they receive it on their
+   * `genericSpatial` handler. The counterpart of CrowdyCPP's `Connection::sendGenericSpatial`.
+   * **Binary relay only:** the GraphQL API has no mutation for it, so the client needs
+   * `realtime: { binaryTransport: true }` and an active {@link subscribe} (the relay session is
+   * app-scoped). Fire-and-forget; a refusal arrives as a `genericError` correlated by
+   * `sequenceNumber`.
+   *
+   * @param input - {@link GenericSpatialInput}:
+   *   - `appId` — owning app id (`BigInt` as a decimal string).
+   *   - `chunk` — `{ x, y, z }` chunk address (signed int64 decimal strings).
+   *   - `uuid` — 32-ASCII-character id of the sending actor (not RFC-4122).
+   *   - `payload` — base64, opaque to the server, at most
+   *     `GENERIC_SPATIAL_MAX_PAYLOAD_BYTES` (1,123) bytes decoded.
+   *   - `distance` — replication radius in chunk units, 0-8 (clamped); defaults to 8.
+   *   - `decayRate` — decay algorithm 0-5 (see {@link sendActorUpdate}); defaults to 0.
+   *   - `sequenceNumber` — optional uint8 (0-255) correlation id.
+   * @returns `true` when accepted for sending — **not** confirmation of delivery.
+   * @throws {RangeError} when the payload is too large; nothing is sent.
+   * @throws {CrowdyRealtimeError} `code === 'BINARY_RELAY_UNAVAILABLE'`: `retryable: false`
+   *   when the client is not on the binary relay, `true` when the relay is not connected
+   *   (yet); nothing is sent.
+   */
+  async sendGenericSpatial(input: GenericSpatialInput): Promise<boolean> {
+    await this.awaitGameplayTokenReady();
+    if (!this.subs.usingBinaryTransport()) {
+      throw new CrowdyRealtimeError(
+        'sendGenericSpatial needs the binary relay (realtime.binaryTransport): the GraphQL API has no mutation for opcode 140',
+        { code: 'BINARY_RELAY_UNAVAILABLE', retryable: false },
+      );
+    }
+    if (!this.subs.binarySendReady()) await this.subs.ensureBinaryReady(2000);
+    const sent = await this.subs.sendBinaryFrame((ctx) => serializeGenericSpatial(ctx, input));
+    this.record('genericSpatial', input);
+    return sent;
   }
 
   /**
