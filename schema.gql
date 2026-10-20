@@ -1748,7 +1748,7 @@ type WalletTransaction {
   """DEPRECATED. balanceAfterMicrousd / 10,000 truncated toward zero."""
   balanceAfter: BigInt! @deprecated(reason: "Derived from balanceAfterMicrousd (truncated toward zero). Read balanceAfterMicrousd.")
   """
-  What produced this transaction. The complete set of values this API writes: "topup" (wallet credit from a completed checkout, positive), "admin_credit" (operator credit applied without a payment provider, positive), "auto_recharge" (off-session automatic wallet recharge, positive), "shared_usage" (hourly shared-environment metered charge for one closed clock hour, negative), "agent_usage" (Crowdy Studio agent run charged at provider cost, negative), "reserved_throughput" (monthly or prorated reserved capacity -- realtime bytes/s or GraphQL operations/s -- charged in addition to metered usage rather than including any of it, negative), "markup_payout" (the app developer's markup on a player's compute bill, credited to the org in the same transaction as the player debit that produced it, positive), "refund" (a payment-provider refund of a top-up, the credited amount leaving the wallet again, negative), "chargeback" (a card dispute on an org top-up, clawed back from the org wallet, negative). No other value is written; earlier versions of this description also listed "usage" and "environment_usage", neither of which was ever produced.
+  What produced this transaction. The complete set of values this API writes: "topup" (wallet credit from a completed checkout, positive), "admin_credit" (operator credit applied without a payment provider, positive), "auto_recharge" (off-session automatic wallet recharge, positive), "shared_usage" (metered shared-environment usage: the increase in what one dimension's period total costs since the last charge for it, negative), "agent_usage" (Crowdy Studio agent run charged at provider cost, negative), "reserved_throughput" (monthly or prorated reserved capacity -- realtime bytes/s or GraphQL operations/s -- charged in addition to metered usage rather than including any of it, negative), "markup_payout" (the app developer's markup on a player's metered usage, credited to the org in the same transaction as the player debit that produced it, positive), "refund" (a payment-provider refund of a top-up, the credited amount leaving the wallet again, negative), "chargeback" (a card dispute on an org top-up, clawed back from the org wallet, negative). No other value is written; earlier versions of this description also listed "usage" and "environment_usage", neither of which was ever produced.
   """
   transactionType: String!
   """
@@ -1888,7 +1888,7 @@ enum CheckoutPurpose {
   """
   @deprecated Legacy recurring subscription for a paid shared app slot. No longer purchasable via createCheckout; retained for historical checkouts and webhook reconciliation.
   """
-  SHARED_APP_SUBSCRIPTION @deprecated(reason: "Shared apps use org wallet hourly usage billing. Publish via publishAppToShared and top up with ORG_WALLET_TOPUP.")
+  SHARED_APP_SUBSCRIPTION @deprecated(reason: "Shared apps are billed for metered usage from the org wallet. Publish via publishAppToShared and top up with ORG_WALLET_TOPUP.")
 }
 
 """
@@ -2144,7 +2144,7 @@ type RateCardBandType {
 }
 
 """
-One priced dimension: its rate and, where it has one, its hourly free allowance. A dimension with a price of 0 is metered but not charged.
+One priced dimension: its rate and, where it has one, its free allowance and the period that allowance resets on. A dimension with a price of 0 is metered but not charged.
 """
 type RateCardEntryType {
   """Which card this row is on."""
@@ -2192,7 +2192,7 @@ type RateCardEntryType {
 }
 
 """
-Which rate card. SHARED prices organization metered usage for shared-environment apps (billed hourly to the org wallet as "shared_usage"). PLAYER prices player compute (billed hourly to the player wallet as "usage_debit").
+Which rate card. SHARED prices an organization's metered usage in shared-environment apps, charged to the org wallet as "shared_usage" entries. PLAYER prices a player's own metered usage (mod compute, egress, model storage and player-paid model tokens), charged to the player wallet as "usage_debit" entries with the app's markup added. Both settle about once a minute: each (payer, dimension, period) is charged what its running total now costs beyond what was already charged for it.
 """
 enum RateScope {
   SHARED
@@ -2506,7 +2506,7 @@ type PlayerWallet {
 }
 
 """
-One player-wallet ledger entry: top-ups, hourly usage debits, auto-recharges, refunds, and adjustments. Usage debits carry the app and reference the hour's charge row, whose snapshot splits platform vs studio-markup components.
+One player-wallet ledger entry: top-ups, usage debits, auto-recharges, refunds, purchases, payouts and adjustments. A usage debit carries the app and charges what one dimension's running total for its period now costs beyond what was already charged, the app's markup included, so a period can bring several debits as its usage arrives; its description names the dimension and the period.
 """
 type PlayerWalletTransaction {
   """Transaction id."""
@@ -2524,12 +2524,14 @@ type PlayerWalletTransaction {
   """DEPRECATED. balanceAfterMicrousd / 10,000 truncated toward zero."""
   balanceAfter: BigInt! @deprecated(reason: "Derived from balanceAfterMicrousd. Read balanceAfterMicrousd.")
   """
-  What produced this entry. The complete set of values this API writes: "topup" (credit from a completed checkout, positive), "auto_recharge" (off-session automatic recharge, positive), "payout_credit" (marketplace seller payout, positive), "refund" (marketplace refund returned to the buyer, positive), "usage_debit" (hourly player-compute metered charge for one closed clock hour, negative), "purchase" (marketplace purchase, negative), "adjustment" (operator or dispute-clawback correction, signed).
+  What produced this entry. The complete set of values this API writes: "topup" (credit from a completed checkout, positive), "auto_recharge" (off-session automatic recharge, positive), "payout_credit" (marketplace seller payout, positive), "refund" (marketplace refund returned to the buyer, positive), "usage_debit" (metered player usage in one app: the increase in what one dimension's period total costs since the last debit for it, markup included, negative), "purchase" (marketplace purchase, negative), "adjustment" (operator or dispute-clawback correction, signed).
   """
   transactionType: String!
   """Human description."""
   description: String
-  """External reference (checkout/PaymentIntent id)."""
+  """
+  External reference: the checkout or PaymentIntent id of a top-up, or for a usage debit the ledger charge it settles ("charge:<chargeId>:<n>", the n-th debit of that charge).
+  """
   referenceId: String
   """The app a usage debit covers; null for wallet-level entries."""
   appId: BigInt
@@ -2592,7 +2594,7 @@ type PlayerAutoBilling {
 }
 
 """
-One posted player usage charge: a (player, app, closed clock hour) row. amountCents = platformCents + markupCents — players see what the platform charges and what the studio adds (06 §4). The UNIQUE hour key makes the billing tick idempotent.
+One player usage charge from the hourly cents-era billing: a (player, app, closed clock hour) row. The lossless ledger, on by default, replaced that billing and writes no rows here, so the list ends where the ledger took over; usage since is in playerWalletTransactions as "usage_debit" entries. amountCents = platformCents + markupCents: what the platform charged and what the studio added.
 """
 type PlayerUsageCharge {
   """Charge id."""
@@ -7102,7 +7104,7 @@ type Query {
     scope: RateScope!
   ): [PublicRateCardEntryType!]!
   """
-  OPERATOR ONLY. The metered rate card for a scope: every priced dimension with its unit, price and hourly free allowance. SHARED is organization usage billed to the org wallet as "shared_usage"; PLAYER is player compute billed to the player wallet as "usage_debit". A dimension priced at 0 is metered but not charged. Read-only. Customers read the same rates through `meteredRateCard`, which is public and omits the operator note.
+  OPERATOR ONLY. The metered rate card for a scope: every priced dimension with its unit, price, free allowance and the period that allowance resets on. SHARED is organization usage charged to the org wallet as "shared_usage"; PLAYER is a player's own metered usage charged to the player wallet as "usage_debit". A dimension priced at 0 is metered but not charged. Read-only. Customers read the same rates through `meteredRateCard`, which is public and omits the operator note.
   """
   billingRateCard(
     """Which card to read."""
@@ -7287,7 +7289,7 @@ type Query {
   """
   playerWalletBalance: PlayerWallet!
   """
-  The caller's player-wallet ledger, newest first: top-ups, hourly usage debits (per app), auto-recharges, refunds, and adjustments. Usage-debit hours are broken down by playerUsageCharges, whose snapshot splits the platform and studio-markup components.
+  The caller's player-wallet ledger, newest first: top-ups, usage debits (per app, the app's markup included), auto-recharges, refunds, purchases, payouts and adjustments. Each usage debit names its dimension and period, and an over-charge credited back appears as an adjustment.
   """
   playerWalletTransactions(
     """Max entries (default 50, max 200)."""
@@ -7296,7 +7298,7 @@ type Query {
     offset: Int
   ): [PlayerWalletTransaction!]!
   """
-  The caller's posted hourly player-usage charges, newest first, optionally filtered by app. Each charge splits platformCents (base rate card) from markupCents (the studio's configured markup) with a per-metric snapshot — players always see what the platform charges and what the studio adds.
+  The caller's hourly player-usage charges from the cents-era billing, newest first, optionally filtered by app. Nothing has been added since the lossless ledger took over; current usage charges are the "usage_debit" entries in playerWalletTransactions.
   """
   playerUsageCharges(
     """Optional: only charges for this app."""
@@ -7305,7 +7307,7 @@ type Query {
     Maximum number of charges to return, 1 to 200 (a value outside is clamped). Defaults to 50 when omitted.
     """
     limit: Int
-  ): [PlayerUsageCharge!]!
+  ): [PlayerUsageCharge!]! @deprecated(reason: "Reads the hourly cents-era charge rows, which the lossless ledger does not write. Read playerWalletTransactions: each \"usage_debit\" entry is one charge, per app, markup included.")
   """
   The caller's self-set spend caps (global and per-app) with running counters. The effective runtime limit is min(developer policy, self-cap, wallet balance).
   """
@@ -9079,11 +9081,11 @@ type Mutation {
     referenceId: String
   ): WalletTransaction! @requiresPermission(scope: "operator", permission: "is_operator")
   """
-  OPERATOR ONLY. Runs the shared-usage billing tick once. It still bills only the last CLOSED clock hour — it will not charge an open hour. Use this to prove a closed-hour debit without waiting for the ~60s cron. Backdating usage rows is a local-test fixture, not something this mutation does on a live tier.
+  OPERATOR ONLY. Runs the shared-usage tick once instead of waiting for the ~60s cron: reserved-throughput billing, the itemised statement of the last closed clock hour, and the usage-gate evaluation of every shared app. Metered usage is priced and charged by the ledger's settlement, about once a minute, not by this tick. Backdating usage rows is a local-test fixture, not something this mutation does on a live tier.
   """
   runSharedUsageBillingTick: Boolean! @requiresPermission(scope: "operator", permission: "is_operator")
   """
-  OPERATOR ONLY. Sets a metered dimension's price, the UNIT that price is quoted in, its free allowances, or any combination, and returns the new row alongside the values that moved. THIS IS THE ONLY SANCTIONED WAY TO CHANGE A PRICE OR A UNIT: the schema seeds use ON CONFLICT DO NOTHING, so a rate reaches a tier once at install and a unit corrected in the declaration never reaches a tier that already exists. Refuses an unknown or unmetered metric (a rate for a dimension nothing meters bills nobody while appearing configured), refuses a negative price, refuses unitLabel without unitQuantity (which would restate the rate card while the arithmetic kept the old divisor), and refuses a call that would change nothing. A unit change that also moves the money needs acknowledgeRepricing: true, so restating a price and cutting it cannot be confused. priceBands sets a graduated schedule (SHARED aggregate_data_volume only; band 1 becomes priceCents) and clearPriceBands returns the dimension to one flat price; while a dimension is banded a bare priceCents or a unit change is refused. NOT RETROACTIVE: charges already written are history and the tick is idempotent per closed hour, so a new rate applies to hours billed from now on. Takes effect within about a minute — both billing ticks reload the card on every run, so no restart is needed.
+  OPERATOR ONLY. Sets a metered dimension's price, the UNIT that price is quoted in, its free allowances, or any combination, and returns the new row alongside the values that moved. THIS IS THE ONLY SANCTIONED WAY TO CHANGE A PRICE OR A UNIT: the schema seeds use ON CONFLICT DO NOTHING, so a rate reaches a tier once at install and a unit corrected in the declaration never reaches a tier that already exists. Refuses an unknown or unmetered metric (a rate for a dimension nothing meters bills nobody while appearing configured), refuses a negative price, refuses unitLabel without unitQuantity (which would restate the rate card while the arithmetic kept the old divisor), and refuses a call that would change nothing. A unit change that also moves the money needs acknowledgeRepricing: true, so restating a price and cutting it cannot be confused. priceBands sets a graduated schedule (SHARED aggregate_data_volume only; band 1 becomes priceCents) and clearPriceBands returns the dimension to one flat price; while a dimension is banded a bare priceCents or a unit change is refused. NOT RETROACTIVE: the ledger keeps the rate and allowance in force when a (payer, dimension, period) is first charged, so a change applies from each dimension's next period and nothing already charged is repriced. Takes effect within about a minute — the settlement reloads the card on every run, so no restart is needed.
   """
   setBillingRate(
     """Which dimension to reprice, the new price and/or allowance, and why."""
@@ -9105,7 +9107,7 @@ type Mutation {
     reason: String!
   ): BillingExemptOrgType! @requiresPermission(scope: "operator", permission: "is_operator")
   """
-  Publishes an app to the shared game-api environment. Free under the org's app-slot quota (result.free = true); beyond the quota, publish still succeeds and hourly usage is debited from the org wallet. Requires the 'manage_apps' permission on the app's org. Blocked when SHARED_GAME_API_URL is not configured.
+  Publishes an app to the shared game-api environment. Free under the org's app-slot quota (result.free = true); beyond the quota, publish still succeeds and metered usage is charged to the org wallet. Requires the 'manage_apps' permission on the app's org. Blocked when SHARED_GAME_API_URL is not configured.
   """
   publishAppToShared(
     """App id (BigInt) to publish to the shared environment."""
