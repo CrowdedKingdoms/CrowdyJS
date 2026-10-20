@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.11.0** (18.0.0 was published only as
+**Current package:** `package.json` is **18.14.0** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -29,6 +29,13 @@ directly. So, before adding a wrapper:
 - 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
+
+**18.14.0: billing descriptions and a deprecation (2026-10-20).** `schema.gql` is cks-game-api
+`dev`'s after #550 (the billing descriptions describe the lossless ledger; `playerUsageCharges`
+is `@deprecated`). `playerWallet.charges()` is `@deprecated` with it: read `transactions()`'s
+`usage_debit` entries. `src/domains/voxels.ts`'s comments say what `getChunk` returns (an edit is
+in the chunk's `voxelStates`; only `updateChunk` writes the packed grid). The authoring index
+already matched cks-game-api's (same content hash), so it is unchanged.
 
 **18.13.0: the economy (2026-10-15).** `src/kit/modules/player.ts`: `PlayerKit` (`kit.player`),
 the caller's own `player` hub, whose key is their player id (`runtime.playerId()`); its mirrors
