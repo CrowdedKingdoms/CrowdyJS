@@ -66,7 +66,11 @@ export class PlayerWalletAPI {
     return data.playerWalletBalance;
   }
 
-  /** The caller's wallet ledger, newest first. */
+  /**
+   * The caller's wallet ledger, newest first. Usage charges are its `usage_debit` entries: one
+   * per app, dimension and period each time that period's usage costs more, the app's markup
+   * included.
+   */
   async transactions(
     variables: PlayerWalletTransactionsQueryVariables = {},
   ): Promise<PlayerWalletTransactionsQuery["playerWalletTransactions"]> {
@@ -78,8 +82,10 @@ export class PlayerWalletAPI {
   }
 
   /**
-   * The caller's posted hourly usage charges; each splits platformCents vs
-   * markupCents with a per-metric snapshot ("what is this grid costing me").
+   * The caller's hourly usage charges from the cents-era billing, which the lossless ledger
+   * replaced: nothing is added to this list any more.
+   *
+   * @deprecated Read {@link transactions}: its `usage_debit` entries are the usage charges.
    */
   async charges(
     variables: PlayerUsageChargesQueryVariables = {},

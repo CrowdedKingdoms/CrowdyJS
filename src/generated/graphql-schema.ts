@@ -1733,7 +1733,7 @@ export enum CheckoutPurpose {
   PropertyTokens = 'PROPERTY_TOKENS',
   /**
    * @deprecated Legacy recurring subscription for a paid shared app slot. No longer purchasable via createCheckout; retained for historical checkouts and webhook reconciliation.
-   * @deprecated Shared apps use org wallet hourly usage billing. Publish via publishAppToShared and top up with ORG_WALLET_TOPUP.
+   * @deprecated Shared apps are billed for metered usage from the org wallet. Publish via publishAppToShared and top up with ORG_WALLET_TOPUP.
    */
   SharedAppSubscription = 'SHARED_APP_SUBSCRIPTION'
 }
@@ -4867,7 +4867,7 @@ export type Mutation = {
   confirmEmail: Scalars['Boolean']['output'];
   /** Open the UDP proxy session for this game token (idempotent: returns the existing status if one is already open). Binds a socket and selects the game server with the fewest clients on first open. Optional: send mutations and udpNotifications also create a session lazily when none exists. To force a fresh socket, call disconnectUdpProxy first. */
   connectUdpProxy: UdpProxyConnectionStatus;
-  /** Operator only. Credit the payer of an over-billed charge (an I3 finding: an allowance or rate was raised after the charge landed) the difference, and close the charge row. Idempotent per charge state. SIDE EFFECT: a wallet credit and a CREDIT event. */
+  /** Operator only. Close an over-billed charge (an I3 finding: its priced total fell below what was billed and written off). The billed part of the difference is credited to the payer (a wallet credit and a CREDIT event); a written-off part (an exempt org) was never paid, so no money moves and a WRITE_OFF event of the opposite sign (reason OVERBILL_REVERSAL) offsets it. creditedMicrousd is the wallet credit only. Idempotent per charge state. */
   cpBillingCreditOverbill: BillingCreditResult;
   /** Operator only (is_operator or is_super_admin). Publish or release an emergency kill for one app. This state is separate from the app's own kill and always takes precedence in Management's effective envelope; app users cannot clear it. SIDE EFFECTS: revision increment and a sanitized audit event. NOTHING IS PUSHED TO GAME API: preemption takes effect when its runtime next pulls this app's crowdy.studio-agent-policy/1 replica, which is within about a minute for an app already holding one and not at all for an app that does not until a permitted caller asks. Releasing the operator kill does not enable the app or clear its own kill. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT. */
   cpSetCrowdyStudioAgentAppKill: CrowdyStudioAgentPolicy;
@@ -5055,7 +5055,7 @@ export type Mutation = {
   mintAppToken: AppTokenResponse;
   /** Mint a grid-scoped token from the app token you hold (DN-10). The result can call only a short, fixed list of gameplay fields, and each is confined to the grid: world reads and replication sends must address a chunk inside it (a send's origin; its reach follows distance), and channels must be the grid's own. refreshAppToken and logout are refused, so the token cannot widen or tear down its parent. Requires an app token (not a session token, not another grid token), and the caller must own the grid or hold run_client_code on it. */
   mintGridToken: GridTokenResponse;
-  /** Publishes an app to the shared game-api environment. Free under the org's app-slot quota (result.free = true); beyond the quota, publish still succeeds and hourly usage is debited from the org wallet. Requires the 'manage_apps' permission on the app's org. Blocked when SHARED_GAME_API_URL is not configured. */
+  /** Publishes an app to the shared game-api environment. Free under the org's app-slot quota (result.free = true); beyond the quota, publish still succeeds and metered usage is charged to the org wallet. Requires the 'manage_apps' permission on the app's org. Blocked when SHARED_GAME_API_URL is not configured. */
   publishAppToShared: PublishAppResult;
   /** Store acceptance of the current required legal documents (Game Terms, API Terms, SDK Developer Terms, Free Tier and Billing Basis, Overworld Privacy Policy) and the age-of-majority attestation. Both arguments must be true; a false value stores nothing and is refused with LEGAL_ACCEPTANCE_REQUIRED. Idempotent for a version already stored. Requires a session token. Gameplay tokens stay refused until this has succeeded for the current document set. */
   recordPlayerConsents: Scalars['Boolean']['output'];
@@ -5109,7 +5109,7 @@ export type Mutation = {
   revokeTierAccessRule: TierAccessRule;
   /** Reverts every voxel edit made by `userId` in `appId` between `from` and `to`, returning one RollbackVoxelEventResult per affected voxel (`applied` tells you whether each was actually changed). DEFAULTS to dryRun=true, which only PREVIEWS the planned reversions without writing; pass dryRun=false to actually apply them (DESTRUCTIVE — mutates world state). A reverted voxel’s edit-log row takes the earlier edit’s type, state and author and the ROLLBACK’s time as its createdAt, so a client reading edits `since` its last sync sees the revert. When the app’s wilderness is closed (`wildernessOpen` false), an applied rollback that would write any chunk of closed, unclaimed wilderness is refused (403) before it writes anything; a dry run is not. Requires a valid bearer token AND the `manage_apps` permission on the org that owns `appId` (super admins bypass). */
   rollbackVoxelUpdates: Array<RollbackVoxelEventResult>;
-  /** OPERATOR ONLY. Runs the shared-usage billing tick once. It still bills only the last CLOSED clock hour — it will not charge an open hour. Use this to prove a closed-hour debit without waiting for the ~60s cron. Backdating usage rows is a local-test fixture, not something this mutation does on a live tier. */
+  /** OPERATOR ONLY. Runs the shared-usage tick once instead of waiting for the ~60s cron: reserved-throughput billing, the itemised statement of the last closed clock hour, and the usage-gate evaluation of every shared app. Metered usage is priced and charged by the ledger's settlement, about once a minute, not by this tick. Backdating usage rows is a local-test fixture, not something this mutation does on a live tier. */
   runSharedUsageBillingTick: Scalars['Boolean']['output'];
   /** Send an actor (player/NPC) state update for spatial replication to nearby chunks. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — it does NOT confirm the world applied the update. There is NO separate per-request success response: the game server fans the update out to every client in the target chunk INCLUDING the sender, so you observe your own applied update as an ActorUpdateNotification carrying the same sequenceNumber (ActorUpdateResponse is legacy and is never emitted). Failures arrive ASYNCHRONOUSLY as a GenericErrorResponse; both are correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). Subscribe to udpNotifications before sending so the self-notification/error is not missed. */
   sendActorUpdate: Scalars['Boolean']['output'];
@@ -5151,7 +5151,7 @@ export type Mutation = {
   setAppVisibility: App;
   /** Enables or disables off-session auto-billing for an org and updates its thresholds. When enabled and the wallet falls to lowWaterThresholdCents, the saved payment method is charged rechargeAmountCents (requires setupSharedPaymentMethod first). Pass limitCents=null for no per-period cap. Requires the 'manage_billing' org permission. */
   setAutoBilling: OrgAutoBilling;
-  /** OPERATOR ONLY. Sets a metered dimension's price, the UNIT that price is quoted in, its free allowances, or any combination, and returns the new row alongside the values that moved. THIS IS THE ONLY SANCTIONED WAY TO CHANGE A PRICE OR A UNIT: the schema seeds use ON CONFLICT DO NOTHING, so a rate reaches a tier once at install and a unit corrected in the declaration never reaches a tier that already exists. Refuses an unknown or unmetered metric (a rate for a dimension nothing meters bills nobody while appearing configured), refuses a negative price, refuses unitLabel without unitQuantity (which would restate the rate card while the arithmetic kept the old divisor), and refuses a call that would change nothing. A unit change that also moves the money needs acknowledgeRepricing: true, so restating a price and cutting it cannot be confused. priceBands sets a graduated schedule (SHARED aggregate_data_volume only; band 1 becomes priceCents) and clearPriceBands returns the dimension to one flat price; while a dimension is banded a bare priceCents or a unit change is refused. NOT RETROACTIVE: charges already written are history and the tick is idempotent per closed hour, so a new rate applies to hours billed from now on. Takes effect within about a minute — both billing ticks reload the card on every run, so no restart is needed. */
+  /** OPERATOR ONLY. Sets a metered dimension's price, the UNIT that price is quoted in, its free allowances, or any combination, and returns the new row alongside the values that moved. THIS IS THE ONLY SANCTIONED WAY TO CHANGE A PRICE OR A UNIT: the schema seeds use ON CONFLICT DO NOTHING, so a rate reaches a tier once at install and a unit corrected in the declaration never reaches a tier that already exists. Refuses an unknown or unmetered metric (a rate for a dimension nothing meters bills nobody while appearing configured), refuses a negative price, refuses unitLabel without unitQuantity (which would restate the rate card while the arithmetic kept the old divisor), and refuses a call that would change nothing. A unit change that also moves the money needs acknowledgeRepricing: true, so restating a price and cutting it cannot be confused. priceBands sets a graduated schedule (SHARED aggregate_data_volume only; band 1 becomes priceCents) and clearPriceBands returns the dimension to one flat price; while a dimension is banded a bare priceCents or a unit change is refused. NOT RETROACTIVE: the ledger keeps the rate and allowance in force when a (payer, dimension, period) is first charged, so a change applies from each dimension's next period and nothing already charged is repriced. Takes effect within about a minute — the settlement reloads the card on every run, so no restart is needed. */
   setBillingRate: SetRateCardResult;
   /** Replace a member's channel roles with the given set (not additive — roles not listed are removed). Requires the 'manage_roles' channel permission (app admins bypass). Re-pushes the member's effective send permission to Buddy so their ability to post updates immediately. */
   setChannelMemberRoles: GroupMember;
@@ -7200,7 +7200,7 @@ export type PlayerSpendCap = {
   userId: Scalars['BigInt']['output'];
 };
 
-/** One posted player usage charge: a (player, app, closed clock hour) row. amountCents = platformCents + markupCents — players see what the platform charges and what the studio adds (06 §4). The UNIQUE hour key makes the billing tick idempotent. */
+/** One player usage charge from the hourly cents-era billing: a (player, app, closed clock hour) row. The lossless ledger, on by default, replaced that billing and writes no rows here, so the list ends where the ledger took over; usage since is in playerWalletTransactions as "usage_debit" entries. amountCents = platformCents + markupCents: what the platform charged and what the studio added. */
 export type PlayerUsageCharge = {
   __typename?: 'PlayerUsageCharge';
   /** Total debited cents. */
@@ -7249,7 +7249,7 @@ export type PlayerWallet = {
   walletId: Scalars['BigInt']['output'];
 };
 
-/** One player-wallet ledger entry: top-ups, hourly usage debits, auto-recharges, refunds, and adjustments. Usage debits carry the app and reference the hour's charge row, whose snapshot splits platform vs studio-markup components. */
+/** One player-wallet ledger entry: top-ups, usage debits, auto-recharges, refunds, purchases, payouts and adjustments. A usage debit carries the app and charges what one dimension's running total for its period now costs beyond what was already charged, the app's markup included, so a period can bring several debits as its usage arrives; its description names the dimension and the period. */
 export type PlayerWalletTransaction = {
   __typename?: 'PlayerWalletTransaction';
   /**
@@ -7272,11 +7272,11 @@ export type PlayerWalletTransaction = {
   createdAt: Scalars['DateTime']['output'];
   /** Human description. */
   description: Maybe<Scalars['String']['output']>;
-  /** External reference (checkout/PaymentIntent id). */
+  /** External reference: the checkout or PaymentIntent id of a top-up, or for a usage debit the ledger charge it settles ("charge:<chargeId>:<n>", the n-th debit of that charge). */
   referenceId: Maybe<Scalars['String']['output']>;
   /** Transaction id. */
   transactionId: Scalars['BigInt']['output'];
-  /** What produced this entry. The complete set of values this API writes: "topup" (credit from a completed checkout, positive), "auto_recharge" (off-session automatic recharge, positive), "payout_credit" (marketplace seller payout, positive), "refund" (marketplace refund returned to the buyer, positive), "usage_debit" (hourly player-compute metered charge for one closed clock hour, negative), "purchase" (marketplace purchase, negative), "adjustment" (operator or dispute-clawback correction, signed). */
+  /** What produced this entry. The complete set of values this API writes: "topup" (credit from a completed checkout, positive), "auto_recharge" (off-session automatic recharge, positive), "payout_credit" (marketplace seller payout, positive), "refund" (marketplace refund returned to the buyer, positive), "usage_debit" (metered player usage in one app: the increase in what one dimension's period total costs since the last debit for it, markup included, negative), "purchase" (marketplace purchase, negative), "adjustment" (operator or dispute-clawback correction, signed). */
   transactionType: Scalars['String']['output'];
   /** The owning player user id. */
   userId: Scalars['BigInt']['output'];
@@ -7470,7 +7470,7 @@ export type Query = {
   billingCharges: Array<BillingCharge>;
   /** OPERATOR ONLY. Every organization currently marked billing_exempt. An exemption nobody can enumerate is an exemption that outlives its reason. */
   billingExemptOrgs: Array<BillingExemptOrgType>;
-  /** OPERATOR ONLY. The metered rate card for a scope: every priced dimension with its unit, price and hourly free allowance. SHARED is organization usage billed to the org wallet as "shared_usage"; PLAYER is player compute billed to the player wallet as "usage_debit". A dimension priced at 0 is metered but not charged. Read-only. Customers read the same rates through `meteredRateCard`, which is public and omits the operator note. */
+  /** OPERATOR ONLY. The metered rate card for a scope: every priced dimension with its unit, price, free allowance and the period that allowance resets on. SHARED is organization usage charged to the org wallet as "shared_usage"; PLAYER is a player's own metered usage charged to the player wallet as "usage_debit". A dimension priced at 0 is metered but not charged. Read-only. Customers read the same rates through `meteredRateCard`, which is public and omits the operator note. */
   billingRateCard: Array<RateCardEntryType>;
   /** Amounts the platform could not bill this org for, with the reason (an exempt org, a provider with no generation record, a process that died with metered usage in memory). Requires 'view_billing' on the org. */
   billingWriteOffs: Array<BillingWriteOff>;
@@ -7708,11 +7708,14 @@ export type Query = {
   playerRuntimeStates: Array<PlayerRuntimeState>;
   /** The caller's self-set spend caps (global and per-app) with running counters. The effective runtime limit is min(developer policy, self-cap, wallet balance). */
   playerSpendCaps: Array<PlayerSpendCap>;
-  /** The caller's posted hourly player-usage charges, newest first, optionally filtered by app. Each charge splits platformCents (base rate card) from markupCents (the studio's configured markup) with a per-metric snapshot — players always see what the platform charges and what the studio adds. */
+  /**
+   * The caller's hourly player-usage charges from the cents-era billing, newest first, optionally filtered by app. Nothing has been added since the lossless ledger took over; current usage charges are the "usage_debit" entries in playerWalletTransactions.
+   * @deprecated Reads the hourly cents-era charge rows, which the lossless ledger does not write. Read playerWalletTransactions: each "usage_debit" entry is one charge, per app, markup included.
+   */
   playerUsageCharges: Array<PlayerUsageCharge>;
   /** The caller's player wallet, created empty on first access (never null). Platform-scoped: one wallet, across every org and app, pays for the player's mods past their monthly trial and any Agentic Studio model requests charged to them; org billing never touches it. Fund it via createCheckout purpose PLAYER_WALLET_TOPUP. */
   playerWalletBalance: PlayerWallet;
-  /** The caller's player-wallet ledger, newest first: top-ups, hourly usage debits (per app), auto-recharges, refunds, and adjustments. Usage-debit hours are broken down by playerUsageCharges, whose snapshot splits the platform and studio-markup components. */
+  /** The caller's player-wallet ledger, newest first: top-ups, usage debits (per app, the app's markup included), auto-recharges, refunds, purchases, payouts and adjustments. Each usage debit names its dimension and period, and an over-charge credited back appears as an adjustment. */
   playerWalletTransactions: Array<PlayerWalletTransaction>;
   /** Whether portaling the calling user into an app needs a consent prompt. Trusted (first-party) apps and already-granted apps return consentRequired=false. The Overworld calls this before createPortalAuthorizationCode. Requires a SESSION token. */
   portalConsent: PortalConsentState;
@@ -8695,7 +8698,7 @@ export type RateCardBandType = {
   upToUnits: Maybe<Scalars['BigInt']['output']>;
 };
 
-/** One priced dimension: its rate and, where it has one, its hourly free allowance. A dimension with a price of 0 is metered but not charged. */
+/** One priced dimension: its rate and, where it has one, its free allowance and the period that allowance resets on. A dimension with a price of 0 is metered but not charged. */
 export type RateCardEntryType = {
   __typename?: 'RateCardEntryType';
   /** ISO currency code. USD today. */
@@ -8737,7 +8740,7 @@ export type RateChangeType = {
   updated: Scalars['String']['output'];
 };
 
-/** Which rate card. SHARED prices organization metered usage for shared-environment apps (billed hourly to the org wallet as "shared_usage"). PLAYER prices player compute (billed hourly to the player wallet as "usage_debit"). */
+/** Which rate card. SHARED prices an organization's metered usage in shared-environment apps, charged to the org wallet as "shared_usage" entries. PLAYER prices a player's own metered usage (mod compute, egress, model storage and player-paid model tokens), charged to the player wallet as "usage_debit" entries with the app's markup added. Both settle about once a minute: each (payer, dimension, period) is charged what its running total now costs beyond what was already charged for it. */
 export enum RateScope {
   Player = 'PLAYER',
   Shared = 'SHARED'
@@ -9378,13 +9381,13 @@ export type SetRateCardInput = {
   acknowledgeRepricing?: InputMaybe<Scalars['Boolean']['input']>;
   /** true removes the dimension's bands so it is priced flat at priceCents (the former first band's price unless priceCents is also given). Not combinable with priceBands. */
   clearPriceBands?: InputMaybe<Scalars['Boolean']['input']>;
-  /** New hourly free allowance in raw metric units, as a BigInt decimal string. Must be >= 0. Omit to leave the allowance unchanged. */
+  /** New hourly free allowance in raw metric units, as a BigInt decimal string. Must be >= 0. Omit to leave the allowance unchanged. Like a price, it applies from a dimension's next period where a period has already been charged. */
   freePerHour?: InputMaybe<Scalars['BigInt']['input']>;
-  /** New monthly free allowance in raw metric units, as a BigInt decimal string. Must be >= 0. On the PLAYER card with metric player_wasm_compute_units this is the pooled monthly TRIAL BUDGET per (player, app) — the only sanctioned way to change it on a live tier. Omit to leave it unchanged. */
+  /** New monthly free allowance in raw metric units, as a BigInt decimal string. Must be >= 0. On the PLAYER card with metric player_wasm_compute_units this is the pooled monthly TRIAL BUDGET per (player, app) — the only sanctioned way to change it on a live tier. Omit to leave it unchanged. Like a price, it applies from a dimension's next period where a period has already been charged. */
   freePerMonth?: InputMaybe<Scalars['BigInt']['input']>;
   /** New period for the free allowance. Leaves the units as they are unless freeUnits is also given. Moving a dimension to MONTH is how the development quota is stated. */
   freePeriod?: InputMaybe<AllowancePeriod>;
-  /** New free allowance in raw metric units per freePeriod, as a BigInt decimal string. Must be >= 0. Leaves the period as it is unless freePeriod is also given. Not combinable with freePerHour, which is the older spelling of freeUnits with freePeriod HOUR. */
+  /** New free allowance in raw metric units per freePeriod, as a BigInt decimal string. Must be >= 0. Leaves the period as it is unless freePeriod is also given. Not combinable with freePerHour, which is the older spelling of freeUnits with freePeriod HOUR. Like a price, it applies from a dimension's next period where a period has already been charged. */
   freeUnits?: InputMaybe<Scalars['BigInt']['input']>;
   /** The metered dimension to reprice. Refused unless the platform actually meters it: a rate for an unmetered metric bills nobody while appearing configured. */
   metric: Scalars['String']['input'];
@@ -10371,7 +10374,7 @@ export type WalletTransaction = {
   referenceId: Maybe<Scalars['String']['output']>;
   /** Unique transaction id (BigInt as a decimal string). */
   transactionId: Scalars['BigInt']['output'];
-  /** What produced this transaction. The complete set of values this API writes: "topup" (wallet credit from a completed checkout, positive), "admin_credit" (operator credit applied without a payment provider, positive), "auto_recharge" (off-session automatic wallet recharge, positive), "shared_usage" (hourly shared-environment metered charge for one closed clock hour, negative), "agent_usage" (Crowdy Studio agent run charged at provider cost, negative), "reserved_throughput" (monthly or prorated reserved capacity -- realtime bytes/s or GraphQL operations/s -- charged in addition to metered usage rather than including any of it, negative), "markup_payout" (the app developer's markup on a player's compute bill, credited to the org in the same transaction as the player debit that produced it, positive), "refund" (a payment-provider refund of a top-up, the credited amount leaving the wallet again, negative), "chargeback" (a card dispute on an org top-up, clawed back from the org wallet, negative). No other value is written; earlier versions of this description also listed "usage" and "environment_usage", neither of which was ever produced. */
+  /** What produced this transaction. The complete set of values this API writes: "topup" (wallet credit from a completed checkout, positive), "admin_credit" (operator credit applied without a payment provider, positive), "auto_recharge" (off-session automatic wallet recharge, positive), "shared_usage" (metered shared-environment usage: the increase in what one dimension's period total costs since the last charge for it, negative), "agent_usage" (Crowdy Studio agent run charged at provider cost, negative), "reserved_throughput" (monthly or prorated reserved capacity -- realtime bytes/s or GraphQL operations/s -- charged in addition to metered usage rather than including any of it, negative), "markup_payout" (the app developer's markup on a player's metered usage, credited to the org in the same transaction as the player debit that produced it, positive), "refund" (a payment-provider refund of a top-up, the credited amount leaving the wallet again, negative), "chargeback" (a card dispute on an org top-up, clawed back from the org wallet, negative). No other value is written; earlier versions of this description also listed "usage" and "environment_usage", neither of which was ever produced. */
   transactionType: Scalars['String']['output'];
   /** Wallet this transaction belongs to (BigInt as a decimal string). */
   walletId: Scalars['BigInt']['output'];

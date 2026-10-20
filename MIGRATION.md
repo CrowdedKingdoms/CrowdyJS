@@ -120,6 +120,18 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.14.0: billing descriptions, and `playerWallet.charges()` deprecated
+
+No breaking change. The schema is cks-game-api `dev`'s after #550: the billing descriptions say
+what the lossless ledger does (settled about once a minute, per dimension and period, with no
+clock-hour close), and the voxel comments say what `getChunk` returns (an edit is in the
+chunk's `voxelStates`; only `updateChunk` writes the packed grid).
+
+`playerWallet.charges()` is **deprecated**, like the `playerUsageCharges` field it wraps: that
+field reads the cents-era hourly charge rows, which the ledger does not write, so the list ends
+where the ledger took over. Read `playerWallet.transactions()`: each `usage_debit` entry is one
+usage charge, per app, with the app's markup included. Nothing is removed in 18.x.
+
 ## 18.13.0: the economy
 
 Additive. **Needs a compute toolchain whose starter pack has the `player` and `market`

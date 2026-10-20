@@ -28,8 +28,9 @@ import {
  *
  * A "voxel edit" is one row of the `voxel_updates` log (a {@link Voxel}): the
  * app / chunk / local position that changed, the new voxel type, an optional
- * base64 state blob, and who/when. A background maintenance job later folds these
- * edits into the chunk's packed grid (see {@link ChunksAPI}). For high-frequency
+ * base64 state blob, and who/when. `getChunk` applies these edits to the chunk it
+ * returns, as entries of its `voxelStates`; the packed grid itself is written only
+ * by `updateChunk` (see {@link ChunksAPI}). For high-frequency
  * realtime edits prefer the UDP path (`client.udp.sendVoxelUpdate(...)`); use
  * this API for authoritative reads, audit history, and administrative rollback.
  *
@@ -93,10 +94,12 @@ export class VoxelsAPI {
 
   /**
    * Record (upsert) a single voxel edit in the `voxel_updates` log for one chunk.
-   * **Writes world state**; a background job later folds the edit into the
-   * chunk's packed grid. Requires voxel-edit permission for the target region:
-   * active app access plus the `update_voxel_data` runtime permission (and, where
-   * grids cover the chunk, `update_voxel_data` on a covering grid).
+   * **Writes world state**; `getChunk` returns the edit in the chunk's
+   * `voxelStates` (the packed grid is written only by `updateChunk`). Requires
+   * voxel-edit permission for the target region: active app access, the
+   * `update_voxel_data` tier permission, and `update_voxel_data` on the most
+   * specific grid covering the chunk. A chunk no grid covers is refused, and so
+   * is one only the app's world grid covers while its wilderness is closed.
    *
    * @param input - {@link UpdateVoxelInput}: `appId`, chunk `coordinates`, the
    *   local voxel `location` and the `voxelType` to write (app-defined
