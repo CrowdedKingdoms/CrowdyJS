@@ -735,9 +735,31 @@ export interface ServerEventNotification {
 }
 
 /**
+ * Input of `client.udp.sendGenericSpatial`: an app-defined spatial message (opcode 140) that
+ * the actors near `chunk` receive as a {@link GenericSpatialNotification}.
+ */
+export interface GenericSpatialInput {
+  /** Owning app id ({@link BigInt} decimal string). */
+  appId: string;
+  /** Chunk address `{ x, y, z }`; each axis a signed int64 decimal string. */
+  chunk: { x: string; y: string; z: string };
+  /** The 32-ASCII-character id of the sending actor (not an RFC-4122 UUID). */
+  uuid: string;
+  /** Base64; opaque to the server; at most 1,123 bytes decoded (`GENERIC_SPATIAL_MAX_PAYLOAD_BYTES`). */
+  payload?: string | null;
+  /** Replication radius in chunk units, 0-8 (clamped); defaults to 8. */
+  distance?: number | null;
+  /** Decay algorithm 0-5 (see `sendActorUpdate`); defaults to 0 (none). */
+  decayRate?: number | null;
+  /** Optional uint8 (0-255) correlation id for a `genericError`. */
+  sequenceNumber?: number | null;
+}
+
+/**
  * An app-defined spatial message (`GENERIC_SPATIAL_1`, opcode 140) from a nearby client or a
- * hub: the server fans it out like any spatial message and never reads `payload` (CrowdyCPP
- * sends one with `Connection::sendGenericSpatial`). Delivered on the binary relay only
+ * hub: the server fans it out like any spatial message and never reads `payload` (sent with
+ * `client.udp.sendGenericSpatial` or CrowdyCPP's `Connection::sendGenericSpatial`). Delivered on
+ * the binary relay only
  * (`realtime: { binaryTransport: true }`): the GraphQL `udpNotifications` union has no member for
  * it, so a client on the GraphQL transport does not receive these.
  */

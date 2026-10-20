@@ -108,8 +108,9 @@ export const WireMessageType = {
   CLIENT_TEXT_NOTIFICATION_2: 137,
   CLIENT_EVENT_NOTIFICATION_2: 138,
   SERVER_EVENT_NOTIFICATION_2: 139,
-  // An app-defined spatial payload (CrowdyCPP `Connection::sendGenericSpatial`, a hub's
-  // emit). Parsed on the binary relay only: the GraphQL union has no member for it.
+  // An app-defined spatial payload (`udp.sendGenericSpatial`, CrowdyCPP
+  // `Connection::sendGenericSpatial`, a hub's emit). Sent and parsed on the binary relay
+  // only: the GraphQL API has no mutation and no union member for it.
   GENERIC_SPATIAL_1: 140,
   SINGLE_ACTOR_MESSAGE: 142,
   // Buddy v0.25.0: webcam video pair (audio's shape, payload = one SDK
@@ -522,6 +523,40 @@ export function serializeSingleActorMessage(
     0,
     input.targetUuid,
     input.payload ? decodeBase64(input.payload) : new Uint8Array(0),
+    input.sequenceNumber ?? 0,
+  );
+}
+
+/** Most bytes a generic spatial payload may carry: one signed datagram's worth (1,123). */
+export const GENERIC_SPATIAL_MAX_PAYLOAD_BYTES =
+  RELAY_MAX_DATAGRAM_BYTES - SPATIAL_HEADER_SIZE - TAIL_AUTH_BYTES;
+
+/**
+ * GENERIC_SPATIAL_1 (140): an app-defined payload in the long-spatial layout, which the
+ * server fans out without reading. Defaults match CrowdyCPP's `SpatialSend`: `distance` 8,
+ * `decayRate` 0.
+ * @throws {RangeError} (as a rejection) when the payload decodes to more than
+ *   {@link GENERIC_SPATIAL_MAX_PAYLOAD_BYTES}.
+ */
+export async function serializeGenericSpatial(
+  ctx: RelaySignContext,
+  input: SpatialSendBase & { payload?: string | null },
+): Promise<Uint8Array> {
+  const payload = input.payload ? decodeBase64(input.payload) : new Uint8Array(0);
+  if (payload.length > GENERIC_SPATIAL_MAX_PAYLOAD_BYTES) {
+    throw new RangeError(
+      `payload is ${payload.length} bytes; at most ${GENERIC_SPATIAL_MAX_PAYLOAD_BYTES}`,
+    );
+  }
+  return serializeSpatial(
+    ctx,
+    WireMessageType.GENERIC_SPATIAL_1,
+    input.appId,
+    input.chunk,
+    input.distance ?? 8,
+    input.decayRate ?? 0,
+    input.uuid,
+    payload,
     input.sequenceNumber ?? 0,
   );
 }

@@ -47,7 +47,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '18.14.0';
+export const VERSION = '18.15.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -108,6 +108,8 @@ export {
   serializeChannelAudio,
   serializeChannelMessage,
   serializeClientEvent,
+  serializeGenericSpatial,
+  GENERIC_SPATIAL_MAX_PAYLOAD_BYTES,
   serializeRangedChannelMessage,
   CHANNEL_RANGED_MAX_DISTANCE,
   serializeSingleActorMessage,
@@ -247,6 +249,7 @@ export type {
   ClientEventNotification,
   ServerEventNotification,
   GenericSpatialNotification,
+  GenericSpatialInput,
   ChannelAudioNotification,
   GenericErrorResponse,
   ActorUpdateHandler,
