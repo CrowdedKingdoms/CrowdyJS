@@ -398,6 +398,23 @@ export const ACCOUNT_BLOCKED_CODE = 'ACCOUNT_BLOCKED';
  * request, an add or an invite; see {@link groupMemberBannedOf}.
  */
 export const GROUP_MEMBER_BANNED_CODE = 'GROUP_MEMBER_BANNED';
+/**
+ * `extensions.code` for "an org-managed player cannot do this" (HTTP 403): it has no wallet,
+ * and its mods are refused where its organization has not switched them on for the app; see
+ * {@link managedPlayerNotAllowedOf}.
+ */
+export const MANAGED_PLAYER_NOT_ALLOWED_CODE = 'MANAGED_PLAYER_NOT_ALLOWED';
+/**
+ * `extensions.code` for "the organization's signed player assertion was refused" (HTTP 401),
+ * with the failed check in `extensions.reason`; see {@link assertionRejectedOf}.
+ */
+export const ASSERTION_REJECTED_CODE = 'ASSERTION_REJECTED';
+/**
+ * `extensions.code` for "the player's organization has not accepted the current Org-Managed
+ * Players Addendum" (HTTP 403), on an org-managed player's sign-in and refresh and on
+ * provisioning; see {@link orgLegalAcceptanceRequiredOf}.
+ */
+export const ORG_LEGAL_ACCEPTANCE_REQUIRED_CODE = 'ORG_LEGAL_ACCEPTANCE_REQUIRED';
 
 /**
  * Why an app is paused, as `extensions.reason` on `APP_PAUSED` and
@@ -479,6 +496,42 @@ export function accountBlockedOf(value: unknown): { blockedUntil: string | null 
 /** Whether an error is a `GROUP_MEMBER_BANNED` refusal (HTTP 403); only an unban lifts it. */
 export function groupMemberBannedOf(value: unknown): boolean {
   return errorWithCode(value, GROUP_MEMBER_BANNED_CODE) !== null;
+}
+
+/**
+ * Whether an error is a `MANAGED_PLAYER_NOT_ALLOWED` refusal (HTTP 403): an org-managed
+ * player asked for a wallet, or for a mod, a Crowdy Studio write or the Studio agent in an app
+ * whose organization has not switched its managed players' mods on. Not fixed by retrying.
+ */
+export function managedPlayerNotAllowedOf(value: unknown): boolean {
+  return errorWithCode(value, MANAGED_PLAYER_NOT_ALLOWED_CODE) !== null;
+}
+
+/**
+ * An `ASSERTION_REJECTED` refusal (HTTP 401) from
+ * `portal.exchangeManagedPlayerAssertion`, or `null`. `reason` is `extensions.reason`, the
+ * check that failed: for example `expired`, `replayed`, `signature`, `audience` or
+ * `unknown_key`. Resending the same assertion cannot succeed; ask the organization's
+ * sign-in service for a new one.
+ */
+export function assertionRejectedOf(value: unknown): { reason: string | null } | null {
+  const entry = errorWithCode(value, ASSERTION_REJECTED_CODE);
+  if (!entry) return null;
+  const reason = entry.extensions?.reason;
+  return { reason: typeof reason === 'string' && reason.length > 0 ? reason : null };
+}
+
+/**
+ * Whether an error is an `ORG_LEGAL_ACCEPTANCE_REQUIRED` refusal (HTTP 403, ck-api v2.53.0):
+ * the player's organization has not accepted the current Org-Managed Players Addendum, so it
+ * signs no player in, provisions none, and its players' tokens do not refresh. The player
+ * cannot fix it, and neither can the organization's server: an admin of the organization
+ * accepts it in Studio. Not fixed by retrying. Distinct from the player's own
+ * `LEGAL_ACCEPTANCE_REQUIRED` ({@link isLegalAcceptanceRequiredError}), which a managed
+ * player never gets.
+ */
+export function orgLegalAcceptanceRequiredOf(value: unknown): boolean {
+  return errorWithCode(value, ORG_LEGAL_ACCEPTANCE_REQUIRED_CODE) !== null;
 }
 
 /**

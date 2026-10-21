@@ -1,0 +1,13 @@
+fragment OrgSigningKeyFields on OrgSigningKey {
+  keyId
+  orgId
+  kid
+  algorithm
+  publicJwk
+  issuer
+  audience
+  appIds
+  label
+  createdAt
+  revokedAt
+}

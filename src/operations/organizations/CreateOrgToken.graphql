@@ -4,6 +4,8 @@ mutation CreateOrgToken($input: CreateOrgTokenInput!) {
     orgId
     token
     label
+    scopes
+    appIds
     isActive
     expiresAt
     createdAt

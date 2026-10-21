@@ -1,0 +1,5 @@
+mutation UpdateManagedPlayer($input: UpdateManagedPlayerInput!) {
+  updateManagedPlayer(input: $input) {
+    ...ManagedPlayerFields
+  }
+}

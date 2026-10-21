@@ -1,0 +1,3 @@
+mutation SetAppManagedPlayerMods($appId: BigInt!, $enabled: Boolean!) {
+  setAppManagedPlayerMods(appId: $appId, enabled: $enabled)
+}
