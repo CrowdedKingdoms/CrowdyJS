@@ -44,8 +44,8 @@ export type OrgSigningKeyRegistration = Omit<RegisterOrgSigningKeyInput, 'public
 };
 
 /**
- * Org-managed players (dev only): an organization's own players, signed in by the
- * organization instead of with a Crowded Kingdoms email and password. Exposed as
+ * Org-managed players: an organization's own players, signed in by the organization
+ * instead of with a Crowded Kingdoms email and password. Exposed as
  * `client.managedPlayers` (and `client.admin.managedPlayers`).
  *
  * An org-managed player has no email, password, session or wallet. Its organization
@@ -66,7 +66,15 @@ export type OrgSigningKeyRegistration = Omit<RegisterOrgSigningKeyInput, 'public
  * token with `players:manage` for the player operations). An operator turns the feature on
  * for an organization and sets its limits; {@link settings} reads them.
  *
- * Every field answers `FEATURE_DISABLED` outside the dev tier.
+ * **The Org-Managed Players Addendum** (ck-api v2.53.0). Before any of the organization's
+ * players is created or signed in, an admin of the organization accepts the addendum in
+ * Studio, on the organization's Players tab. Until then sign-ins (both ways), refreshes and
+ * {@link provision} answer `ORG_LEGAL_ACCEPTANCE_REQUIRED` (`orgLegalAcceptanceRequiredOf`).
+ * {@link settings} reports `termsVersion`, `termsUrl`, `termsAccepted` and whether the
+ * signed-in user may accept (`viewerMayAcceptTerms`). This SDK has no wrapper for the
+ * acceptance on purpose: it binds the organization, so a person makes it, in Studio.
+ *
+ * A tier that does not serve org-managed players answers `FEATURE_DISABLED` to every field.
  */
 export class ManagedPlayersAPI {
   constructor(private readonly api: GraphQLClient) {}
@@ -97,7 +105,9 @@ export class ManagedPlayersAPI {
   /**
    * Create players ahead of their first sign-in, up to 500 per call (one statement, much
    * faster than first sign-ins one at a time: pre-provision before a launch). A player
-   * that already exists is left as it is and counted in `existing`.
+   * that already exists is left as it is and counted in `existing`. Refused with
+   * `ORG_LEGAL_ACCEPTANCE_REQUIRED` until the organization has accepted the current
+   * Org-Managed Players Addendum.
    */
   async provision(
     input: ProvisionManagedPlayersInput,
@@ -135,7 +145,10 @@ export class ManagedPlayersAPI {
 
   /**
    * Whether an operator has turned managed players on for the organization, and its limits:
-   * the player cap, sign-ins per minute and the session lengths. Read-only here.
+   * the player cap, sign-ins per minute and the session lengths. Also where the organization
+   * stands on the Org-Managed Players Addendum: the current `termsVersion` and `termsUrl`,
+   * `termsAccepted`, the latest acceptance, and `viewerMayAcceptTerms` (whether the signed-in
+   * user is an admin of the organization who may accept it, in Studio). Read-only here.
    */
   async settings(
     orgId: string,

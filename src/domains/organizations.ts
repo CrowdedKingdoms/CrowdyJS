@@ -190,7 +190,7 @@ export class OrganizationsAPI {
    * that carries it with an `Origin` header.
    *
    * @param input - {@link CreateOrgTokenInput}: `orgId`, optional `label` and
-   *   `expiresAt`; for org-managed players (dev only), `scopes`
+   *   `expiresAt`; for org-managed players, `scopes`
    *   (`players:mint`, `players:manage`) and `appIds` (limit the token to some
    *   of the org's apps). A token with no scope can do nothing.
    * @returns The created token including its one-time plaintext secret.
@@ -228,7 +228,7 @@ export class OrganizationsAPI {
    *
    * @param orgTokenId - Numeric token id.
    * @param options - `endSessions: true` also ends every session the token signed
-   *   org-managed players in with (dev only), so their devices stop now rather than at
+   *   org-managed players in with, so their devices stop now rather than at
    *   their sessions' end.
    * @returns `true` on success.
    */

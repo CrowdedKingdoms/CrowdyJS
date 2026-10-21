@@ -32,7 +32,7 @@ import type { GameAppsAPI } from './gameApps.js';
 export class AdminAPI {
   /** Organizations, members, RBAC roles, and org API tokens. */
   readonly organizations: OrganizationsAPI;
-  /** The organization's own players, signed in by the organization (dev only). */
+  /** The organization's own players, signed in by the organization. */
   readonly managedPlayers: ManagedPlayersAPI;
   /** App registry, routing, and player-code admission policy. */
   readonly apps: AppsAPI;

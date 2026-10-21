@@ -1,5 +1,5 @@
 /**
- * Org-managed players (cks-game-api #557, dev only). An organization signs its own players in:
+ * Org-managed players (cks-game-api #557; the addendum, #560). An organization signs its own players in:
  * its server mints the player's app token with an org token, or its sign-in service signs an
  * assertion the device trades. The device holds the player's app token and never the org
  * token, so the SDK wraps the organization's administration and the device's two steps, and
@@ -109,6 +109,29 @@ test('a refused assertion surfaces its reason; a refused mod is MANAGED_PLAYER_N
   assert.equal(errors.managedPlayerNotAllowedOf(refusal), false);
   assert.equal(sdk.assertionRejectedOf, errors.assertionRejectedOf);
   assert.equal(sdk.MANAGED_PLAYER_NOT_ALLOWED_CODE, 'MANAGED_PLAYER_NOT_ALLOWED');
+});
+
+test("the organization's addendum refusal reads as its own, never as the player's clickwrap", async () => {
+  const message =
+    'Organization 7 has not accepted the current Org-Managed Players Addendum (managed-players-addendum-2026-10-21)';
+  const orgRefusal = new errors.CrowdyGraphQLError([
+    { message, extensions: { code: 'ORG_LEGAL_ACCEPTANCE_REQUIRED' } },
+  ]);
+  assert.equal(errors.orgLegalAcceptanceRequiredOf(orgRefusal), true);
+  assert.equal(sdk.orgLegalAcceptanceRequiredOf, errors.orgLegalAcceptanceRequiredOf);
+  assert.equal(sdk.ORG_LEGAL_ACCEPTANCE_REQUIRED_CODE, 'ORG_LEGAL_ACCEPTANCE_REQUIRED');
+  // A managed player has no clickwrap to show; the player reader must not claim this one,
+  // by its code or by a message that carries the org code's name.
+  assert.equal(sdk.isLegalAcceptanceRequiredError(orgRefusal), false);
+  assert.equal(
+    sdk.isLegalAcceptanceRequiredError(new Error(`ORG_LEGAL_ACCEPTANCE_REQUIRED: ${message}`)),
+    false,
+  );
+  const playerRefusal = new errors.CrowdyGraphQLError([
+    { message: 'Accept the current terms', extensions: { code: 'LEGAL_ACCEPTANCE_REQUIRED' } },
+  ]);
+  assert.equal(errors.orgLegalAcceptanceRequiredOf(playerRefusal), false);
+  assert.equal(sdk.isLegalAcceptanceRequiredError(new Error('LEGAL_ACCEPTANCE_REQUIRED: x')), true);
 });
 
 test('managedPlayers sends each administration field with its arguments', async () => {

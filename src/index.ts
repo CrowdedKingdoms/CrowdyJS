@@ -47,7 +47,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '18.16.0';
+export const VERSION = '18.17.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -194,8 +194,10 @@ export {
   groupMemberBannedOf,
   MANAGED_PLAYER_NOT_ALLOWED_CODE,
   ASSERTION_REJECTED_CODE,
+  ORG_LEGAL_ACCEPTANCE_REQUIRED_CODE,
   managedPlayerNotAllowedOf,
   assertionRejectedOf,
+  orgLegalAcceptanceRequiredOf,
   ACTOR_EXISTS_CODE,
   APP_PAUSED_CODE,
   accessRefusalOf,

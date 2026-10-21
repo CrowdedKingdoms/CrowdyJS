@@ -409,6 +409,12 @@ export const MANAGED_PLAYER_NOT_ALLOWED_CODE = 'MANAGED_PLAYER_NOT_ALLOWED';
  * with the failed check in `extensions.reason`; see {@link assertionRejectedOf}.
  */
 export const ASSERTION_REJECTED_CODE = 'ASSERTION_REJECTED';
+/**
+ * `extensions.code` for "the player's organization has not accepted the current Org-Managed
+ * Players Addendum" (HTTP 403), on an org-managed player's sign-in and refresh and on
+ * provisioning; see {@link orgLegalAcceptanceRequiredOf}.
+ */
+export const ORG_LEGAL_ACCEPTANCE_REQUIRED_CODE = 'ORG_LEGAL_ACCEPTANCE_REQUIRED';
 
 /**
  * Why an app is paused, as `extensions.reason` on `APP_PAUSED` and
@@ -513,6 +519,19 @@ export function assertionRejectedOf(value: unknown): { reason: string | null } |
   if (!entry) return null;
   const reason = entry.extensions?.reason;
   return { reason: typeof reason === 'string' && reason.length > 0 ? reason : null };
+}
+
+/**
+ * Whether an error is an `ORG_LEGAL_ACCEPTANCE_REQUIRED` refusal (HTTP 403, ck-api v2.53.0):
+ * the player's organization has not accepted the current Org-Managed Players Addendum, so it
+ * signs no player in, provisions none, and its players' tokens do not refresh. The player
+ * cannot fix it, and neither can the organization's server: an admin of the organization
+ * accepts it in Studio. Not fixed by retrying. Distinct from the player's own
+ * `LEGAL_ACCEPTANCE_REQUIRED` ({@link isLegalAcceptanceRequiredError}), which a managed
+ * player never gets.
+ */
+export function orgLegalAcceptanceRequiredOf(value: unknown): boolean {
+  return errorWithCode(value, ORG_LEGAL_ACCEPTANCE_REQUIRED_CODE) !== null;
 }
 
 /**
