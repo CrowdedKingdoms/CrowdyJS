@@ -28,7 +28,9 @@
  *                           player. dev and test are staff-only: without one, a new
  *                           crowdy-e2e-*@test.invalid account is refused there
  *                           (TIER_ACCESS_REQUIRED). Secrets Manager
- *                           infra-cp/<tier>/loadtest/provisioning-token-sdk-e2e
+ *                           infra-cp/<tier>/loadtest/provisioning-token-harness
+ *                           (its `token` field; the harness label admits
+ *                           crowdy-e2e*@test.invalid)
  *
  * THE DEFAULT APP ID IS A LOCAL-STACK DEFAULT AND IT IS A TRAP AGAINST A TIER.
  * No deployed tier has an app numbered 1 -- ids are Snowflake53, so they are

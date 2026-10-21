@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.14.0** (18.0.0 was published only as
+**Current package:** `package.json` is **18.15.0** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -29,6 +29,21 @@ directly. So, before adding a wrapper:
 - 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
+
+**18.15.0: sending opcode 140 (2026-10-20).** `udp.sendGenericSpatial` sends
+`GENERIC_SPATIAL_1` (140), the counterpart of CrowdyCPP's `Connection::sendGenericSpatial`
+(the Unreal SDK team's ask, `crowdycpp-issues-2.md`); 18.7.0 only received it.
+`serializeGenericSpatial` in `src/binary-wire.ts` is held to CrowdyCPP's golden vector
+(`kGoldenSpatial`) in `test/unit/generic-spatial.test.mjs`; the defaults are `SpatialSend`'s
+(`distance` 8, `decayRate` 0) and the payload limit one datagram's, 1,123 bytes. **Binary relay
+only, with no fallback:** the method does not go through `sendViaRelay`, which turns any
+serializer error into "use GraphQL", because there is no mutation for opcode 140. Off the
+relay it throws `BINARY_RELAY_UNAVAILABLE` (`retryable: false`), and a serializer error (too
+large a payload, a long uuid) reaches the caller as itself. No schema change, so it needs no
+particular Game API release. `test/e2e/two-client-generic-spatial.test.mjs` is the live proof:
+on `dev` (2026-10-20) A's message reached B's `genericSpatial` over the relay, payload, uuid,
+distance 8 and decay 0 intact. CrowdyCPP's parity matrix maps the new surface to
+`Connection::sendGenericSpatial`.
 
 **18.14.0: billing descriptions and a deprecation (2026-10-20).** `schema.gql` is cks-game-api
 `dev`'s after #550 (the billing descriptions describe the lossless ledger; `playerUsageCharges`
