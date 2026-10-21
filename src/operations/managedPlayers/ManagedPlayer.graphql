@@ -1,0 +1,5 @@
+query ManagedPlayer($orgId: BigInt!, $externalId: String!) {
+  managedPlayer(orgId: $orgId, externalId: $externalId) {
+    ...ManagedPlayerFields
+  }
+}

@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.15.0** (18.0.0 was published only as
+**Current package:** `package.json` is **18.16.0** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -29,6 +29,36 @@ directly. So, before adding a wrapper:
 - 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
+
+**18.17.0: the Org-Managed Players Addendum, and every tier (2026-10-21).** ck-api v2.53.0
+(cks-game-api #560) serves org-managed players on dev, test and prod, and refuses an
+organization's managed sign-ins, refreshes and provisioning with `ORG_LEGAL_ACCEPTANCE_REQUIRED`
+until an admin of the organization accepts the addendum in Studio. The SDK reads it
+(`orgLegalAcceptanceRequiredOf`, `ORG_LEGAL_ACCEPTANCE_REQUIRED_CODE`), and `managedPlayers.settings`
+carries the terms fields and `viewerMayAcceptTerms`. **No wrapper for `acceptManagedPlayerTerms`,
+on purpose:** the acceptance binds the organization, so a person makes it in Studio.
+`isLegalAcceptanceRequiredError`'s message fallback now refuses to match the org code: a
+managed player has no clickwrap, and treating the org's refusal as the player's sent it to one.
+
+**18.16.0: org-managed players (2026-10-21, dev only at the time).** An organization that runs its own
+accounts signs its players in itself (cks-game-api #557). Its server calls `mintManagedPlayerToken`
+with an org token, or its sign-in service signs an assertion; either way the device ends up
+with the player's own app token. **The SDK carries the device's two steps and the org admin's
+surface, and deliberately no org-token mint:** an org token signs in any of the org's players,
+so it stays on the org's server (the API refuses one sent with an `Origin` header).
+`managed-players.test.mjs` fails if an operation document ever names `mintManagedPlayerToken`.
+`portal.adoptAppToken(response)` stores the token the org's server minted (it refuses a `cko_`
+token); `portal.exchangeManagedPlayerAssertion({ appId, assertion })` is public and stores the
+result. `client.managedPlayers` (also `client.admin.managedPlayers`) is the org's
+administration (`manage_players`; `setAppMods` needs `manage_billing`); `setOrgManagedPlayerSettings`
+is the operator's and is on `sdk-audience.test.mjs`'s platform-only list. `organizations.createToken`
+takes `scopes` / `appIds`, `revokeToken(id, { endSessions })`. `assertionRejectedOf` and
+`managedPlayerNotAllowedOf` read the new refusals. `test/e2e/two-client-managed-players.test.mjs`
+is the replication proof (`CROWDY_ORG_TOKEN`, `CROWDY_MANAGED_APP_ID`): on the builder's local
+stack (Citus scratch database, ck-api from #557, two Buddies), two managed players' actor
+updates crossed Buddies. Needs the Game API release carrying #557 on the tier; merge after it
+is deployed on `dev`, with `schema.gql` re-synced from `dev`'s. CrowdyCPP and CrowdyPy mirror
+the device's two steps and the error readers.
 
 **18.15.0: sending opcode 140 (2026-10-20).** `udp.sendGenericSpatial` sends
 `GENERIC_SPATIAL_1` (140), the counterpart of CrowdyCPP's `Connection::sendGenericSpatial`

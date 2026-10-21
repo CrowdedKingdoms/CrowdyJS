@@ -1,0 +1,3 @@
+mutation RevokeOrgSigningKey($orgId: BigInt!, $keyId: BigInt!) {
+  revokeOrgSigningKey(orgId: $orgId, keyId: $keyId)
+}

@@ -1,0 +1,3 @@
+mutation EndManagedPlayerSessions($orgId: BigInt!, $externalId: String!) {
+  endManagedPlayerSessions(orgId: $orgId, externalId: $externalId)
+}

@@ -103,6 +103,7 @@ game stack never receives the player's full session.
 | in a browser, on your own domain (every customer game) | `portal.signIn` -> Studio -> `portal.handleSignInCallback` | the client already holds the app token |
 | in a browser, on the first-party host (Studio) | `auth.login` / magic link / social       | `portal.mintAppToken(appId)`          |
 | outside a browser (Node, CLI, CrowdyCPP, tests)        | `auth.login` / `auth.register`            | `portal.mintAppToken(appId)`          |
+| anywhere, for players of an organization that runs its own accounts | the organization signs its player in: its server mints with an org token, or its sign-in service signs an assertion | `portal.adoptAppToken(response)` / `portal.exchangeManagedPlayerAssertion(...)` — see [Org-managed players](#org-managed-players) |
 
 The first row is the only one a game on its own domain can take: the direct
 sign-in mutations are refused from a non-first-party browser origin with
@@ -198,6 +199,78 @@ Notes:
 Deeper reading: [Portals & app-scoped tokens](https://docs.crowdedkingdoms.com/management-api/portals-and-app-tokens)
 and [Sign in](https://docs.crowdedkingdoms.com/management-api/authentication).
 
+### Org-managed players
+
+An organization that runs its own accounts can sign its players in to its own apps itself
+(18.16.0, cks-game-api #557). The player never types a Crowded Kingdoms password, and Crowded
+Kingdoms holds no email or password for it: the organization vouches for the player and the
+device gets the player's own app token, which plays exactly like any other. An org-managed
+player has no session and no wallet, plays only its organization's apps, and its mods are paid
+for by the organization where it switched them on (`managedPlayers.setAppMods`). An operator
+turns the feature on for an organization.
+
+**The organization accepts the Org-Managed Players Addendum first** (18.17.0, ck-api v2.53.0).
+An admin of the organization accepts it once in Studio (Org > Players); until then every
+sign-in, refresh and `provision` answers `ORG_LEGAL_ACCEPTANCE_REQUIRED`
+(`orgLegalAcceptanceRequiredOf(err)`), which neither the player nor your server can fix.
+`managedPlayers.settings(orgId)` reports `termsAccepted`, the current `termsVersion` and its
+`termsUrl`. The SDK does not wrap the acceptance: it binds the organization, so a person makes
+it in Studio.
+
+**From the organization's server, with an org token.** Create the token in Studio (or
+`organizations.createToken({ orgId, scopes: ['players:mint'], appIds: [appId] })`) and keep it
+on the server: it signs in any of the organization's players, and the API refuses one sent
+with an `Origin` header. The SDK deliberately has no wrapper for the mint; it is one request:
+
+```ts
+// your server, after your own sign-in succeeded
+const res = await fetch('https://ck.dev.crowdedkingdoms.com/graphql', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json', authorization: `Bearer ${process.env.CK_ORG_TOKEN}` },
+  body: JSON.stringify({
+    query: `mutation($i: MintManagedPlayerTokenInput!) { mintManagedPlayerToken(input: $i) {
+      token gameTokenId appId expiresAt gameApiUrl gameApiWsUrl discoveryUrl launchUrl } }`,
+    variables: { i: { appId, externalId: account.id, gamertag: account.displayName } },
+  }),
+});
+const { data } = await res.json();
+// send data.mintManagedPlayerToken to the player's device
+```
+
+```ts
+// the player's device
+const access = await fetch('/api/crowded-kingdoms/token').then((r) => r.json());
+const game = createCrowdyClient({ httpUrl: access.gameApiUrl, wsUrl: access.gameApiWsUrl });
+game.portal.adoptAppToken(access); // refuses an org token by mistake
+game.world(appId).subscribe({ actorUpdate: (n) => { /* ... */ } });
+```
+
+`externalId` is your own stable account id (not an email); the first sign-in creates the player
+and the same id is always the same player. The token refreshes (`refreshGameplayToken`) until
+the sign-in's lifetime ends (`sessionTtlSeconds`, at most the organization's setting); then the
+device asks your server again.
+
+**With a signed assertion.** Register a public key once
+(`managedPlayers.registerSigningKey({ orgId, kid, algorithm: 'EdDSA', publicJwk, issuer })`);
+your sign-in service signs a short JWS per player (`iss`, `aud: 'ck:app:<appId>'`, `sub` your
+account id, `iat`, `exp` at most 300 s later, a fresh `jti`, optionally `gamertag`) and the
+device trades it, without your server calling Crowded Kingdoms:
+
+```ts
+const access = await game.portal.exchangeManagedPlayerAssertion({ appId, assertion });
+```
+
+Each assertion works once; a refusal reads with `assertionRejectedOf(err)?.reason`
+(`expired`, `replayed`, `signature`, …).
+
+**Administration** takes an org admin's session with `manage_players`:
+`client.managedPlayers.list` / `get` / `provision` (up to 500 a call: pre-provision before a
+launch) / `update` (rename, disable, enable) / `endSessions` / `delete`, `settings` (the
+operator-set limits and the addendum), `signingKeys` / `registerSigningKey` / `revokeSigningKey`, and
+`appModsEnabled` / `setAppMods` (`manage_billing`). From your server, an org token with
+`players:manage` also works for the six player operations. `organizations.revokeToken(id, { endSessions: true })`
+also ends the sessions a token signed in.
+
 ### Token refresh during gameplay
 
 Before an app token expires, call `game.refreshGameplayToken()` while gameplay
@@ -244,7 +317,7 @@ never told about, so a native refresh without it is a re-placement.
 | `client.auth` | Sign-in: `login` / `register` (email + password), magic link, social/OIDC. Passwords: `requestPasswordReset` / `resetPassword`, `changePassword`, and `setInitialPassword` for an account created by magic link or a social provider (added in 15.1.0). Log out, and linked identities (`myIdentities`, `linkIdentity`/`unlinkIdentity`). **No dev bypass** — `devLogin` was removed in 15.0.0 and `DEV_AUTH_BYPASS` is gone from every tier. |
 | `client.users` | `me`, `updateGamertag`, profile reads; `playerProfile` / `playerProfiles` (up to 100) for other players' public `{ userId, gamertag, disambiguation }`. |
 | `client.session` | Token store, `restore()`, `getToken()`, manual `setToken()`. |
-| `client.portal` | App-scoped token minting (`mintAppToken`) and the cross-origin PKCE entry flow (`beginEntry` / `handleAuthorizeRequest` / `completeEntry` / `refresh`). |
+| `client.portal` | App-scoped token minting (`mintAppToken`) and the cross-origin PKCE entry flow (`beginEntry` / `handleAuthorizeRequest` / `completeEntry` / `refresh`). For an org-managed player, `adoptAppToken` stores the token its organization minted and `exchangeManagedPlayerAssertion` trades the organization's signed assertion. |
 | `client.hosting` | Third-party hosting on Crowdy Games (17.2.0): `claim` a slug for an app, `beginPublish` / `completePublish` / `abandonPublish` a built bundle, `setEnabled`; public `game(slug)` / `listed()`. Mutations need an identity session with `manage_apps`. `@crowdedkingdoms/crowdyjs/hosting` exports `publishDirectory(client, { dir, slug })`, the Node helper that does the whole publish for a `dist/`. |
 | `client.platform` | Public platform configuration (`config()`). |
 | `client.serverStatus` | `gameClientBootstrap(appId)` — per-app version info, UDP status, spatial limits. |
@@ -270,7 +343,8 @@ grouped under `client.admin` and mirrored at the top level):
 
 | Sub-client | What it does |
 |---|---|
-| `client.organizations` | Orgs, members, RBAC roles, org API tokens. |
+| `client.organizations` | Orgs, members, RBAC roles, org API tokens (with `scopes` and `appIds` for org-managed players). |
+| `client.managedPlayers` | Org-managed players: list, provision, rename, disable, end sessions, delete; assertion signing keys; whether the org pays for their mods in an app; where the org stands on the addendum. See [Org-managed players](#org-managed-players). |
 | `client.apps` | App registry, discovery + routing (`create`, `routeFor`, `marketplace`), visibility, and player-code admission mode / allow-list administration. |
 | `client.appAccess` | Access tiers + per-user grants, and the feature keys a tier grants (`defineFeature`, `grantTierFeature`, `tierFeatures`, …), which a hub checks with the node API's `players.features`; timed bans (`suspend`, `unsuspend`) and `resyncTierGridPermissions`. |
 | `client.billing` | Org wallet + per-app spend budgets. |
@@ -1170,7 +1244,9 @@ Readers for the refusals a player should be told about, each `null` for any othe
 `ACCESS_NOT_GRANTED`), `appPausedOf(err)` (`APP_PAUSED`, with `reason`) and `actorExistsOf(err)`
 (`ACTOR_EXISTS`; `ownedByCaller: true` means a retried create of your own actor). A paused app
 still mints tokens: check `isAppPaused(token.runtimeGate)` (or the bootstrap's `runtimeGate`)
-before entering the world.
+before entering the world. For org-managed players: `assertionRejectedOf(err)`
+(`ASSERTION_REJECTED`, with the failed check as `reason`) and `managedPlayerNotAllowedOf(err)`
+(`MANAGED_PLAYER_NOT_ALLOWED`: no wallet, or mods the organization has not switched on).
 
 ## Idempotent retries
 
