@@ -164,6 +164,21 @@ test('managedPlayers sends each administration field with its arguments', async 
   );
 });
 
+test('registerSigningKey refuses a private JWK before any request', async () => {
+  const gql = fakeGql(() => ({ registerOrgSigningKey: { keyId: '1' } }));
+  const players = new ManagedPlayersAPI(gql);
+  const base = { orgId: '3', kid: 'k1', algorithm: 'EdDSA', issuer: 'https://id.example' };
+  await assert.rejects(
+    players.registerSigningKey({ ...base, publicJwk: { kty: 'OKP', crv: 'Ed25519', x: 'abc', d: 'secret' } }),
+    /private member 'd'/,
+  );
+  await assert.rejects(
+    players.registerSigningKey({ ...base, algorithm: 'RS256', publicJwk: JSON.stringify({ kty: 'RSA', n: 'n', e: 'AQAB', p: 'secret' }) }),
+    /private member 'p'/,
+  );
+  assert.equal(gql.calls.length, 0);
+});
+
 test('appModsEnabled is false for an app the caller cannot see', async () => {
   const players = new ManagedPlayersAPI(fakeGql(() => ({ app: null })));
   assert.equal(await players.appModsEnabled('7'), false);

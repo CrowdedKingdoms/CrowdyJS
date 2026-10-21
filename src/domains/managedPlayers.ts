@@ -24,6 +24,20 @@ import {
   type RegisterOrgSigningKeyInput,
 } from '../generated/graphql.js';
 
+/** The JWK members that only a private key has (RFC 7518: EC and OKP `d`, RSA's CRT values, `oct`'s `k`). */
+const PRIVATE_JWK_MEMBERS = ['d', 'p', 'q', 'dp', 'dq', 'qi', 'oth', 'k'] as const;
+
+function privateJwkMember(json: string): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return null; // not JSON: the API refuses it with its own message
+  }
+  if (!parsed || typeof parsed !== 'object') return null;
+  return PRIVATE_JWK_MEMBERS.find((m) => m in (parsed as Record<string, unknown>)) ?? null;
+}
+
 /** A public key as {@link ManagedPlayersAPI.registerSigningKey} takes it: a JWK object or its JSON. */
 export type OrgSigningKeyRegistration = Omit<RegisterOrgSigningKeyInput, 'publicJwk'> & {
   publicJwk: string | Record<string, unknown>;
@@ -149,6 +163,14 @@ export class ManagedPlayersAPI {
   ): Promise<RegisterOrgSigningKeyMutation['registerOrgSigningKey']> {
     const publicJwk =
       typeof input.publicJwk === 'string' ? input.publicJwk : JSON.stringify(input.publicJwk);
+    // The API refuses a private JWK too; refusing here keeps the private key from ever
+    // leaving the machine that holds it.
+    const privateMember = privateJwkMember(publicJwk);
+    if (privateMember) {
+      throw new TypeError(
+        `registerSigningKey: the JWK carries the private member '${privateMember}'. Register the PUBLIC key only.`,
+      );
+    }
     const data = await this.api.request(RegisterOrgSigningKeyDocument, {
       input: { ...input, publicJwk },
     });
