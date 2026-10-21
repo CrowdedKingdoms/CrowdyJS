@@ -905,7 +905,7 @@ export type App = {
   isTrusted: Scalars['Boolean']['output'];
   /** Browser destination (origin/URL) a player is redirected to when they portal into this app from the Overworld. Used to route the player and to validate portal redirect URIs. */
   launchUrl: Maybe<Scalars['String']['output']>;
-  /** Whether the organization lets its org-managed players build and run mods (and use the Studio agent) in this app, paying for their mod compute, egress, storage and model tokens itself. False by default, and false wherever org-managed players are off (they are on dev only). Set with setAppManagedPlayerMods (manage_billing). Players with a Crowded Kingdoms account are unaffected. */
+  /** Whether the organization lets its org-managed players build and run mods (and use the Studio agent) in this app, paying for their mod compute, egress, storage and model tokens itself. False by default, and false on a tier that does not serve org-managed players. Set with setAppManagedPlayerMods (manage_billing). Players with a Crowded Kingdoms account are unaffected. */
   managedPlayerModsEnabled: Scalars['Boolean']['output'];
   /** Opaque JSON-encoded string of marketplace media (cover image URL, screenshots, long description, etc.). Stored internally as JSONB; clients must JSON.parse on read and JSON.stringify on write. Null/"{}" when unset. */
   metadata: Maybe<Scalars['String']['output']>;
@@ -2310,7 +2310,7 @@ export type CreateOrgRoleInput = {
 };
 
 export type CreateOrgTokenInput = {
-  /** Limit the token to these apps of the organization; omit for every app (org-managed players, dev only). */
+  /** Limit the token to these apps of the organization; omit for every app (org-managed players). */
   appIds?: InputMaybe<Array<Scalars['BigInt']['input']>>;
   /** Optional expiry timestamp; omit for a non-expiring token. */
   expiresAt?: InputMaybe<Scalars['DateTime']['input']>;
@@ -2318,7 +2318,7 @@ export type CreateOrgTokenInput = {
   label?: InputMaybe<Scalars['String']['input']>;
   /** Organization to mint the token for (BigInt as string). */
   orgId: Scalars['BigInt']['input'];
-  /** What the token may do: 'players:mint' and/or 'players:manage' (org-managed players, dev only). Omit for a token with no scope, which can do nothing. */
+  /** What the token may do: 'players:mint' and/or 'players:manage' (org-managed players). Omit for a token with no scope, which can do nothing. */
   scopes?: InputMaybe<Array<Scalars['String']['input']>>;
 };
 
@@ -4806,7 +4806,7 @@ export type LoginUserInput = {
   password: Scalars['String']['input'];
 };
 
-/** A player an organization signs in itself (an org-managed player): a Crowded Kingdoms user with no email, password or wallet, known to the org by its own id. Dev only for now. */
+/** A player an organization signs in itself (an org-managed player): a Crowded Kingdoms user with no email, password or wallet, known to the org by its own id. */
 export type ManagedPlayer = {
   __typename?: 'ManagedPlayer';
   /** When the player was first signed in or provisioned. */
@@ -4871,6 +4871,8 @@ export type Mutation = {
   __typename?: 'Mutation';
   /** Give up a STAGING publish and clear its staged objects. Requires manage_apps and a SESSION token. */
   abandonGamePublish: HostedGamePublish;
+  /** SESSION ONLY, an admin of the organization (its own admin grant: a super admin's or an operator's access does not stand in). Accept the Org-Managed Players Addendum on the organization's behalf, the version orgManagedPlayerSettings names as termsVersion (read it at termsUrl). Until the organization has accepted the current version, its managed players are neither created nor signed in (ORG_LEGAL_ACCEPTANCE_REQUIRED). A version that is not the current one is refused with CONFLICT; accepting the current one again changes nothing. Studio asks for it on the organization's Players tab. */
+  acceptManagedPlayerTerms: OrgManagedPlayerSettings;
   /** Application liveness heartbeat for the authenticated user's existing actor rows in an app. Refreshes actors.updated_at so the user stays host-eligible, then returns the freshly-elected host so a client can fold its poll and heartbeat into one round-trip. This is not proof of a live Buddy session and does not refresh the separate Buddy presence lease used by security-sensitive artifact/compute occupancy gates. */
   actorHeartbeat: Maybe<GameHost>;
   /** Add a user to a channel, or approve their pending join request (upsert to active). Requires the 'manage_members' channel permission (app admins bypass). Auto-assigns the default role if configured and notifies Buddy with the member's effective send permission. */
@@ -4951,7 +4953,7 @@ export type Mutation = {
   createGridChannel: Group;
   /** Creates a custom role in an organization with a name, optional description, and permission keys. Requires the 'manage_members' permission on the org (super admins bypass). */
   createOrgRole: OrgRole;
-  /** Mints a new org token (it starts with `cko_`) and returns the plaintext exactly once - save it, since subsequent queries only show metadata. An org token is the organization's SERVER credential for its org-managed players (dev only for now): with scope 'players:mint' its server signs the org's own players in (mintManagedPlayerToken), with 'players:manage' it manages them; `appIds` limits it to some of the org's apps. Never put one in a game client or a web page: a request with an Origin header is refused. Requires the 'manage_tokens' permission on the target org (super admins bypass). */
+  /** Mints a new org token (it starts with `cko_`) and returns the plaintext exactly once - save it, since subsequent queries only show metadata. An org token is the organization's SERVER credential for its org-managed players: with scope 'players:mint' its server signs the org's own players in (mintManagedPlayerToken), with 'players:manage' it manages them; `appIds` limits it to some of the org's apps. Never put one in a game client or a web page: a request with an Origin header is refused. Requires the 'manage_tokens' permission on the target org (super admins bypass). */
   createOrgToken: OrgTokenWithSecret;
   /** Creates a new organization and makes the authenticated caller its owner (with full permissions). Requires a valid session token. */
   createOrganization: Organization;
@@ -5009,7 +5011,7 @@ export type Mutation = {
   deleteChannelRole: Scalars['Boolean']['output'];
   /** Delete a studio-created peer grid so its chunk box no longer blocks overlapping grid creation. Requires app-admin ('manage_apps'). Returns a hybrid response — on success `gridId` is populated and `error` is NO_ERROR; on failure `gridId` is null and `error` is a UDP-style error code (e.g. GRID_NOT_FOUND, CANNOT_DELETE_DEFAULT_WORLD_GRID, GRID_HAS_NESTED_CHILDREN). The open-by-default world grid and any grid that still contains nested child grids cannot be deleted. */
   deleteGrid: DeleteGridResponse;
-  /** Dev only. Delete a managed player: its sessions end and its row is anonymized, as an account deletion is. Signing the same external id in again creates a new player. False when there was no such player. An org token with players:manage, or an org admin with manage_players. */
+  /** Delete a managed player: its sessions end and its row is anonymized, as an account deletion is. Signing the same external id in again creates a new player. False when there was no such player. An org token with players:manage, or an org admin with manage_players. */
   deleteManagedPlayer: Scalars['Boolean']['output'];
   /** DESTRUCTIVE self-service: soft-deletes the authenticated caller's OWN account — anonymizes PII and revokes all sessions; wallet, voxel, and donation history stay intact via FK. Acts only on the caller (no target argument). Requires a valid game token. */
   deleteMyAccount: Scalars['Boolean']['output'];
@@ -5025,11 +5027,11 @@ export type Mutation = {
   deleteUserAppState: UserAppState;
   /** Close the UDP proxy session and socket for this game token. Unsubscribing from udpNotifications does not disconnect; use this mutation (or rely on server inactivity timeout). */
   disconnectUdpProxy: Scalars['Boolean']['output'];
-  /** Dev only. Sign a managed player out everywhere: its sessions and app tokens end, and so do its realtime and ck-exec connections. It can sign in again (use updateManagedPlayer to stop that). False when it held no session. An org token with players:manage, or an org admin with manage_players. */
+  /** Sign a managed player out everywhere: its sessions and app tokens end, and so do its realtime and ck-exec connections. It can sign in again (use updateManagedPlayer to stop that). False when it held no session. An org token with players:manage, or an org admin with manage_players. */
   endManagedPlayerSessions: Scalars['Boolean']['output'];
   /** OPERATOR: end the sessions and app tokens of these accounts (at most 1000), skipping any this tier admits. Returns how many had sessions ended. Refused on prod. */
   endTierAccessSessions: Scalars['Int']['output'];
-  /** Dev only. Exchange an assertion your organization signed for one of its players for that player's app-scoped gameplay token (the same token mintManagedPlayerToken returns). Public: the signature is the credential, so a game client calls it directly, from a browser on your registered origin or natively. The assertion must name a registered, active key (header kid) and carry iss and aud as registered (aud defaults to ck:app:<appId>), sub (your id for the player), iat, exp at most 300 seconds after iat, and a jti never used before for this app; optionally gamertag. The player is created on its first sign-in. Refusals are ASSERTION_REJECTED with extensions.reason. */
+  /** Exchange an assertion your organization signed for one of its players for that player's app-scoped gameplay token (the same token mintManagedPlayerToken returns). Public: the signature is the credential, so a game client calls it directly, from a browser on your registered origin or natively. The assertion must name a registered, active key (header kid) and carry iss and aud as registered (aud defaults to ck:app:<appId>), sub (your id for the player), iat, exp at most 300 seconds after iat, and a jti never used before for this app; optionally gamertag. The player is created on its first sign-in. Refusals are ASSERTION_REJECTED with extensions.reason; a valid assertion is refused with ORG_LEGAL_ACCEPTANCE_REQUIRED until an admin of the organization has accepted the current Org-Managed Players Addendum. */
   exchangeManagedPlayerAssertion: AppTokenResponse;
   /** Exchange a one-time portal authorization code (with the matching PKCE verifier) for an app-scoped gameplay token. Public (the code + verifier authorize the call); called by the destination game at its own origin so the game never sees the player's session token. */
   exchangePortalCode: AppTokenResponse;
@@ -5119,9 +5121,9 @@ export type Mutation = {
   mintAppToken: AppTokenResponse;
   /** Mint a grid-scoped token from the app token you hold (DN-10). The result can call only a short, fixed list of gameplay fields, and each is confined to the grid: world reads and replication sends must address a chunk inside it (a send's origin; its reach follows distance), and channels must be the grid's own. refreshAppToken and logout are refused, so the token cannot widen or tear down its parent. Requires an app token (not a session token, not another grid token), and the caller must own the grid or hold run_client_code on it. */
   mintGridToken: GridTokenResponse;
-  /** ORG TOKEN ONLY, dev only. Sign one of your organization's own players in and get its app-scoped gameplay token, the same token mintAppToken returns: hand `token` (and the URLs) to the player's device, which plays with it exactly as with any app token and refreshes it with refreshAppToken. Call from your server with `Authorization: Bearer cko_...` (scope players:mint); a request with an Origin header is refused. The player is created on its first sign-in (no email, password or wallet), and each sign-in lasts `sessionTtlSeconds` (default and maximum: the org's settings): after it the device comes back to you. The app must be one of your organization's apps (and in the token's app list, if it has one). Free tiers grant access automatically; a paid tier needs grantAppAccess. */
+  /** ORG TOKEN ONLY. Sign one of your organization's own players in and get its app-scoped gameplay token, the same token mintAppToken returns: hand `token` (and the URLs) to the player's device, which plays with it exactly as with any app token and refreshes it with refreshAppToken. Call from your server with `Authorization: Bearer cko_...` (scope players:mint); a request with an Origin header is refused. The player is created on its first sign-in (no email, password or wallet), and each sign-in lasts `sessionTtlSeconds` (default and maximum: the org's settings): after it the device comes back to you. The app must be one of your organization's apps (and in the token's app list, if it has one). Free tiers grant access automatically; a paid tier needs grantAppAccess. Refused with ORG_LEGAL_ACCEPTANCE_REQUIRED until an admin of the organization has accepted the current Org-Managed Players Addendum. */
   mintManagedPlayerToken: AppTokenResponse;
-  /** Dev only. Create managed players ahead of their first sign-in, up to 500 a call in one write (creating a player is a cluster-wide commit, so a large import goes in batches). A player that exists is left as it is. An org token with players:manage, or an org admin with manage_players. */
+  /** Create managed players ahead of their first sign-in, up to 500 a call in one write (creating a player is a cluster-wide commit, so a large import goes in batches). A player that exists is left as it is. Refused with ORG_LEGAL_ACCEPTANCE_REQUIRED until the organization has accepted the current Org-Managed Players Addendum. An org token with players:manage, or an org admin with manage_players. */
   provisionManagedPlayers: ProvisionManagedPlayersResult;
   /** Publishes an app to the shared game-api environment. Free under the org's app-slot quota (result.free = true); beyond the quota, publish still succeeds and metered usage is charged to the org wallet. Requires the 'manage_apps' permission on the app's org. Blocked when SHARED_GAME_API_URL is not configured. */
   publishAppToShared: PublishAppResult;
@@ -5131,7 +5133,7 @@ export type Mutation = {
   refreshAppToken: AppTokenResponse;
   /** Registers a new email + password account: creates the (initially unconfirmed) account, emails a confirmation link, and returns an AuthResponse with a session `token` for immediate use (send as `Authorization: Bearer <token>`). If an account already exists for the email it is refused with extensions.code EMAIL_ALREADY_REGISTERED (409) and no session is returned: an account that already has a password is left exactly as it was (sign in, or use the emailed reset), and only a password-less account (created via magic link/social) gets the password attached pending email confirmation. It is a routine outcome rather than a fault, and it reached clients as INTERNAL_SERVER_ERROR before v1.60.0, which is why several of them match it by its message text. A browser request (Origin header present) must send acceptLegal and attestAgeOfMajority both true or it is refused with LEGAL_ACCEPTANCE_REQUIRED before an account is created; a request with no Origin may omit them, and gameplay tokens stay refused until the documents are stored. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited. */
   register: AuthResponse;
-  /** Dev only. Register the PUBLIC half of a key your organization signs its players' sign-in assertions with (exchangeManagedPlayerAssertion): its kid, algorithm (EdDSA, ES256 or RS256), the JWK, the iss your assertions carry and, if your identity provider sets its own, their aud. The private key never leaves your systems. Requires manage_players on the org. */
+  /** Register the PUBLIC half of a key your organization signs its players' sign-in assertions with (exchangeManagedPlayerAssertion): its kid, algorithm (EdDSA, ES256 or RS256), the JWK, the iss your assertions carry and, if your identity provider sets its own, their aud. The private key never leaves your systems. Requires manage_players on the org. */
   registerOrgSigningKey: OrgSigningKey;
   /** OPERATOR ONLY. Reverses a retirement: the organization returns to status 'active', deleted_at is cleared, and the tombstone records who put it back and why rather than being deleted. Its apps are LEFT ARCHIVED — un-archiving is archiveApp's inverse and belongs to whoever decides which apps should serve traffic again. Refuses an organization that is not currently retired. */
   reinstateOrganization: OrgRetirementType;
@@ -5171,7 +5173,7 @@ export type Mutation = {
   revokeGridPermissions: GridUserPermissions;
   /** Revoke group/role grants on a grid (deletes from the `grid_group_grants` input table) and recompute the materialized effective ACL. Omit `permissionKeys` to revoke ALL of the group/role's grants on the grid; pass a subset to revoke only those keys. Requires app-admin ('manage_apps'). DESTRUCTIVE: removes the granted permissions from every affected member. Returns the group's remaining grants on the grid. */
   revokeGroupFromGrid: Array<GridGroupGrant>;
-  /** Dev only. Revoke a signing key: assertions it signed are refused from now on (sessions already signed in run until they lapse; end them with endManagedPlayerSessions). False when there was no such active key. Requires manage_players on the org. */
+  /** Revoke a signing key: assertions it signed are refused from now on (sessions already signed in run until they lapse; end them with endManagedPlayerSessions). False when there was no such active key. Requires manage_players on the org. */
   revokeOrgSigningKey: Scalars['Boolean']['output'];
   /** Permanently deactivates an org token so it can no longer authenticate. With `endSessions: true` it also signs out every managed player session the token signed in (their app tokens, realtime and ck-exec connections end now); without it those sessions run until they lapse. Requires the 'manage_tokens' permission on the token's org (super admins bypass). DESTRUCTIVE and irreversible; the secret cannot be reactivated. Returns false if the token does not exist. */
   revokeOrgToken: Scalars['Boolean']['output'];
@@ -5215,7 +5217,7 @@ export type Mutation = {
   setAppComputeBudget: AppComputeBudgetInfo;
   /** Set how a player claim confers grid ownership in this app (D4): SELF_CLAIM, APPROVAL (optionally with a designated approver list), or INVITE. MARKETPLACE_ONLY is refused with FEATURE_DISABLED while paid grid commerce is off the public API. Requires 'manage_apps'. Changing policy never revokes existing grid_ownership rows. */
   setAppGridClaimPolicy: GridClaimPolicy;
-  /** Dev only. Let the organization's org-managed players build and run mods (and use the Studio agent) in this app, or stop them. The organization pays for what they use: their mod compute and egress as its own compute, their project storage as the app's, their model tokens from the org wallet. Turning it off pauses their mods within a minute and refuses new builds. Requires manage_billing on the app's organization. Returns the new setting. */
+  /** Let the organization's org-managed players build and run mods (and use the Studio agent) in this app, or stop them. The organization pays for what they use: their mod compute and egress as its own compute, their project storage as the app's, their model tokens from the org wallet. Turning it off pauses their mods within a minute and refuses new builds. Requires manage_billing on the app's organization. Returns the new setting. */
   setAppManagedPlayerMods: Scalars['Boolean']['output'];
   /** Reserve capacity for a shared app. A reservation is a FLOOR, not a ceiling: the platform provisions and holds a minimum for you and does not limit what you may use beyond it. Billed monthly from the org wallet whether or not it is used; upgrades are prorated for the current month. Note that the ~1 MB/s free-tier shaping is lifted by funding a wallet, not by reserving. Requires 'manage_billing' on the app's org. */
   setAppReservedThroughput: SetAppReservedThroughputResult;
@@ -5249,7 +5251,7 @@ export type Mutation = {
   setOperator: User;
   /** OPERATOR ONLY. Sets or clears an organization billing exemption. When true, org-wallet debits and money-driven runtime denials are skipped; usage is still metered and every waived amount is written to org_billing_waivers. Does not waive player-wallet charges, failure breakers, or the per-minute compute budget. reason is required when setting true. SIDE EFFECT: re-evaluates the runtime gate for every shared app in the org, so clearing the exemption re-denies immediately instead of waiting for the next hourly tick. */
   setOrgBillingExempt: BillingExemptOrgType;
-  /** OPERATOR ONLY, dev only. Enable or disable an organization's org-managed players and set its limits. Disabling refuses new sign-ins; sessions already running last until they lapse (end them with endManagedPlayerSessions). */
+  /** OPERATOR ONLY. Enable or disable an organization's org-managed players and set its limits. Disabling refuses new sign-ins; sessions already running last until they lapse (end them with endManagedPlayerSessions). Enabling does not accept the addendum: an admin of the organization does that (acceptManagedPlayerTerms). */
   setOrgManagedPlayerSettings: OrgManagedPlayerSettings;
   /** Super admin only. Freeze ('frozen') or unfreeze ('active') an organization platform-wide. A FROZEN organization grants its members NO org permission (super admins excepted, so it is reversible): they cannot spend its wallet, create or manage apps, or change members, and every such refusal names the freeze; its API tokens stop authenticating; the org itself still resolves by id and slug so Studio can show the state. Takes exactly 'active' or 'frozen'; 'retired' is refused in either direction — retirement is retireOrganization, which writes a tombstone. */
   setOrgStatus: Organization;
@@ -5325,7 +5327,7 @@ export type Mutation = {
   updateChunkState: Maybe<Chunk>;
   /** Sets the authenticated user’s gamertag and disambiguation and appends a gamertag-history row. Requires a valid game token; only ever updates the caller. Fails if the gamertag+disambiguation pair is already taken. */
   updateGamertag: User;
-  /** Dev only. Rename a managed player, or disable or enable it. Disabling ends every session it has now (realtime and ck-exec included) and refuses its sign-ins; enabling lifts only a disable the org set. An org token with players:manage, or an org admin with manage_players. */
+  /** Rename a managed player, or disable or enable it. Disabling ends every session it has now (realtime and ck-exec included) and refuses its sign-ins; enabling lifts only a disable the org set. An org token with players:manage, or an org admin with manage_players. */
   updateManagedPlayer: ManagedPlayer;
   /** Replaces the full set of roles assigned to an org member. Requires the 'manage_members' permission on the org (super admins bypass). Pass the complete desired role list; roles not included are removed. */
   updateOrgMemberRoles: OrgMember;
@@ -5351,6 +5353,12 @@ export type Mutation = {
 export type MutationAbandonGamePublishArgs = {
   publishId: Scalars['BigInt']['input'];
   slug: Scalars['String']['input'];
+};
+
+
+export type MutationAcceptManagedPlayerTermsArgs = {
+  orgId: Scalars['BigInt']['input'];
+  version: Scalars['String']['input'];
 };
 
 
@@ -6758,7 +6766,7 @@ export type OrgAutoBilling = {
   rechargeAmountCents: Scalars['BigInt']['output'];
 };
 
-/** An organization's org-managed player settings. Set by a Crowded Kingdoms operator; the org reads them. */
+/** An organization's org-managed player settings, and where it stands on the Org-Managed Players Addendum. A Crowded Kingdoms operator sets the settings; an admin of the organization accepts the addendum. */
 export type OrgManagedPlayerSettings = {
   __typename?: 'OrgManagedPlayerSettings';
   /** How long one sign-in lasts (seconds) when the org does not ask for less: app tokens refresh until then. */
@@ -6774,6 +6782,20 @@ export type OrgManagedPlayerSettings = {
   orgId: Scalars['BigInt']['output'];
   /** How many managed players it holds now. */
   playerCount: Scalars['BigInt']['output'];
+  /** Whether the organization has accepted the current version. Until it has, its managed players are neither created nor signed in and their app tokens do not refresh (ORG_LEGAL_ACCEPTANCE_REQUIRED). */
+  termsAccepted: Scalars['Boolean']['output'];
+  /** When it accepted that version. */
+  termsAcceptedAt: Maybe<Scalars['DateTime']['output']>;
+  /** The user id of the admin who accepted that version. */
+  termsAcceptedByUserId: Maybe<Scalars['BigInt']['output']>;
+  /** The version the organization accepted most recently, or null if it never accepted one. */
+  termsAcceptedVersion: Maybe<Scalars['String']['output']>;
+  /** Where the current addendum is published. */
+  termsUrl: Scalars['String']['output'];
+  /** The current version of the Org-Managed Players Addendum, which an admin of the organization accepts (acceptManagedPlayerTerms) before its players are created or signed in. */
+  termsVersion: Scalars['String']['output'];
+  /** Whether the signed-in user may accept the addendum for this organization: an admin of it, by the organization's own grant (a super admin's or an operator's access does not count). */
+  viewerMayAcceptTerms: Scalars['Boolean']['output'];
 };
 
 export type OrgMember = {
@@ -6866,7 +6888,7 @@ export type OrgRole = {
   roleName: Scalars['String']['output'];
 };
 
-/** The public half of a key an organization signs its players' sign-in assertions with (exchangeManagedPlayerAssertion). Only public keys are stored. Dev only for now. */
+/** The public half of a key an organization signs its players' sign-in assertions with (exchangeManagedPlayerAssertion). Only public keys are stored. */
 export type OrgSigningKey = {
   __typename?: 'OrgSigningKey';
   /** 'EdDSA', 'ES256' or 'RS256'. */
@@ -6920,7 +6942,7 @@ export type OrgToken = {
   orgTokenId: Scalars['BigInt']['output'];
   /** When the token was revoked, if it has been. */
   revokedAt: Maybe<Scalars['DateTime']['output']>;
-  /** What the token may do: 'players:mint' (sign the org's managed players in, mintManagedPlayerToken) and 'players:manage' (provision, list, rename, disable, sign out and delete them). A token with no scope can do nothing. Org tokens authenticate on dev only for now. */
+  /** What the token may do: 'players:mint' (sign the org's managed players in, mintManagedPlayerToken) and 'players:manage' (provision, list, rename, disable, sign out and delete them). A token with no scope can do nothing. */
   scopes: Array<Scalars['String']['output']>;
   /** When the token was last updated. */
   updatedAt: Scalars['DateTime']['output'];
@@ -7824,9 +7846,9 @@ export type Query = {
   listVoxelUpdatesByDistance: VoxelUpdatesByDistanceResponse;
   /** Lists recorded voxel edits for a single chunk (optionally only those at/after `since`), newest first. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only. */
   listVoxels: Array<Voxel>;
-  /** Dev only. One managed player by the id your organization knows it by, or null. An org token with players:manage, or an org admin with manage_players. */
+  /** One managed player by the id your organization knows it by, or null. An org token with players:manage, or an org admin with manage_players. */
   managedPlayer: Maybe<ManagedPlayer>;
-  /** Dev only. The organization's managed players, by user id. `search` matches the start of the external id (exactly) or of the gamertag (any case). An org token with players:manage, or an org admin with manage_players. */
+  /** The organization's managed players, by user id. `search` matches the start of the external id (exactly) or of the gamertag (any case). An org token with players:manage, or an org admin with manage_players. */
   managedPlayers: ManagedPlayersPage;
   /** Returns the authenticated user resolved from the token (sent as `Authorization: Bearer <token>`), or null if missing/invalid. Readable with either an identity session token or an app-scoped gameplay token. */
   me: Maybe<User>;
@@ -7876,7 +7898,7 @@ export type Query = {
   orgAutoBilling: OrgAutoBilling;
   /** An org's free shared-app slot quota and how much of it is used. Apps beyond the quota still publish; metered usage is billed from the org wallet. Caller must be a member of the org. */
   orgFreeAppQuota: FreeAppQuota;
-  /** Dev only. The organization's org-managed player settings: whether it may sign its own players in, its cap, sign-in rate and sign-in lifetimes, and how many players it holds. Requires manage_players on the org (super-admins and operators bypass). */
+  /** The organization's org-managed player settings: whether it may sign its own players in, its cap, sign-in rate and sign-in lifetimes, how many players it holds, and whether it has accepted the current Org-Managed Players Addendum. Requires manage_players on the org (super-admins and operators bypass). */
   orgManagedPlayerSettings: OrgManagedPlayerSettings;
   /** Lists the members of an organization. Requires the 'manage_members' permission on the org (super admins bypass). */
   orgMembers: Array<OrgMember>;
@@ -7886,7 +7908,7 @@ export type Query = {
   orgPermissions: Array<OrgPermission>;
   /** Lists all roles defined in an organization. Requires the 'manage_members' permission on the org (super admins bypass). */
   orgRoles: Array<OrgRole>;
-  /** Dev only. The organization's signing keys for player assertions, newest first, revoked ones included. Requires manage_players on the org. */
+  /** The organization's signing keys for player assertions, newest first, revoked ones included. Requires manage_players on the org. */
   orgSigningKeys: Array<OrgSigningKey>;
   /** Lists an organization's API tokens (metadata only; secret values are never returned here). Requires the 'manage_tokens' permission on the org (super admins bypass). */
   orgTokens: Array<OrgToken>;

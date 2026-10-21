@@ -263,7 +263,7 @@ export class CrowdyClient {
   readonly platform: PlatformAPI;
   /** Organizations, members, RBAC roles, and org API tokens (studio admin). */
   readonly organizations: OrganizationsAPI;
-  /** An organization's own players, signed in by the organization (studio admin, dev only). */
+  /** An organization's own players, signed in by the organization (studio admin). */
   readonly managedPlayers: ManagedPlayersAPI;
   /** App access tiers + per-user access grants (studio admin). */
   readonly appAccess: AppAccessAPI;

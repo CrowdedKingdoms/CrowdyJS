@@ -30,7 +30,17 @@ directly. So, before adding a wrapper:
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
 
-**18.16.0: org-managed players (2026-10-21, dev only).** An organization that runs its own
+**18.17.0: the Org-Managed Players Addendum, and every tier (2026-10-21).** ck-api v2.53.0
+(cks-game-api #560) serves org-managed players on dev, test and prod, and refuses an
+organization's managed sign-ins, refreshes and provisioning with `ORG_LEGAL_ACCEPTANCE_REQUIRED`
+until an admin of the organization accepts the addendum in Studio. The SDK reads it
+(`orgLegalAcceptanceRequiredOf`, `ORG_LEGAL_ACCEPTANCE_REQUIRED_CODE`), and `managedPlayers.settings`
+carries the terms fields and `viewerMayAcceptTerms`. **No wrapper for `acceptManagedPlayerTerms`,
+on purpose:** the acceptance binds the organization, so a person makes it in Studio.
+`isLegalAcceptanceRequiredError`'s message fallback now refuses to match the org code: a
+managed player has no clickwrap, and treating the org's refusal as the player's sent it to one.
+
+**18.16.0: org-managed players (2026-10-21, dev only at the time).** An organization that runs its own
 accounts signs its players in itself (cks-game-api #557). Its server calls `mintManagedPlayerToken`
 with an org token, or its sign-in service signs an assertion; either way the device ends up
 with the player's own app token. **The SDK carries the device's two steps and the org admin's

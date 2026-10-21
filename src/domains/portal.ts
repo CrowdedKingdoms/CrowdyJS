@@ -382,7 +382,8 @@ export function isLegalAcceptanceRequiredError(error: unknown): boolean {
     ...(e?.graphqlErrors ?? []).map((g) => g.extensions?.code),
   ];
   if (codes.includes('LEGAL_ACCEPTANCE_REQUIRED')) return true;
-  return /LEGAL_ACCEPTANCE_REQUIRED/.test(
+  // Not the organization's ORG_LEGAL_ACCEPTANCE_REQUIRED: no player clickwrap answers that.
+  return /(^|[^A-Z_])LEGAL_ACCEPTANCE_REQUIRED/.test(
     typeof e?.message === 'string' ? e.message : '',
   );
 }
@@ -479,7 +480,7 @@ export class PortalAPI {
     return data.refreshAppToken;
   }
 
-  // ----- Org-managed players (dev only) --------------------------------------
+  // ----- Org-managed players ---------------------------------------------------
 
   /**
    * Store an app token the player's organization minted for it, so this client plays with
@@ -490,6 +491,9 @@ export class PortalAPI {
    *
    * The token refreshes until the sign-in's lifetime (the organization's setting) ends;
    * after that `refresh()` is refused and the device gets a new token from its organization.
+   * A refresh is also refused with `ORG_LEGAL_ACCEPTANCE_REQUIRED`
+   * ({@link orgLegalAcceptanceRequiredOf}) while the organization has not accepted the
+   * current Org-Managed Players Addendum; only an admin of the organization can fix that.
    *
    * Refuses an org token (`cko_…`). That is the organization's server credential: it signs
    * in any of the organization's players, so a device must never hold one.
@@ -516,7 +520,9 @@ export class PortalAPI {
    *
    * Each assertion works once. A refusal is `ASSERTION_REJECTED`, with the failed check in
    * `extensions.reason` ({@link assertionRejectedOf}); resending the same assertion cannot
-   * succeed, so ask the sign-in service for a new one.
+   * succeed, so ask the sign-in service for a new one. A valid assertion is refused with
+   * `ORG_LEGAL_ACCEPTANCE_REQUIRED` ({@link orgLegalAcceptanceRequiredOf}) while the
+   * organization has not accepted the current Org-Managed Players Addendum.
    */
   async exchangeManagedPlayerAssertion(params: {
     appId: string;

@@ -1087,7 +1087,7 @@ type OrgToken {
   """Optional human-readable label."""
   label: String
   """
-  What the token may do: 'players:mint' (sign the org's managed players in, mintManagedPlayerToken) and 'players:manage' (provision, list, rename, disable, sign out and delete them). A token with no scope can do nothing. Org tokens authenticate on dev only for now.
+  What the token may do: 'players:mint' (sign the org's managed players in, mintManagedPlayerToken) and 'players:manage' (provision, list, rename, disable, sign out and delete them). A token with no scope can do nothing.
   """
   scopes: [String!]!
   """
@@ -1349,7 +1349,7 @@ type App {
   """
   org: Organization
   """
-  Whether the organization lets its org-managed players build and run mods (and use the Studio agent) in this app, paying for their mod compute, egress, storage and model tokens itself. False by default, and false wherever org-managed players are off (they are on dev only). Set with setAppManagedPlayerMods (manage_billing). Players with a Crowded Kingdoms account are unaffected.
+  Whether the organization lets its org-managed players build and run mods (and use the Studio agent) in this app, paying for their mod compute, egress, storage and model tokens itself. False by default, and false on a tier that does not serve org-managed players. Set with setAppManagedPlayerMods (manage_billing). Players with a Crowded Kingdoms account are unaffected.
   """
   managedPlayerModsEnabled: Boolean!
 }
@@ -1600,7 +1600,7 @@ type ServerVersionInfo {
 }
 
 """
-A player an organization signs in itself (an org-managed player): a Crowded Kingdoms user with no email, password or wallet, known to the org by its own id. Dev only for now.
+A player an organization signs in itself (an org-managed player): a Crowded Kingdoms user with no email, password or wallet, known to the org by its own id.
 """
 type ManagedPlayer {
   """
@@ -1644,7 +1644,7 @@ type ProvisionManagedPlayersResult {
 }
 
 """
-An organization's org-managed player settings. Set by a Crowded Kingdoms operator; the org reads them.
+An organization's org-managed player settings, and where it stands on the Org-Managed Players Addendum. A Crowded Kingdoms operator sets the settings; an admin of the organization accepts the addendum.
 """
 type OrgManagedPlayerSettings {
   orgId: BigInt!
@@ -1664,10 +1664,32 @@ type OrgManagedPlayerSettings {
   defaultSessionTtlSeconds: Int!
   """The longest sign-in the org may ask for (seconds)."""
   maxSessionTtlSeconds: Int!
+  """
+  The current version of the Org-Managed Players Addendum, which an admin of the organization accepts (acceptManagedPlayerTerms) before its players are created or signed in.
+  """
+  termsVersion: String!
+  """Where the current addendum is published."""
+  termsUrl: String!
+  """
+  Whether the organization has accepted the current version. Until it has, its managed players are neither created nor signed in and their app tokens do not refresh (ORG_LEGAL_ACCEPTANCE_REQUIRED).
+  """
+  termsAccepted: Boolean!
+  """
+  The version the organization accepted most recently, or null if it never accepted one.
+  """
+  termsAcceptedVersion: String
+  """When it accepted that version."""
+  termsAcceptedAt: DateTime
+  """The user id of the admin who accepted that version."""
+  termsAcceptedByUserId: BigInt
+  """
+  Whether the signed-in user may accept the addendum for this organization: an admin of it, by the organization's own grant (a super admin's or an operator's access does not count).
+  """
+  viewerMayAcceptTerms: Boolean!
 }
 
 """
-The public half of a key an organization signs its players' sign-in assertions with (exchangeManagedPlayerAssertion). Only public keys are stored. Dev only for now.
+The public half of a key an organization signs its players' sign-in assertions with (exchangeManagedPlayerAssertion). Only public keys are stored.
 """
 type OrgSigningKey {
   """The key’s id here."""
@@ -7122,13 +7144,16 @@ type Query {
   """
   versionInfo: ServerVersionInfo!
   """
-  Dev only. The organization's managed players, by user id. `search` matches the start of the external id (exactly) or of the gamertag (any case). An org token with players:manage, or an org admin with manage_players.
+  The organization's managed players, by user id. `search` matches the start of the external id (exactly) or of the gamertag (any case). An org token with players:manage, or an org admin with manage_players.
   """
   managedPlayers(
     """
     The organization (BigInt as a decimal string). With an org token, the token's own.
     """
     orgId: BigInt!
+    """
+    Matches the start of an externalId (exactly) or of a gamertag (any case).
+    """
     search: String
     """Page size, 1-200 (default 50)."""
     first: Int
@@ -7136,23 +7161,30 @@ type Query {
     after: String
   ): ManagedPlayersPage!
   """
-  Dev only. One managed player by the id your organization knows it by, or null. An org token with players:manage, or an org admin with manage_players.
+  One managed player by the id your organization knows it by, or null. An org token with players:manage, or an org admin with manage_players.
   """
   managedPlayer(
     """
     The organization (BigInt as a decimal string). With an org token, the token's own.
     """
     orgId: BigInt!
+    """The id your organization knows the player by."""
     externalId: String!
   ): ManagedPlayer
   """
-  Dev only. The organization's org-managed player settings: whether it may sign its own players in, its cap, sign-in rate and sign-in lifetimes, and how many players it holds. Requires manage_players on the org (super-admins and operators bypass).
+  The organization's org-managed player settings: whether it may sign its own players in, its cap, sign-in rate and sign-in lifetimes, how many players it holds, and whether it has accepted the current Org-Managed Players Addendum. Requires manage_players on the org (super-admins and operators bypass).
   """
-  orgManagedPlayerSettings(orgId: BigInt!): OrgManagedPlayerSettings!
+  orgManagedPlayerSettings(
+    """The organization (BigInt as a decimal string)."""
+    orgId: BigInt!
+  ): OrgManagedPlayerSettings!
   """
-  Dev only. The organization's signing keys for player assertions, newest first, revoked ones included. Requires manage_players on the org.
+  The organization's signing keys for player assertions, newest first, revoked ones included. Requires manage_players on the org.
   """
-  orgSigningKeys(orgId: BigInt!): [OrgSigningKey!]!
+  orgSigningKeys(
+    """The organization (BigInt as a decimal string)."""
+    orgId: BigInt!
+  ): [OrgSigningKey!]!
   """
   A hosted third-party game by slug, or null when the slug is unclaimed. PUBLIC: the first-party shell at https://<games host>/<slug>/ calls this before sign-in to learn the contentOrigin it frames. Returns DISABLED and TAKEN_DOWN games too (with their status) so the shell can say why. Null when the tier does not host third-party games.
   """
@@ -8969,7 +9001,7 @@ type Mutation {
     input: ReinstateOrganizationInput!
   ): OrgRetirementType! @requiresPermission(scope: "operator", permission: "is_operator")
   """
-  Mints a new org token (it starts with `cko_`) and returns the plaintext exactly once - save it, since subsequent queries only show metadata. An org token is the organization's SERVER credential for its org-managed players (dev only for now): with scope 'players:mint' its server signs the org's own players in (mintManagedPlayerToken), with 'players:manage' it manages them; `appIds` limits it to some of the org's apps. Never put one in a game client or a web page: a request with an Origin header is refused. Requires the 'manage_tokens' permission on the target org (super admins bypass).
+  Mints a new org token (it starts with `cko_`) and returns the plaintext exactly once - save it, since subsequent queries only show metadata. An org token is the organization's SERVER credential for its org-managed players: with scope 'players:mint' its server signs the org's own players in (mintManagedPlayerToken), with 'players:manage' it manages them; `appIds` limits it to some of the org's apps. Never put one in a game client or a web page: a request with an Origin header is refused. Requires the 'manage_tokens' permission on the target org (super admins bypass).
   """
   createOrgToken(input: CreateOrgTokenInput!): OrgTokenWithSecret! @requiresPermission(scope: "org", permission: "manage_tokens", scopeArg: "input.orgId")
   """
@@ -9152,57 +9184,82 @@ type Mutation {
   """
   setAppClientSettings(input: SetAppClientSettingsInput!): PortalConsentState!
   """
-  ORG TOKEN ONLY, dev only. Sign one of your organization's own players in and get its app-scoped gameplay token, the same token mintAppToken returns: hand `token` (and the URLs) to the player's device, which plays with it exactly as with any app token and refreshes it with refreshAppToken. Call from your server with `Authorization: Bearer cko_...` (scope players:mint); a request with an Origin header is refused. The player is created on its first sign-in (no email, password or wallet), and each sign-in lasts `sessionTtlSeconds` (default and maximum: the org's settings): after it the device comes back to you. The app must be one of your organization's apps (and in the token's app list, if it has one). Free tiers grant access automatically; a paid tier needs grantAppAccess.
+  ORG TOKEN ONLY. Sign one of your organization's own players in and get its app-scoped gameplay token, the same token mintAppToken returns: hand `token` (and the URLs) to the player's device, which plays with it exactly as with any app token and refreshes it with refreshAppToken. Call from your server with `Authorization: Bearer cko_...` (scope players:mint); a request with an Origin header is refused. The player is created on its first sign-in (no email, password or wallet), and each sign-in lasts `sessionTtlSeconds` (default and maximum: the org's settings): after it the device comes back to you. The app must be one of your organization's apps (and in the token's app list, if it has one). Free tiers grant access automatically; a paid tier needs grantAppAccess. Refused with ORG_LEGAL_ACCEPTANCE_REQUIRED until an admin of the organization has accepted the current Org-Managed Players Addendum.
   """
   mintManagedPlayerToken(input: MintManagedPlayerTokenInput!): AppTokenResponse!
   """
-  Dev only. Create managed players ahead of their first sign-in, up to 500 a call in one write (creating a player is a cluster-wide commit, so a large import goes in batches). A player that exists is left as it is. An org token with players:manage, or an org admin with manage_players.
+  Create managed players ahead of their first sign-in, up to 500 a call in one write (creating a player is a cluster-wide commit, so a large import goes in batches). A player that exists is left as it is. Refused with ORG_LEGAL_ACCEPTANCE_REQUIRED until the organization has accepted the current Org-Managed Players Addendum. An org token with players:manage, or an org admin with manage_players.
   """
   provisionManagedPlayers(input: ProvisionManagedPlayersInput!): ProvisionManagedPlayersResult!
   """
-  Dev only. Rename a managed player, or disable or enable it. Disabling ends every session it has now (realtime and ck-exec included) and refuses its sign-ins; enabling lifts only a disable the org set. An org token with players:manage, or an org admin with manage_players.
+  Rename a managed player, or disable or enable it. Disabling ends every session it has now (realtime and ck-exec included) and refuses its sign-ins; enabling lifts only a disable the org set. An org token with players:manage, or an org admin with manage_players.
   """
   updateManagedPlayer(input: UpdateManagedPlayerInput!): ManagedPlayer!
   """
-  Dev only. Sign a managed player out everywhere: its sessions and app tokens end, and so do its realtime and ck-exec connections. It can sign in again (use updateManagedPlayer to stop that). False when it held no session. An org token with players:manage, or an org admin with manage_players.
+  Sign a managed player out everywhere: its sessions and app tokens end, and so do its realtime and ck-exec connections. It can sign in again (use updateManagedPlayer to stop that). False when it held no session. An org token with players:manage, or an org admin with manage_players.
   """
   endManagedPlayerSessions(
     """
     The organization (BigInt as a decimal string). With an org token, the token's own.
     """
     orgId: BigInt!
+    """The id your organization knows the player by."""
     externalId: String!
   ): Boolean!
   """
-  Dev only. Delete a managed player: its sessions end and its row is anonymized, as an account deletion is. Signing the same external id in again creates a new player. False when there was no such player. An org token with players:manage, or an org admin with manage_players.
+  Delete a managed player: its sessions end and its row is anonymized, as an account deletion is. Signing the same external id in again creates a new player. False when there was no such player. An org token with players:manage, or an org admin with manage_players.
   """
   deleteManagedPlayer(
     """
     The organization (BigInt as a decimal string). With an org token, the token's own.
     """
     orgId: BigInt!
+    """The id your organization knows the player by."""
     externalId: String!
   ): Boolean!
   """
-  OPERATOR ONLY, dev only. Enable or disable an organization's org-managed players and set its limits. Disabling refuses new sign-ins; sessions already running last until they lapse (end them with endManagedPlayerSessions).
+  OPERATOR ONLY. Enable or disable an organization's org-managed players and set its limits. Disabling refuses new sign-ins; sessions already running last until they lapse (end them with endManagedPlayerSessions). Enabling does not accept the addendum: an admin of the organization does that (acceptManagedPlayerTerms).
   """
   setOrgManagedPlayerSettings(input: SetOrgManagedPlayerSettingsInput!): OrgManagedPlayerSettings! @requiresPermission(scope: "operator", permission: "is_operator")
   """
-  Dev only. Register the PUBLIC half of a key your organization signs its players' sign-in assertions with (exchangeManagedPlayerAssertion): its kid, algorithm (EdDSA, ES256 or RS256), the JWK, the iss your assertions carry and, if your identity provider sets its own, their aud. The private key never leaves your systems. Requires manage_players on the org.
+  SESSION ONLY, an admin of the organization (its own admin grant: a super admin's or an operator's access does not stand in). Accept the Org-Managed Players Addendum on the organization's behalf, the version orgManagedPlayerSettings names as termsVersion (read it at termsUrl). Until the organization has accepted the current version, its managed players are neither created nor signed in (ORG_LEGAL_ACCEPTANCE_REQUIRED). A version that is not the current one is refused with CONFLICT; accepting the current one again changes nothing. Studio asks for it on the organization's Players tab.
+  """
+  acceptManagedPlayerTerms(
+    """The organization (BigInt as a decimal string)."""
+    orgId: BigInt!
+    """
+    The addendum version the admin read and accepts: termsVersion from orgManagedPlayerSettings.
+    """
+    version: String!
+  ): OrgManagedPlayerSettings! @requiresPermission(scope: "org", permission: "admin", scopeArg: "orgId")
+  """
+  Register the PUBLIC half of a key your organization signs its players' sign-in assertions with (exchangeManagedPlayerAssertion): its kid, algorithm (EdDSA, ES256 or RS256), the JWK, the iss your assertions carry and, if your identity provider sets its own, their aud. The private key never leaves your systems. Requires manage_players on the org.
   """
   registerOrgSigningKey(input: RegisterOrgSigningKeyInput!): OrgSigningKey!
   """
-  Dev only. Revoke a signing key: assertions it signed are refused from now on (sessions already signed in run until they lapse; end them with endManagedPlayerSessions). False when there was no such active key. Requires manage_players on the org.
+  Revoke a signing key: assertions it signed are refused from now on (sessions already signed in run until they lapse; end them with endManagedPlayerSessions). False when there was no such active key. Requires manage_players on the org.
   """
-  revokeOrgSigningKey(orgId: BigInt!, keyId: BigInt!): Boolean!
+  revokeOrgSigningKey(
+    """The organization (BigInt as a decimal string)."""
+    orgId: BigInt!
+    """The key to revoke (OrgSigningKey.keyId)."""
+    keyId: BigInt!
+  ): Boolean!
   """
-  Dev only. Exchange an assertion your organization signed for one of its players for that player's app-scoped gameplay token (the same token mintManagedPlayerToken returns). Public: the signature is the credential, so a game client calls it directly, from a browser on your registered origin or natively. The assertion must name a registered, active key (header kid) and carry iss and aud as registered (aud defaults to ck:app:<appId>), sub (your id for the player), iat, exp at most 300 seconds after iat, and a jti never used before for this app; optionally gamertag. The player is created on its first sign-in. Refusals are ASSERTION_REJECTED with extensions.reason.
+  Exchange an assertion your organization signed for one of its players for that player's app-scoped gameplay token (the same token mintManagedPlayerToken returns). Public: the signature is the credential, so a game client calls it directly, from a browser on your registered origin or natively. The assertion must name a registered, active key (header kid) and carry iss and aud as registered (aud defaults to ck:app:<appId>), sub (your id for the player), iat, exp at most 300 seconds after iat, and a jti never used before for this app; optionally gamertag. The player is created on its first sign-in. Refusals are ASSERTION_REJECTED with extensions.reason; a valid assertion is refused with ORG_LEGAL_ACCEPTANCE_REQUIRED until an admin of the organization has accepted the current Org-Managed Players Addendum.
   """
   exchangeManagedPlayerAssertion(input: ExchangeManagedPlayerAssertionInput!): AppTokenResponse!
   """
-  Dev only. Let the organization's org-managed players build and run mods (and use the Studio agent) in this app, or stop them. The organization pays for what they use: their mod compute and egress as its own compute, their project storage as the app's, their model tokens from the org wallet. Turning it off pauses their mods within a minute and refuses new builds. Requires manage_billing on the app's organization. Returns the new setting.
+  Let the organization's org-managed players build and run mods (and use the Studio agent) in this app, or stop them. The organization pays for what they use: their mod compute and egress as its own compute, their project storage as the app's, their model tokens from the org wallet. Turning it off pauses their mods within a minute and refuses new builds. Requires manage_billing on the app's organization. Returns the new setting.
   """
-  setAppManagedPlayerMods(appId: BigInt!, enabled: Boolean!): Boolean! @requiresPermission(scope: "app", permission: "manage_billing", scopeArg: "appId")
+  setAppManagedPlayerMods(
+    """An app of your organization (BigInt as a decimal string)."""
+    appId: BigInt!
+    """
+    True: the organization pays for its managed players' mods in this app. False: their mods are refused and switched off.
+    """
+    enabled: Boolean!
+  ): Boolean! @requiresPermission(scope: "app", permission: "manage_billing", scopeArg: "appId")
   """
   Claim the hosting slug for an app (idempotent; the same app re-claiming its slug is a no-op, a different slug MOVES the game). Registers https://<games host>/<slug>/ and https://<slug>.<content host> as the app's redirect URIs and sets launch_url to the former. Requires manage_apps on the app and a SESSION token. Refuses a slug that is not a DNS label, is reserved, or belongs to another app (HOSTED_SLUG_UNAVAILABLE), and answers CONTENT_HOSTING_DISABLED on a tier without a content CDN.
   """
@@ -10927,11 +10984,11 @@ input CreateOrgTokenInput {
   """Optional expiry timestamp; omit for a non-expiring token."""
   expiresAt: DateTime
   """
-  What the token may do: 'players:mint' and/or 'players:manage' (org-managed players, dev only). Omit for a token with no scope, which can do nothing.
+  What the token may do: 'players:mint' and/or 'players:manage' (org-managed players). Omit for a token with no scope, which can do nothing.
   """
   scopes: [String!]
   """
-  Limit the token to these apps of the organization; omit for every app (org-managed players, dev only).
+  Limit the token to these apps of the organization; omit for every app (org-managed players).
   """
   appIds: [BigInt!]
 }
