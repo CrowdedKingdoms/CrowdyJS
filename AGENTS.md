@@ -31,8 +31,7 @@ directly. So, before adding a wrapper:
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
 
 **18.16.0: org-managed players (2026-10-21, dev only).** An organization that runs its own
-accounts signs its players in itself (cks-game-api #557; design in cks-project-root
-`project-root-docs/org-managed-players-program/`). Its server calls `mintManagedPlayerToken`
+accounts signs its players in itself (cks-game-api #557). Its server calls `mintManagedPlayerToken`
 with an org token, or its sign-in service signs an assertion; either way the device ends up
 with the player's own app token. **The SDK carries the device's two steps and the org admin's
 surface, and deliberately no org-token mint:** an org token signs in any of the org's players,
