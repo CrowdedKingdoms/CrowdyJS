@@ -230,7 +230,7 @@ test('the client exposes managedPlayers at the top level and under admin', () =>
   }
 });
 
-test('no SDK document mints with an org token: that call belongs on the organization server', () => {
+test('no SDK document mints with an org token or accepts the addendum: the first belongs on the organization server, the second to a person in Studio', () => {
   const fields = [];
   const walk = (dir) => {
     for (const name of readdirSync(dir)) {
@@ -247,6 +247,11 @@ test('no SDK document mints with an org token: that call belongs on the organiza
   walk(join(repo, 'src', 'operations'));
   assert.ok(fields.includes('managedPlayers'), 'the documents were read');
   assert.equal(fields.includes('mintManagedPlayerToken'), false);
+  assert.equal(fields.includes('acceptManagedPlayerTerms'), false);
   const inline = readFileSync(join(repo, 'src', 'domains', 'portal.ts'), 'utf8');
   assert.doesNotMatch(inline, /mintManagedPlayerToken\s*\(/);
+  for (const domain of readdirSync(join(repo, 'src', 'domains'))) {
+    const source = readFileSync(join(repo, 'src', 'domains', domain), 'utf8');
+    assert.doesNotMatch(source, /acceptManagedPlayerTerms\s*\(/, domain);
+  }
 });
