@@ -1,0 +1,5 @@
+mutation RegisterOrgSigningKey($input: RegisterOrgSigningKeyInput!) {
+  registerOrgSigningKey(input: $input) {
+    ...OrgSigningKeyFields
+  }
+}

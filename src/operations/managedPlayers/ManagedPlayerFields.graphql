@@ -1,0 +1,9 @@
+fragment ManagedPlayerFields on ManagedPlayer {
+  userId
+  orgId
+  externalId
+  gamertag
+  disambiguation
+  disabled
+  createdAt
+}

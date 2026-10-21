@@ -1,0 +1,6 @@
+query AppManagedPlayerMods($appId: BigInt!) {
+  app(appId: $appId) {
+    appId
+    managedPlayerModsEnabled
+  }
+}

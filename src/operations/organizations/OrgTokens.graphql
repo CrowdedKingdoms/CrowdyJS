@@ -3,6 +3,8 @@ query OrgTokens($orgId: BigInt!) {
     orgTokenId
     orgId
     label
+    scopes
+    appIds
     isActive
     lastUsedAt
     revokedAt
