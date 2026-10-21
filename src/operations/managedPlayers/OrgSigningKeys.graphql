@@ -1,0 +1,5 @@
+query OrgSigningKeys($orgId: BigInt!) {
+  orgSigningKeys(orgId: $orgId) {
+    ...OrgSigningKeyFields
+  }
+}

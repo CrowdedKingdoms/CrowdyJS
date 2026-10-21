@@ -185,10 +185,14 @@ export class OrganizationsAPI {
 
   /**
    * Mint a new org API token (for server-side studio backends). Requires the
-   * `manage_tokens` org permission. The plaintext secret is returned **once**.
+   * `manage_tokens` org permission. The plaintext secret (`cko_…`) is returned
+   * **once**. Keep it on the organization's server: the API refuses a request
+   * that carries it with an `Origin` header.
    *
    * @param input - {@link CreateOrgTokenInput}: `orgId`, optional `label` and
-   *   `expiresAt`.
+   *   `expiresAt`; for org-managed players (dev only), `scopes`
+   *   (`players:mint`, `players:manage`) and `appIds` (limit the token to some
+   *   of the org's apps). A token with no scope can do nothing.
    * @returns The created token including its one-time plaintext secret.
    */
   async createToken(
@@ -223,13 +227,18 @@ export class OrganizationsAPI {
    * Revoke (disable) an org token. Requires the `manage_tokens` org permission.
    *
    * @param orgTokenId - Numeric token id.
+   * @param options - `endSessions: true` also ends every session the token signed
+   *   org-managed players in with (dev only), so their devices stop now rather than at
+   *   their sessions' end.
    * @returns `true` on success.
    */
   async revokeToken(
     orgTokenId: string,
+    options: { endSessions?: boolean } = {},
   ): Promise<RevokeOrgTokenMutation['revokeOrgToken']> {
     const data = await this.api.request(RevokeOrgTokenDocument, {
       orgTokenId,
+      ...(options.endSessions === undefined ? {} : { endSessions: options.endSessions }),
     });
     return data.revokeOrgToken;
   }

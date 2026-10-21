@@ -1,0 +1,3 @@
+mutation DeleteManagedPlayer($orgId: BigInt!, $externalId: String!) {
+  deleteManagedPlayer(orgId: $orgId, externalId: $externalId)
+}

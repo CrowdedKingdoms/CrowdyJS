@@ -186,6 +186,16 @@ const RefreshAppTokenOnServerDocument = parse(
   { currentServer: CurrentServer }
 >;
 
+const ExchangeManagedPlayerAssertionDocument = parse(
+  `mutation ExchangeManagedPlayerAssertion($input: ExchangeManagedPlayerAssertionInput!) { exchangeManagedPlayerAssertion(input: $input) { ${APP_TOKEN_FIELDS} } }`,
+) as TypedDocumentNode<
+  { exchangeManagedPlayerAssertion: AppTokenResponse },
+  { input: { appId: string; assertion: string } }
+>;
+
+/** What every org token starts with: an organization's server credential, never a device's. */
+const ORG_TOKEN_PREFIX = 'cko_';
+
 export interface PortalConsentState {
   appId: string;
   appName: string | null;
@@ -467,6 +477,56 @@ export class PortalAPI {
       : await this.api.request(RefreshAppTokenDocument, {});
     this.session.setToken(data.refreshAppToken.token);
     return data.refreshAppToken;
+  }
+
+  // ----- Org-managed players (dev only) --------------------------------------
+
+  /**
+   * Store an app token the player's organization minted for it, so this client plays with
+   * it and {@link refresh} rotates it. For an org-managed player: the organization's server
+   * calls `mintManagedPlayerToken` with its org token and sends the response to the
+   * player's device, which passes it here. Returns the response unchanged; point the game
+   * client at its `gameApiUrl` / `gameApiWsUrl` as after any mint.
+   *
+   * The token refreshes until the sign-in's lifetime (the organization's setting) ends;
+   * after that `refresh()` is refused and the device gets a new token from its organization.
+   *
+   * Refuses an org token (`cko_…`). That is the organization's server credential: it signs
+   * in any of the organization's players, so a device must never hold one.
+   */
+  adoptAppToken(response: AppTokenResponse): AppTokenResponse {
+    const token: unknown = response?.token;
+    if (typeof token !== 'string' || token.length === 0) {
+      throw new TypeError('adoptAppToken: the response has no token');
+    }
+    if (token.startsWith(ORG_TOKEN_PREFIX)) {
+      throw new TypeError(
+        "adoptAppToken: that is an org token, your organization's server credential. Give the device the app token mintManagedPlayerToken returns, never the org token.",
+      );
+    }
+    this.session.setToken(token);
+    return response;
+  }
+
+  /**
+   * Trade an assertion the player's organization signed for the player's app token, and
+   * store it (as {@link adoptAppToken} does). For an org-managed player whose organization
+   * registered a signing key: its sign-in service signs a short JWS for the player and the
+   * device brings it here. Public: needs no session and no org token.
+   *
+   * Each assertion works once. A refusal is `ASSERTION_REJECTED`, with the failed check in
+   * `extensions.reason` ({@link assertionRejectedOf}); resending the same assertion cannot
+   * succeed, so ask the sign-in service for a new one.
+   */
+  async exchangeManagedPlayerAssertion(params: {
+    appId: string;
+    assertion: string;
+  }): Promise<AppTokenResponse> {
+    const data = await this.api.request(ExchangeManagedPlayerAssertionDocument, {
+      input: { appId: params.appId, assertion: params.assertion },
+    });
+    this.session.setToken(data.exchangeManagedPlayerAssertion.token);
+    return data.exchangeManagedPlayerAssertion;
   }
 
   // ----- Consent + connected apps ------------------------------------------

@@ -47,7 +47,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '18.15.0';
+export const VERSION = '18.16.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -192,6 +192,10 @@ export {
   GROUP_MEMBER_BANNED_CODE,
   accountBlockedOf,
   groupMemberBannedOf,
+  MANAGED_PLAYER_NOT_ALLOWED_CODE,
+  ASSERTION_REJECTED_CODE,
+  managedPlayerNotAllowedOf,
+  assertionRejectedOf,
   ACTOR_EXISTS_CODE,
   APP_PAUSED_CODE,
   accessRefusalOf,
@@ -326,6 +330,10 @@ export {
 export { generatePkcePair, generateState, type PkcePair } from './pkce.js';
 export { PlatformAPI, type PlatformConfig } from './domains/platform.js';
 export { OrganizationsAPI } from './domains/organizations.js';
+export {
+  ManagedPlayersAPI,
+  type OrgSigningKeyRegistration,
+} from './domains/managedPlayers.js';
 export { AppAccessAPI } from './domains/appAccess.js';
 export { BillingAPI } from './domains/billing.js';
 export { PaymentsAPI } from './domains/payments.js';
