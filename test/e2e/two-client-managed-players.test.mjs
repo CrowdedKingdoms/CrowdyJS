@@ -1,5 +1,6 @@
 /**
- * Org-managed players replicate like any players (cks-game-api #557, dev only).
+ * Org-managed players replicate like any players (cks-game-api #557; every tier since v2.53.0, once the
+ * organization has accepted the Org-Managed Players Addendum, or the mint answers ORG_LEGAL_ACCEPTANCE_REQUIRED).
  *
  * The organization's server is played by this test: it mints two players' app tokens with
  * an org token (`mintManagedPlayerToken`, scope `players:mint`) the way a game studio's
