@@ -1,0 +1,18 @@
+query OrgManagedPlayerSettings($orgId: BigInt!) {
+  orgManagedPlayerSettings(orgId: $orgId) {
+    orgId
+    enabled
+    maxPlayers
+    playerCount
+    mintsPerMinute
+    defaultSessionTtlSeconds
+    maxSessionTtlSeconds
+    termsVersion
+    termsUrl
+    termsAccepted
+    termsAcceptedVersion
+    termsAcceptedAt
+    termsAcceptedByUserId
+    viewerMayAcceptTerms
+  }
+}

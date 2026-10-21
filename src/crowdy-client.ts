@@ -49,6 +49,7 @@ import {
 } from './domains/portal.js';
 import { PlatformAPI } from './domains/platform.js';
 import { OrganizationsAPI } from './domains/organizations.js';
+import { ManagedPlayersAPI } from './domains/managedPlayers.js';
 import { AppAccessAPI } from './domains/appAccess.js';
 import { BillingAPI } from './domains/billing.js';
 import { PaymentsAPI } from './domains/payments.js';
@@ -262,6 +263,8 @@ export class CrowdyClient {
   readonly platform: PlatformAPI;
   /** Organizations, members, RBAC roles, and org API tokens (studio admin). */
   readonly organizations: OrganizationsAPI;
+  /** An organization's own players, signed in by the organization (studio admin). */
+  readonly managedPlayers: ManagedPlayersAPI;
   /** App access tiers + per-user access grants (studio admin). */
   readonly appAccess: AppAccessAPI;
   /** Org wallet + per-app spend budgets (studio admin). */
@@ -482,6 +485,7 @@ export class CrowdyClient {
     this.discovery = new DiscoveryDomain(this.graphql);
     this.platform = new PlatformAPI(this.graphql);
     this.organizations = new OrganizationsAPI(this.graphql);
+    this.managedPlayers = new ManagedPlayersAPI(this.graphql);
     this.appAccess = new AppAccessAPI(this.graphql);
     this.billing = new BillingAPI(this.graphql);
     this.payments = new PaymentsAPI(this.graphql);
@@ -516,6 +520,7 @@ export class CrowdyClient {
 
     this.admin = new AdminAPI({
       organizations: this.organizations,
+      managedPlayers: this.managedPlayers,
       apps: this.apps,
       appAccess: this.appAccess,
       billing: this.billing,

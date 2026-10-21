@@ -2,6 +2,8 @@ mutation UpdateOrgToken($orgTokenId: BigInt!, $input: UpdateOrgTokenInput!) {
   updateOrgToken(orgTokenId: $orgTokenId, input: $input) {
     orgTokenId
     label
+    scopes
+    appIds
     isActive
     expiresAt
     revokedAt

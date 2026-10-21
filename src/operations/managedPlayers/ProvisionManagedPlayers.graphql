@@ -1,0 +1,9 @@
+mutation ProvisionManagedPlayers($input: ProvisionManagedPlayersInput!) {
+  provisionManagedPlayers(input: $input) {
+    created
+    existing
+    players {
+      ...ManagedPlayerFields
+    }
+  }
+}

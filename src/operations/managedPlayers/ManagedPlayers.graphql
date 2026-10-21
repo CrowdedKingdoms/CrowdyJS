@@ -1,0 +1,8 @@
+query ManagedPlayers($orgId: BigInt!, $search: String, $first: Int, $after: String) {
+  managedPlayers(orgId: $orgId, search: $search, first: $first, after: $after) {
+    players {
+      ...ManagedPlayerFields
+    }
+    nextCursor
+  }
+}

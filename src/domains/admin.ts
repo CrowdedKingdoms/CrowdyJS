@@ -1,4 +1,5 @@
 import type { OrganizationsAPI } from './organizations.js';
+import type { ManagedPlayersAPI } from './managedPlayers.js';
 import type { AppsAPI } from './apps.js';
 import type { AppAccessAPI } from './appAccess.js';
 import type { BillingAPI } from './billing.js';
@@ -31,6 +32,8 @@ import type { GameAppsAPI } from './gameApps.js';
 export class AdminAPI {
   /** Organizations, members, RBAC roles, and org API tokens. */
   readonly organizations: OrganizationsAPI;
+  /** The organization's own players, signed in by the organization. */
+  readonly managedPlayers: ManagedPlayersAPI;
   /** App registry, routing, and player-code admission policy. */
   readonly apps: AppsAPI;
   /** App access tiers + per-user access grants. */
@@ -50,6 +53,7 @@ export class AdminAPI {
 
   constructor(deps: {
     organizations: OrganizationsAPI;
+    managedPlayers: ManagedPlayersAPI;
     apps: AppsAPI;
     appAccess: AppAccessAPI;
     billing: BillingAPI;
@@ -60,6 +64,7 @@ export class AdminAPI {
     grids: GameAppsAPI;
   }) {
     this.organizations = deps.organizations;
+    this.managedPlayers = deps.managedPlayers;
     this.apps = deps.apps;
     this.appAccess = deps.appAccess;
     this.billing = deps.billing;
