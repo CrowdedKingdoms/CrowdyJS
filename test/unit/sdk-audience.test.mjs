@@ -76,6 +76,9 @@ const PLATFORM_ONLY = [
   'revokeTierAccessProvisioningToken',
   'tierAccessInventory',
   'setTierAccessMode',
+  // org-managed players (cks-game-api #557, dev only): an operator turns them on for an
+  // org and sets its limits. orgManagedPlayerSettings is an org admin's read and is wrapped.
+  'setOrgManagedPlayerSettings',
 ];
 
 /** How the schema's descriptions say a field is for super-admins or operators only. */
