@@ -46,9 +46,11 @@ test and prod on 2026-10-23); turn logging on 20 s before the run.
 `CROWDY_QUIET_APP_ID` (its default tier lacks both keys) a player moves but its text and direct
 message are refused `UNAUTHORIZED`; on `CROWDY_NO_MEDIA_APP_ID` (logging on,
 `replayLoggingRecordsMedia: false`, set 20 s before) its text is recorded and its voice is not.
-The relay keeps a player's sends on its session's socket; an HTTP send can reach another API
-instance behind the balancer. README: the admin surface takes an org admin's session, or an
-org token for the managed-player calls.
+The relay keeps a player's sends on its session's socket. HTTP sends stay on that instance
+too since 2026-10-23: the game balancers pin a client by the `cks_ga` cookie, which
+`LbCookieStore` (`src/lb-cookie-store.ts`, on by default) sends back on HTTP and on the
+WebSocket upgrade, and by its IP when it has no cookie. README: the admin surface takes an
+org admin's session, or an org token for the managed-player calls.
 
 **18.17.0: the Org-Managed Players Addendum, and every tier (2026-10-21).** ck-api v2.53.0
 (cks-game-api #560) serves org-managed players on dev, test and prod, and refuses an
