@@ -136,7 +136,10 @@ export class ManagedPlayersAPI {
 
   /**
    * Delete a player: its sessions end and its account is scrubbed. The external id is free
-   * again, so a later sign-in with it creates a new player.
+   * again, so a later sign-in with it creates a new player. Since Game API v2.54.0 its
+   * player-side content is erased within minutes (usage and billing records and world edits
+   * stay), and a legal hold on the player or its organization refuses the delete with
+   * `LEGAL_HOLD`; the player stays as it was.
    */
   async delete(orgId: string, externalId: string): Promise<boolean> {
     const data = await this.api.request(DeleteManagedPlayerDocument, { orgId, externalId });

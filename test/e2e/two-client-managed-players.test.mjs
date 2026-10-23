@@ -1,5 +1,6 @@
 /**
- * Org-managed players replicate like any players (cks-game-api #557, dev only).
+ * Org-managed players replicate like any players (cks-game-api #557; every tier since v2.53.0, once the
+ * organization has accepted the Org-Managed Players Addendum, or the mint answers ORG_LEGAL_ACCEPTANCE_REQUIRED).
  *
  * The organization's server is played by this test: it mints two players' app tokens with
  * an org token (`mintManagedPlayerToken`, scope `players:mint`) the way a game studio's
@@ -18,6 +19,12 @@
  *
  * The org token is sent from this process (no Origin header), as from a server. The players'
  * external ids are new on every run (`crowdy-e2e-<run>-a` / `-b`).
+ *
+ * With CROWDY_MANAGED_APP_RECORDS=1 (the app has replay logging on: an org admin turned it on
+ * with updateApp), the test also reads the input log as the players: A reads its own session's
+ * recorded inputs, and B, who has no manage_apps, is answered NOT_FOUND for A's session. Turn
+ * logging on at least 20 seconds before the run: the realtime servers re-read which apps record
+ * every 15 seconds, and a session that starts before that records nothing.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -34,6 +41,7 @@ const missing = ['CROWDY_HTTP_URL', 'CROWDY_ORG_TOKEN', 'CROWDY_MANAGED_APP_ID']
 const skipReason =
   missing.length > 0 ? `managed-player env not configured (missing: ${missing.join(', ')})` : undefined;
 
+const RECORDS = process.env.CROWDY_MANAGED_APP_RECORDS === '1';
 const SEND_COUNT = Number(process.env.CROWDY_TEST_SEND_COUNT ?? 5);
 const NOTIFY_WAIT_MS = Number(process.env.CROWDY_TEST_NOTIFY_WAIT_MS ?? 3000);
 const CHUNK = { x: '0', y: '0', z: '0' };
@@ -75,7 +83,7 @@ async function mintManagedPlayer(appId, externalId) {
 
 test(
   'two org-managed players see each other through Buddy',
-  { skip: skipReason, timeout: 60_000 },
+  { skip: skipReason, timeout: RECORDS ? 180_000 : 60_000 },
   async () => {
     const { createCrowdyClient } = await import('../../dist/index.js');
     const appId = process.env.CROWDY_MANAGED_APP_ID;
@@ -152,6 +160,32 @@ test(
           genericErrors: receivedByB.genericErrors,
         })}`,
       );
+
+      if (RECORDS) {
+        // The index trails the log by a few seconds: wait for A's session to be listed.
+        const gtidA = String(accessA.gameTokenId);
+        let session = null;
+        for (let i = 0; i < 30 && !session; i++) {
+          const page = await clientA.inputLog.sessions(appId, { first: 20 });
+          session = page.edges.map((e) => e.node).find((s) => String(s.gameTokenId) === gtidA) ?? null;
+          if (!session) await sleep(3000);
+        }
+        assert.ok(session, `A's session ${gtidA} was never listed for A`);
+        assert.equal(String(session.userId), String(meA.userId), "the session is A's");
+
+        const own = await clientA.inputLog.messages(appId, gtidA, { first: 50 });
+        assert.ok(own.edges.length > 0, 'A reads the inputs it sent');
+        assert.ok(
+          own.edges.every((e) => String(e.node.userId) === String(meA.userId)),
+          'every input read is A’s',
+        );
+
+        await assert.rejects(
+          clientB.inputLog.messages(appId, gtidA, { first: 1 }),
+          (err) => err?.code === 'NOT_FOUND' || /NOT_FOUND/.test(String(err?.message)),
+          "B, without manage_apps, is answered NOT_FOUND for A's session",
+        );
+      }
     } finally {
       for (const unsub of cleanup) {
         try { unsub(); } catch { /* swallow */ }

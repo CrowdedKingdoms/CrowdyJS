@@ -602,7 +602,10 @@ export class UdpAPI {
    * Send a spatial text/chat packet, fanned out to nearby actors as a
    * `ClientTextNotification`. Fire-and-forget; opens a UDP proxy session
    * automatically. The sender receives no success echo; failures arrive
-   * asynchronously as `GenericErrorResponse` on {@link subscribe}.
+   * asynchronously as `GenericErrorResponse` on {@link subscribe}. Needs the
+   * `use_text_chat` runtime permission on the app (Game API v2.55.0; every tier
+   * that grants `access` has it unless the app took it away): without it the
+   * server answers `UNAUTHORIZED`.
    *
    * @param input - {@link ClientTextPacketInput}:
    *   - `appId` — owning app id (`BigInt` as a decimal string).
@@ -743,6 +746,9 @@ export class UdpAPI {
    * Fire-and-forget: the sender receives no echo, so there is no
    * `sendSingleActorMessageAndWait` variant. The target receives a
    * `SingleActorMessageNotification` on its `udpNotifications` subscription.
+   * Needs the `use_direct_messages` runtime permission on the app (Game API
+   * v2.55.0; every tier that grants `access` has it unless the app took it
+   * away): without it the server answers `UNAUTHORIZED`.
    *
    * @param input - {@link SingleActorMessageInput}:
    *   - `appId` — the destination actor's app id (`BigInt` as a decimal string).
@@ -818,8 +824,10 @@ export class UdpAPI {
    * Publish a message to a channel. Delivered to every active member of the
    * channel (regardless of location) as a `ChannelMessageNotification` on their
    * `udpNotifications` subscription. Requires the channel `send_messages`
-   * permission; the server drops the message otherwise. Fire-and-forget: the
-   * sender receives no echo.
+   * permission and, from Game API v2.55.0, the `use_text_chat` runtime
+   * permission on the channel's app; without either the server answers
+   * `UNAUTHORIZED` on {@link subscribe}. Fire-and-forget: the sender receives
+   * no echo.
    *
    * @param input - {@link ChannelMessageInput}:
    *   - `channelId` — the channel id (`groups.group_id`) as a `BigInt` decimal
@@ -830,8 +838,9 @@ export class UdpAPI {
    *     1024 bytes.
    *   - `sequenceNumber` — optional uint8 (0-255) correlation id.
    * @returns `true` when accepted for sending — **not** confirmation of
-   *   delivery; note that a message dropped for a missing `send_messages`
-   *   permission still returns `true`.
+   *   delivery; a message refused for a missing `send_messages` or
+   *   `use_text_chat` still returns `true` (the refusal arrives as a
+   *   `genericError` notification).
    * @throws {CrowdyGraphQLError} on auth/validation failures.
    */
   async sendChannelMessage(
@@ -889,8 +898,8 @@ export class UdpAPI {
    * {@link sendChannelMessage}, when one of its live actors is in `appId`
    * within `maxDistance` chunks of `chunk`, measured as the straight-line
    * distance between chunk coordinates, boundary included. A member with no
-   * live actor does not receive it. Same send right as `sendChannelMessage`;
-   * the sender receives no echo.
+   * live actor does not receive it. Same send right and `use_text_chat` as
+   * `sendChannelMessage`; the sender receives no echo.
    *
    * @param input - {@link RangedChannelMessageInput}:
    *   - `channelId` — the channel id (`groups.group_id`) as a `BigInt` decimal
@@ -905,8 +914,9 @@ export class UdpAPI {
    *     2147483647. Not the 0-8 Chebyshev ring count spatial sends take.
    *   - `sequenceNumber` — optional uint8 (0-255) correlation id.
    * @returns `true` when accepted for sending — **not** confirmation of
-   *   delivery. A refusal (no send right: `UNAUTHORIZED`; another app:
-   *   `INVALID_APP_ID`) arrives as a `genericError` notification.
+   *   delivery. A refusal (no send right or no `use_text_chat`:
+   *   `UNAUTHORIZED`; another app: `INVALID_APP_ID`) arrives as a
+   *   `genericError` notification.
    * @throws {CrowdyGraphQLError} on auth/validation failures.
    */
   async sendRangedChannelMessage(
