@@ -22,7 +22,9 @@
  *
  * With CROWDY_MANAGED_APP_RECORDS=1 (the app has replay logging on: an org admin turned it on
  * with updateApp), the test also reads the input log as the players: A reads its own session's
- * recorded inputs, and B, who has no manage_apps, is answered NOT_FOUND for A's session.
+ * recorded inputs, and B, who has no manage_apps, is answered NOT_FOUND for A's session. Turn
+ * logging on at least 20 seconds before the run: the realtime servers re-read which apps record
+ * every 15 seconds, and a session that starts before that records nothing.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
