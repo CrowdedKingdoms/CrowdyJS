@@ -30,6 +30,33 @@ export type AccountBlock = {
   userId: Scalars['BigInt']['output'];
 };
 
+/** An account erasure: what deleting an account erases (its player-side content) and where that stands. Usage, billing, audit and legal records stay, and so does everything the account owns as a developer. */
+export type AccountErasure = {
+  __typename?: 'AccountErasure';
+  /** Apps the account had content in. */
+  apps: Scalars['Int']['output'];
+  /** Of those, the apps already erased. */
+  appsDone: Scalars['Int']['output'];
+  /** When it finished, or null. */
+  completedAt: Maybe<Scalars['DateTime']['output']>;
+  /** The last error, from the finish or from an app, or null. */
+  lastError: Maybe<Scalars['String']['output']>;
+  /** OPERATOR ONLY. While a legal hold defers the erasure, what the account row said before it was blanked (email, gamertag, external id, organization), as JSON; null otherwise. */
+  preservedIdentity: Maybe<Scalars['String']['output']>;
+  /** Why it was asked for: SELF_DELETE (the player deleted its own account), MANAGED_DELETE (its organization deleted it) or OPERATOR. */
+  reason: Scalars['String']['output'];
+  /** When it was asked for. */
+  requestedAt: Scalars['DateTime']['output'];
+  /** Who asked: user:<id>, org_token:<id> or operator:<id>. */
+  requestedBy: Maybe<Scalars['String']['output']>;
+  /** PENDING (apps still to do), RUNNING (finishing), DONE, FAILED (the finish threw; it is retried) or DEFERRED_HOLD (a legal hold applies; nothing is erased until it is released). */
+  status: Scalars['String']['output'];
+  /** What was erased, as JSON: rows removed per table, summed over the apps, and the account-wide rows. */
+  summary: Maybe<Scalars['String']['output']>;
+  /** The deleted account. */
+  userId: Scalars['BigInt']['output'];
+};
+
 export type Actor = {
   __typename?: 'Actor';
   /** App (game) this actor belongs to. BigInt serialized as a decimal string. */
@@ -919,6 +946,8 @@ export type App = {
   redirectUris: Array<Scalars['String']['output']>;
   /** Whether replay logging is on: the realtime servers record every client message they accept for this app, searchable with inputLogSessions and readable with inputLogMessages, and billed as stored input logs. False (the default) records nothing ("No replication logging"). Set with updateApp (manage_apps); turning it on needs a wallet that covers the projected cost of one retention period, or a billing-exempt org. */
   replayLoggingEnabled: Scalars['Boolean']['output'];
+  /** Whether replay logging records the app's voice, webcam video and channel audio messages too. True (the default) records them with every other message; false leaves them out of the input log while everything else is still recorded. Applies only while replayLoggingEnabled is on. Set with updateApp (manage_apps). */
+  replayLoggingRecordsMedia: Scalars['Boolean']['output'];
   /**
    * Reserved realtime (UDP) capacity in bytes/s for shared apps. Superseded by reservedUdpBytesPerSec.
    * @deprecated Renamed 2026-09-01 when reservations split by traffic type. Use reservedUdpBytesPerSec; this returns the same value for one release.
@@ -2128,6 +2157,8 @@ export type ConnectionPageInfo = {
 export type CreateAccessTierInput = {
   /** Numeric id of the app the tier belongs to. The caller must hold manage_access_tiers on this app. */
   appId: Scalars['BigInt']['input'];
+  /** When true (the default) and the tier grants access, it also grants use_text_chat and use_direct_messages, whether or not permissionKeys names them: without them the realtime servers refuse the tier’s text chat and direct messages. Pass false to grant exactly permissionKeys, for example a tier without text chat. */
+  applyCommunicationDefaults?: InputMaybe<Scalars['Boolean']['input']>;
   /** Optional marketing description of the tier. */
   description?: InputMaybe<Scalars['String']['input']>;
   /** Optional; whether this is the app's default tier. Defaults to false. */
@@ -4749,6 +4780,29 @@ export type InviteOrgMemberInput = {
   userId: Scalars['BigInt']['input'];
 };
 
+/** A legal hold an operator set on an organization or on one account. While it applies, deleting a managed player it covers is refused with LEGAL_HOLD, a player’s own account deletion closes the account but keeps its content (and preserves its identity) until the hold is released, and no erasure runs. An organization’s hold covers its managed players. A released hold stays readable as the record. */
+export type LegalHold = {
+  __typename?: 'LegalHold';
+  /** Whether it applies now. */
+  active: Scalars['Boolean']['output'];
+  /** The hold. */
+  holdId: Scalars['BigInt']['output'];
+  /** The organization held (its public id), or null for a hold on one account. */
+  orgId: Maybe<Scalars['BigInt']['output']>;
+  /** Why, as the operator wrote it. */
+  reason: Scalars['String']['output'];
+  /** When it was released, or null while it applies. */
+  releasedAt: Maybe<Scalars['DateTime']['output']>;
+  /** The operator who released it, or null while it applies. */
+  releasedBy: Maybe<Scalars['BigInt']['output']>;
+  /** When it was set. */
+  setAt: Scalars['DateTime']['output'];
+  /** The operator who set it. */
+  setBy: Scalars['BigInt']['output'];
+  /** The account held, or null for a hold on an organization. */
+  userId: Maybe<Scalars['BigInt']['output']>;
+};
+
 /** Link an additional federated identity to the signed-in account. */
 export type LinkIdentityInput = {
   code: Scalars['String']['input'];
@@ -5011,9 +5065,9 @@ export type Mutation = {
   deleteChannelRole: Scalars['Boolean']['output'];
   /** Delete a studio-created peer grid so its chunk box no longer blocks overlapping grid creation. Requires app-admin ('manage_apps'). Returns a hybrid response — on success `gridId` is populated and `error` is NO_ERROR; on failure `gridId` is null and `error` is a UDP-style error code (e.g. GRID_NOT_FOUND, CANNOT_DELETE_DEFAULT_WORLD_GRID, GRID_HAS_NESTED_CHILDREN). The open-by-default world grid and any grid that still contains nested child grids cannot be deleted. */
   deleteGrid: DeleteGridResponse;
-  /** Delete a managed player: its sessions end and its row is anonymized, as an account deletion is. Signing the same external id in again creates a new player. False when there was no such player. An org token with players:manage, or an org admin with manage_players. */
+  /** Delete a managed player, as an account deletion is: its sessions end, its externalId and gamertag are removed, and its player-side content is erased within minutes (Crowdy Studio projects, libraries and agent sessions, mods, actors, avatars and saved state, access grants, grid claims, team and channel memberships). Usage and billing records stay; world edits stay, under the account’s now anonymous id; recorded inputs age out with the input log’s retention. Refused with LEGAL_HOLD while a legal hold covers the player or the organization: disable it instead (updateManagedPlayer), which keeps everything. Signing the same external id in again creates a new player. False when there was no such player. An org token with players:manage, or an org admin with manage_players. */
   deleteManagedPlayer: Scalars['Boolean']['output'];
-  /** DESTRUCTIVE self-service: soft-deletes the authenticated caller's OWN account — anonymizes PII and revokes all sessions; wallet, voxel, and donation history stay intact via FK. Acts only on the caller (no target argument). Requires a valid game token. */
+  /** DESTRUCTIVE self-service: deletes the authenticated caller's OWN account. Every session, app token, realtime connection and ck-exec socket ends; the email, password, gamertag and profile state are removed from the account; and its player-side content is erased within minutes: Crowdy Studio projects, libraries and agent sessions, mods, actors, avatars and saved state, access grants, grid claims, and team and channel memberships. Wallet, billing, usage, audit and legal records stay, and so does everything the account owns as a developer (organizations, apps, published games); world edits stay, under the account's now anonymous id; recorded inputs age out with the input log's retention. Acts only on the caller (no target argument). Requires a valid token. */
   deleteMyAccount: Scalars['Boolean']['output'];
   /** Deletes an organization role. Requires the 'manage_members' permission on the role's org (super admins bypass). DESTRUCTIVE: removes the role and unassigns it from all members. Returns false if the role does not exist. */
   deleteOrgRole: Scalars['Boolean']['output'];
@@ -5139,6 +5193,8 @@ export type Mutation = {
   reinstateOrganization: OrgRetirementType;
   /** Release a one-chunk grid previously created through claimGridChunk. Requires an ordinary app-scoped player token and the caller must still be its current user owner. Refuses foreign grids, studio/marketplace grids, and grids assigned through legacy claimGridOwnership. Atomically removes pending claim requests and invites, self-claim ownership, direct/effective ACL rows, and the grid so its chunk can be claimed again. */
   releaseClaimedGrid: ReleaseClaimedGridResult;
+  /** OPERATOR: release a legal hold. The hold stays as the record. Erasures it deferred resume once no other hold covers their accounts. */
+  releaseLegalHold: LegalHold;
   /** Remove a member from a channel. Requires the 'manage_members' channel permission, except that any member may remove themselves. Notifies Buddy to stop routing to the removed member. Returns true if a membership was removed. */
   removeChannelMember: Scalars['Boolean']['output'];
   /** Removes a user from an organization. Requires the 'manage_members' permission on the org (super admins bypass). DESTRUCTIVE: revokes the user's membership and role assignments in that org. Returns false if the user was not a member. */
@@ -5147,6 +5203,8 @@ export type Mutation = {
   removeSharedPaymentMethod: Scalars['Boolean']['output'];
   /** Remove a member from a team. Requires the 'manage_members' team permission, except that any member may remove themselves. DESTRUCTIVE: drops the membership and its roles. Returns true if a membership was removed. */
   removeTeamMember: Scalars['Boolean']['output'];
+  /** OPERATOR: erase the player-side content of a deleted account, as a deletion does: one deleted before account erasure existed (2026-10-23), or one whose erasure stopped after its retries (its attempts start again). Refused for an account that is not deleted. A legal hold defers it. */
+  requestAccountErasure: AccountErasure;
   /** Passwordless: email a one-time magic sign-in link to the address (creates the account on first sign-in). Always reports sent=true (no account enumeration). Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited. */
   requestLoginLink: RequestLoginLinkResult;
   /** Starts the password-reset flow by emailing a reset link to the address. Always returns true regardless of whether the email exists (prevents account enumeration). The reset link is also the ownership-proven way an existing passwordless account adds a password. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited. */
@@ -5191,17 +5249,17 @@ export type Mutation = {
   sendAudioPacket: Scalars['Boolean']['output'];
   /** Send audio to a channel: delivered to every active member of the channel, wherever they are (party or guild voice), as a ChannelAudioNotification on udpNotifications. The payload is opaque (at most 1024 bytes): your app or an SDK voice helper defines the format and codec. Requires a bearer game token, the channel send_voice permission and the player’s use_voice_chat; without either the server refuses it with UNAUTHORIZED (asynchronously, on udpNotifications). Opens a UDP proxy session automatically if none exists. The sender receives no echo. Every member’s downlink is billed as egress, so keep voice channels small. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING, not delivered; correlate failures by sequenceNumber (correlation only, not an idempotency key). */
   sendChannelAudio: Scalars['Boolean']['output'];
-  /** Publish a message to a channel, delivered to every active member of the channel (not chunk-routed) as a ChannelMessageNotification on udpNotifications. Requires a bearer game token and the channel send_messages permission; lacking the permission the server drops the message. Opens a UDP proxy session automatically if none exists. The sender receives no echo. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING — NOT confirmation of delivery; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). */
+  /** Publish a message to a channel, delivered to every active member of the channel (not chunk-routed) as a ChannelMessageNotification on udpNotifications. Requires a bearer game token, the channel send_messages permission and the use_text_chat runtime permission on the channel’s app; lacking either the game server answers asynchronously with a GenericErrorResponse (errorCode UNAUTHORIZED). Opens a UDP proxy session automatically if none exists. The sender receives no echo. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING — NOT confirmation of delivery; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). */
   sendChannelMessage: Scalars['Boolean']['output'];
   /** Send a custom, app-defined client event (identified by eventType, a uint16) for spatial replication to nearby chunks; nearby actors receive it as a ClientEventNotification. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING — NOT that the world processed it. Failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). */
   sendClientEvent: Scalars['Boolean']['output'];
-  /** Publish a message to a channel that only reaches members near an origin chunk: a member receives it, as an ordinary ChannelMessageNotification on udpNotifications, when one of its live actors is in the same app within maxDistance chunks of input.chunk (straight-line distance between chunk coordinates, boundary included). A member with no live actor does not receive it. Requires a bearer game token and the channel send_messages permission, as for sendChannelMessage; the origin app must be the token’s app. Opens a UDP proxy session automatically if none exists. The sender receives no echo. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING — NOT confirmation of delivery; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications (UNAUTHORIZED without the send right, INVALID_APP_ID for another app), correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). */
+  /** Publish a message to a channel that only reaches members near an origin chunk: a member receives it, as an ordinary ChannelMessageNotification on udpNotifications, when one of its live actors is in the same app within maxDistance chunks of input.chunk (straight-line distance between chunk coordinates, boundary included). A member with no live actor does not receive it. Requires a bearer game token, the channel send_messages permission and use_text_chat, as for sendChannelMessage; the origin app must be the token’s app. Opens a UDP proxy session automatically if none exists. The sender receives no echo. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING — NOT confirmation of delivery; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications (UNAUTHORIZED without the send right or use_text_chat, INVALID_APP_ID for another app), correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). */
   sendRangedChannelMessage: Scalars['Boolean']['output'];
-  /** Send a direct actor-to-actor message, delivered only to the actor identified by targetUuid (NOT broadcast to nearby actors). The sender must know the destination actor’s current chunk. Requires a bearer game token; opens a UDP proxy session automatically if none exists. The target receives a SingleActorMessageNotification on udpNotifications; the sender receives no echo. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING — NOT confirmation of delivery; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). */
+  /** Send a direct actor-to-actor message, delivered only to the actor identified by targetUuid (NOT broadcast to nearby actors). The sender must know the destination actor’s current chunk. Requires a bearer game token and the use_direct_messages runtime permission on the app (a tier that grants access grants it unless the app took it away); without it the game server answers asynchronously with a GenericErrorResponse (errorCode UNAUTHORIZED). Opens a UDP proxy session automatically if none exists. The target receives a SingleActorMessageNotification on udpNotifications; the sender receives no echo. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING — NOT confirmation of delivery; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). */
   sendSingleActorMessage: Scalars['Boolean']['output'];
   /** Operator only (is_operator). Sends a plain test message to one address and returns the SES message id. SIDE EFFECTS: a real outbound email billed to the shared SES identity, and a `send` row in email_events. Prefer the AWS mailbox simulator (success@ / bounce@ / complaint@simulator.amazonses.com), which exercises the whole path without touching a real inbox or a real reputation. `sent: true` with `simulated: true` means SEND_EMAILS is off and nothing left the building -- read both fields. */
   sendTestEmail: SendTestEmailResult;
-  /** Send a spatial text/chat packet, fanned out to nearby actors as a ClientTextNotification. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — NOT confirmation of delivery. The sender receives no echo; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). */
+  /** Send a spatial text/chat packet, fanned out to nearby actors as a ClientTextNotification. Requires a bearer game token and the use_text_chat runtime permission on the app (a tier that grants access grants it unless the app took it away); without it the game server answers asynchronously with a GenericErrorResponse (errorCode UNAUTHORIZED). Opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — NOT confirmation of delivery. The sender receives no echo; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). */
   sendTextPacket: Scalars['Boolean']['output'];
   /** Send ONE webcam video fragment, fanned out to nearby actors as a ClientVideoNotification (Buddy v0.25.0). Requires a bearer game token and the use_video_chat runtime permission at app AND grid level -- without it the game server responds asynchronously with a GenericErrorResponse (errorCode UNAUTHORIZED). A datagram carries at most ~1117 bytes of videoData, so an encoded frame is split by the SDK into fragments (6-byte header: version, codec, frameId, fragIndex, fragCount; at most 16 per frame) and reassembled by receivers; this is a mutation PER FRAGMENT and sustained video belongs on the binary realtime relay. Every receiver in range pays the egress bytes: keep distance small and frames few. Opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING -- NOT that it was delivered; the sender receives no echo, only errors (GenericErrorResponse, correlated by sequenceNumber) on udpNotifications. */
   sendVideoPacket: Scalars['Boolean']['output'];
@@ -5247,6 +5305,8 @@ export type Mutation = {
   setHostedGameListing: HostedGame;
   /** Adds a password to the signed-in account when it does not have one yet — for an account created by magic link or a social provider, which previously had no in-product way to add password sign-in. Requires a valid session token; the session is the proof of account control, so the password is usable immediately and no email confirmation is needed. Refuses with extensions.code PASSWORD_ALREADY_SET (409) when a password is already set — use changePassword, which verifies the current one, or the reset flow if it is forgotten. (Before v1.60.0 that refusal reached clients as INTERNAL_SERVER_ERROR while this description said CONFLICT, so a client could only recognise it by the message text.) A security notification is emailed to the account address. Existing sessions are not revoked. */
   setInitialPassword: Scalars['Boolean']['output'];
+  /** OPERATOR: put an organization (and its managed players) or one account under a legal hold. While it applies, deleting a managed player it covers is refused with LEGAL_HOLD, a player’s own deletion closes the account but keeps its content and preserves its identity, and no erasure runs. */
+  setLegalHold: LegalHold;
   /** Super-admin only. Flip users.is_operator to grant or revoke control-plane / operator access. */
   setOperator: User;
   /** OPERATOR ONLY. Sets or clears an organization billing exemption. When true, org-wallet debits and money-driven runtime denials are skipped; usage is still metered and every waived amount is written to org_billing_waivers. Does not waive player-wallet charges, failure breakers, or the per-minute compute budget. reason is required when setting true. SIDE EFFECT: re-evaluates the runtime gate for every shared app in the org, so clearing the exemption re-denies immediately instead of waiting for the next hourly tick. */
@@ -5307,7 +5367,7 @@ export type Mutation = {
   updateActor: Actor;
   /** Replaces an actor’s `publicState` and/or `privateState` blobs (fields omitted from `input` are left unchanged). OWNER-EXCLUSIVE: only the actor’s owner may write (throws Unauthorized otherwise). Game-plane: requires an app token for the actor’s app (a session token or another app’s token is answered NotFound). `uuid` is the 32-character ASCII actor id; blobs are base64-encoded binary. */
   updateActorState: Actor;
-  /** Update mutable fields of an existing app (name, description, visibility, status, metadata, wildernessWritesOpen, replayLoggingEnabled); only fields present in the input are changed. Turning replayLoggingEnabled on is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet can spend at least the projected cost of keeping one retention period of the app's recent traffic (extensions.requiredMicrousd and spendableMicrousd say how much), or the org is billing-exempt; recordings already kept go on billing after it is turned off, until they age out. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility, or restore an archived app (status back to DRAFT/LIVE). Throws if the app id does not exist. */
+  /** Update mutable fields of an existing app (name, description, visibility, status, metadata, wildernessWritesOpen, claimOwnerKeys, replayLoggingEnabled, replayLoggingRecordsMedia); only fields present in the input are changed. Turning replayLoggingEnabled on is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet can spend at least the projected cost of keeping one retention period of the app's recent traffic (extensions.requiredMicrousd and spendableMicrousd say how much), or the org is billing-exempt; recordings already kept go on billing after it is turned off, until they age out. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility, or restore an archived app (status back to DRAFT/LIVE). Throws if the app id does not exist. */
   updateApp: App;
   /** Updates an avatar’s mutable fields (currently `name`) and returns it. OWNER-EXCLUSIVE: only the avatar’s owner may call this (throws Unauthorized otherwise). Requires a valid game token. To change state blobs use `updateAvatarState`. */
   updateAvatar: Avatar;
@@ -6076,6 +6136,11 @@ export type MutationReleaseClaimedGridArgs = {
 };
 
 
+export type MutationReleaseLegalHoldArgs = {
+  holdId: Scalars['BigInt']['input'];
+};
+
+
 export type MutationRemoveChannelMemberArgs = {
   groupId: Scalars['BigInt']['input'];
   userId: Scalars['BigInt']['input'];
@@ -6098,6 +6163,11 @@ export type MutationRemoveSharedPaymentMethodArgs = {
 
 export type MutationRemoveTeamMemberArgs = {
   groupId: Scalars['BigInt']['input'];
+  userId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationRequestAccountErasureArgs = {
   userId: Scalars['BigInt']['input'];
 };
 
@@ -6372,6 +6442,11 @@ export type MutationSetHostedGameListingArgs = {
 
 export type MutationSetInitialPasswordArgs = {
   newPassword: Scalars['String']['input'];
+};
+
+
+export type MutationSetLegalHoldArgs = {
+  input: SetLegalHoldInput;
 };
 
 
@@ -7613,6 +7688,8 @@ export type Query = {
   __typename?: 'Query';
   /** ADMIN: the target account's platform-wide block: whether it holds now, and the last one set (who, when, why, until). Requires a super-admin bearer game token. */
   accountBlock: AccountBlock;
+  /** OPERATOR: where the erasure of a deleted account stands (what deleting it erases, app by app), or null if none was asked for. While a legal hold defers it, preservedIdentity carries what the account row said before it was blanked. */
+  accountErasure: Maybe<AccountErasure>;
   /** List only healthy GraphQL API servers (status = ReadyForClients) for client routing/discovery. No authentication required. */
   activeGraphQLServers: Array<GraphQlServer>;
   /** Fetches a single actor by its 32-character ASCII `uuid`. Game-plane: requires an app token for the actor’s app (a session token or another app’s token is answered NotFound, the same as a missing id). Owner-aware: the owner receives full state; non-owners receive a public copy with `privateState` stripped (null). */
@@ -7842,6 +7919,8 @@ export type Query = {
   inputLogMessages: InputLogMessageConnection;
   /** Recorded client sessions of an app with replay logging on (App.replayLoggingEnabled), newest first. With 'manage_apps' on the app you see every session and may filter by userId; anyone else sees only their own, and asking for another user's is FORBIDDEN. Game plane: send the app-scoped token for this app to the app's datacenter. Page with `first` (default 50, max 200) and `after`. INPUT_LOG_UNAVAILABLE when input logging is not configured on this deployment. */
   inputLogSessions: InputLogSessionConnection;
+  /** OPERATOR: legal holds, newest first (at most 500), on one organization or account if given; only the ones that apply now unless includeReleased. */
+  legalHolds: Array<LegalHold>;
   /** Lists recorded voxel edits for all chunks within a cubic (Chebyshev) radius of a center chunk, grouped per chunk and ordered by increasing distance, paginated over chunks. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only. */
   listVoxelUpdatesByDistance: VoxelUpdatesByDistanceResponse;
   /** Lists recorded voxel edits for a single chunk (optionally only those at/after `since`), newest first. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only. */
@@ -8019,6 +8098,11 @@ export type Query = {
 
 
 export type QueryAccountBlockArgs = {
+  userId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryAccountErasureArgs = {
   userId: Scalars['BigInt']['input'];
 };
 
@@ -8615,6 +8699,13 @@ export type QueryInputLogSessionsArgs = {
   appId: Scalars['BigInt']['input'];
   filter?: InputMaybe<InputLogSessionFilter>;
   first?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryLegalHoldsArgs = {
+  includeReleased?: InputMaybe<Scalars['Boolean']['input']>;
+  orgId?: InputMaybe<Scalars['BigInt']['input']>;
+  userId?: InputMaybe<Scalars['BigInt']['input']>;
 };
 
 
@@ -9624,6 +9715,16 @@ export type SetHostedGameListingInput = {
   slug: Scalars['String']['input'];
 };
 
+/** A legal hold to set: exactly one of orgId (an organization and its managed players) and userId (one account), and why. */
+export type SetLegalHoldInput = {
+  /** The organization to hold (its public id). Covers its managed players. */
+  orgId?: InputMaybe<Scalars['BigInt']['input']>;
+  /** Why the hold is set (the matter it preserves for), at most 500 characters. */
+  reason: Scalars['String']['input'];
+  /** The account to hold. */
+  userId?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
 /** Replace a member's roles in a group (the listed roles become their full set). */
 export type SetMemberRolesInput = {
   /** The group (team/channel) id. */
@@ -10075,6 +10176,8 @@ export type UdpProxyConnectionStatus = {
 
 /** Fields to update on an access tier. All fields are optional; omitted fields are left unchanged. */
 export type UpdateAccessTierInput = {
+  /** With permissionKeys: when true (the default) and the new set grants access, it also grants use_text_chat and use_direct_messages, whether or not permissionKeys names them. Pass false to set exactly permissionKeys, for example to take text chat away. Ignored without permissionKeys. */
+  applyCommunicationDefaults?: InputMaybe<Scalars['Boolean']['input']>;
   /** New billing cadence (e.g. "month", "year"); null clears it. */
   billingPeriod?: InputMaybe<Scalars['String']['input']>;
   /** New ISO 4217 currency code (e.g. "usd"). */
@@ -10131,6 +10234,8 @@ export type UpdateAppInput = {
   name?: InputMaybe<Scalars['String']['input']>;
   /** Turn replay logging on (true) or off (false): record every client message the realtime servers accept for this app (keep-alives included), kept for the input log's published retention and billed as stored input logs (input_log_storage_byte_hours, no free allowance). Turning it ON is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet can spend at least the projected cost of keeping one retention period of the app's recent traffic, or the org is billing-exempt; turning it off always succeeds, and what was already recorded goes on billing until it ages out. Recording starts and stops within about 15 seconds. Omit to leave unchanged. */
   replayLoggingEnabled?: InputMaybe<Scalars['Boolean']['input']>;
+  /** With replay logging on, record the app's voice (sendAudioPacket), webcam video (sendVideoPacket) and channel audio (sendChannelAudio) too (true, the default) or leave them out of the input log (false); every other message is recorded either way. Takes effect within about 15 seconds; what was already recorded stays until it ages out. Omit to leave unchanged. */
+  replayLoggingRecordsMedia?: InputMaybe<Scalars['Boolean']['input']>;
   /** New lifecycle status; set LIVE to publish, or DRAFT/LIVE to restore an archived app. Omit to leave unchanged. */
   status?: InputMaybe<AppStatus>;
   /** New visibility (PUBLIC/UNLISTED/PRIVATE). Omit to leave unchanged. */

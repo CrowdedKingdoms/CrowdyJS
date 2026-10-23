@@ -342,7 +342,7 @@ never told about, so a native refresh without it is a re-placement.
 | `client.kit(appId)` | Game Kit: typed clients for the ck-exec starter hubs (world, matchmaking, sessions, NPCs and pets) on one shared connection, their topology, realtime conventions, and parties, guilds and chat (`kit.social`) — see [Game Kit](#game-kit). |
 | `createWorldSession(client, appId, config)` | World Stores: opt-in, SDK-managed game state from the `@crowdedkingdoms/crowdyjs/stores` subpath — see [World Stores](#world-stores). |
 
-**Studio-admin surface** (privileged; drive with a server-side / studio token,
+**Studio-admin surface** (privileged; drive with an org admin's session, or an org token for the managed-player calls,
 grouped under `client.admin` and mirrored at the top level):
 
 | Sub-client | What it does |
