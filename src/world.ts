@@ -253,7 +253,8 @@ export class ActorClient {
    * @throws {CrowdyGraphQLError} if the underlying send is rejected.
    * @throws {CrowdyTimeoutError} if the HTTP send leg times out.
    * @throws {CrowdyRealtimeError} on timeout (`code === 'UDP_SEQUENCE_TIMEOUT'`)
-   *   or a matching `GenericErrorResponse`.
+   *   or a matching `GenericErrorResponse` (`UNAUTHORIZED` without the
+   *   `use_text_chat` runtime permission, Game API v2.55.0).
    */
   async sendText(
     text: string,
@@ -336,7 +337,9 @@ export class ActorClient {
    * @param options - `sequenceNumber`: optional uint8 (0-255) correlation id
    *   (used only to correlate a `GenericErrorResponse`).
    * @returns `true` when the datagram was accepted for sending — **not**
-   *   confirmation of delivery.
+   *   confirmation of delivery. Without the `use_direct_messages` runtime
+   *   permission (Game API v2.55.0) the server answers `UNAUTHORIZED` as a
+   *   `genericError` notification.
    * @throws {CrowdyProtocolError} if `targetUuid` is not exactly 32 bytes, or
    *   `targetChunk` is outside signed int64 range.
    * @throws {CrowdyGraphQLError} on auth/validation failures.

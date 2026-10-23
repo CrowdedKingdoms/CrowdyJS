@@ -1337,6 +1337,10 @@ type App {
   """
   replayLoggingEnabled: Boolean!
   """
+  Whether replay logging records the app's voice, webcam video and channel audio messages too. True (the default) records them with every other message; false leaves them out of the input log while everything else is still recorded. Applies only while replayLoggingEnabled is on. Set with updateApp (manage_apps).
+  """
+  replayLoggingRecordsMedia: Boolean!
+  """
   Grid permission keys a player's claim grants its owner on the claimed grid (claimGridOwnership), beside the player-code keys the owner's tier carries; for example update_voxel_data makes a claim buildable without a hub granting it. Never a player-code key; the grid's permission limits still cap them. Empty by default. Set with updateApp (manage_apps).
   """
   claimOwnerKeys: [String!]!
@@ -6647,6 +6651,68 @@ type CrowdyStudioModelUsage {
 }
 
 """
+A legal hold an operator set on an organization or on one account. While it applies, deleting a managed player it covers is refused with LEGAL_HOLD, a player’s own account deletion closes the account but keeps its content (and preserves its identity) until the hold is released, and no erasure runs. An organization’s hold covers its managed players. A released hold stays readable as the record.
+"""
+type LegalHold {
+  """The hold."""
+  holdId: BigInt!
+  """
+  The organization held (its public id), or null for a hold on one account.
+  """
+  orgId: BigInt
+  """The account held, or null for a hold on an organization."""
+  userId: BigInt
+  """Why, as the operator wrote it."""
+  reason: String!
+  """The operator who set it."""
+  setBy: BigInt!
+  """When it was set."""
+  setAt: DateTime!
+  """The operator who released it, or null while it applies."""
+  releasedBy: BigInt
+  """When it was released, or null while it applies."""
+  releasedAt: DateTime
+  """Whether it applies now."""
+  active: Boolean!
+}
+
+"""
+An account erasure: what deleting an account erases (its player-side content) and where that stands. Usage, billing, audit and legal records stay, and so does everything the account owns as a developer.
+"""
+type AccountErasure {
+  """The deleted account."""
+  userId: BigInt!
+  """
+  PENDING (apps still to do), RUNNING (finishing), DONE, FAILED (the finish threw; it is retried) or DEFERRED_HOLD (a legal hold applies; nothing is erased until it is released).
+  """
+  status: String!
+  """
+  Why it was asked for: SELF_DELETE (the player deleted its own account), MANAGED_DELETE (its organization deleted it) or OPERATOR.
+  """
+  reason: String!
+  """Who asked: user:<id>, org_token:<id> or operator:<id>."""
+  requestedBy: String
+  """When it was asked for."""
+  requestedAt: DateTime!
+  """When it finished, or null."""
+  completedAt: DateTime
+  """Apps the account had content in."""
+  apps: Int!
+  """Of those, the apps already erased."""
+  appsDone: Int!
+  """The last error, from the finish or from an app, or null."""
+  lastError: String
+  """
+  What was erased, as JSON: rows removed per table, summed over the apps, and the account-wide rows.
+  """
+  summary: String
+  """
+  OPERATOR ONLY. While a legal hold defers the erasure, what the account row said before it was blanked (email, gamertag, external id, organization), as JSON; null otherwise.
+  """
+  preservedIdentity: String
+}
+
+"""
 Arbitrary-precision signed integer (used for 64-bit ids and chunk coordinates such as appId, userId and chunk x/y/z). ALWAYS transmitted as a base-10 decimal STRING in BOTH directions — send it quoted (e.g. "1024", "-5") and read it back as a string; never use a raw JSON number, because large values overflow IEEE-754 doubles. The server rejects any value that is not a valid integer string.
 """
 scalar BigInt
@@ -7185,6 +7251,24 @@ type Query {
     """The organization (BigInt as a decimal string)."""
     orgId: BigInt!
   ): [OrgSigningKey!]!
+  """
+  OPERATOR: where the erasure of a deleted account stands (what deleting it erases, app by app), or null if none was asked for. While a legal hold defers it, preservedIdentity carries what the account row said before it was blanked.
+  """
+  accountErasure(
+    """The deleted account."""
+    userId: BigInt!
+  ): AccountErasure @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  OPERATOR: legal holds, newest first (at most 500), on one organization or account if given; only the ones that apply now unless includeReleased.
+  """
+  legalHolds(
+    """Only holds on this organization (its public id)."""
+    orgId: BigInt
+    """Only holds on this account."""
+    userId: BigInt
+    """Also list released holds."""
+    includeReleased: Boolean = false
+  ): [LegalHold!]! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   A hosted third-party game by slug, or null when the slug is unclaimed. PUBLIC: the first-party shell at https://<games host>/<slug>/ calls this before sign-in to learn the contentOrigin it frames. Returns DISABLED and TAKEN_DOWN games too (with their status) so the shell can say why. Null when the tier does not host third-party games.
   """
@@ -8612,7 +8696,7 @@ type Mutation {
     userId: BigInt!
   ): AccountBlock! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
-  DESTRUCTIVE self-service: soft-deletes the authenticated caller's OWN account — anonymizes PII and revokes all sessions; wallet, voxel, and donation history stay intact via FK. Acts only on the caller (no target argument). Requires a valid game token.
+  DESTRUCTIVE self-service: deletes the authenticated caller's OWN account. Every session, app token, realtime connection and ck-exec socket ends; the email, password, gamertag and profile state are removed from the account; and its player-side content is erased within minutes: Crowdy Studio projects, libraries and agent sessions, mods, actors, avatars and saved state, access grants, grid claims, and team and channel memberships. Wallet, billing, usage, audit and legal records stay, and so does everything the account owns as a developer (organizations, apps, published games); world edits stay, under the account's now anonymous id; recorded inputs age out with the input log's retention. Acts only on the caller (no target argument). Requires a valid token.
   """
   deleteMyAccount: Boolean!
   """
@@ -9092,7 +9176,7 @@ type Mutation {
     input: CreateAppInput!
   ): App! @requiresPermission(scope: "org", permission: "manage_apps", scopeArg: "input.orgId")
   """
-  Update mutable fields of an existing app (name, description, visibility, status, metadata, wildernessWritesOpen, replayLoggingEnabled); only fields present in the input are changed. Turning replayLoggingEnabled on is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet can spend at least the projected cost of keeping one retention period of the app's recent traffic (extensions.requiredMicrousd and spendableMicrousd say how much), or the org is billing-exempt; recordings already kept go on billing after it is turned off, until they age out. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility, or restore an archived app (status back to DRAFT/LIVE). Throws if the app id does not exist.
+  Update mutable fields of an existing app (name, description, visibility, status, metadata, wildernessWritesOpen, claimOwnerKeys, replayLoggingEnabled, replayLoggingRecordsMedia); only fields present in the input are changed. Turning replayLoggingEnabled on is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet can spend at least the projected cost of keeping one retention period of the app's recent traffic (extensions.requiredMicrousd and spendableMicrousd say how much), or the org is billing-exempt; recordings already kept go on billing after it is turned off, until they age out. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility, or restore an archived app (status back to DRAFT/LIVE). Throws if the app id does not exist.
   """
   updateApp(
     """Numeric id of the app to update."""
@@ -9207,7 +9291,7 @@ type Mutation {
     externalId: String!
   ): Boolean!
   """
-  Delete a managed player: its sessions end and its row is anonymized, as an account deletion is. Signing the same external id in again creates a new player. False when there was no such player. An org token with players:manage, or an org admin with manage_players.
+  Delete a managed player, as an account deletion is: its sessions end, its externalId and gamertag are removed, and its player-side content is erased within minutes (Crowdy Studio projects, libraries and agent sessions, mods, actors, avatars and saved state, access grants, grid claims, team and channel memberships). Usage and billing records stay; world edits stay, under the account’s now anonymous id; recorded inputs age out with the input log’s retention. Refused with LEGAL_HOLD while a legal hold covers the player or the organization: disable it instead (updateManagedPlayer), which keeps everything. Signing the same external id in again creates a new player. False when there was no such player. An org token with players:manage, or an org admin with manage_players.
   """
   deleteManagedPlayer(
     """
@@ -9260,6 +9344,27 @@ type Mutation {
     """
     enabled: Boolean!
   ): Boolean! @requiresPermission(scope: "app", permission: "manage_billing", scopeArg: "appId")
+  """
+  OPERATOR: erase the player-side content of a deleted account, as a deletion does: one deleted before account erasure existed (2026-10-23), or one whose erasure stopped after its retries (its attempts start again). Refused for an account that is not deleted. A legal hold defers it.
+  """
+  requestAccountErasure(
+    """The deleted account to erase."""
+    userId: BigInt!
+  ): AccountErasure! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  OPERATOR: put an organization (and its managed players) or one account under a legal hold. While it applies, deleting a managed player it covers is refused with LEGAL_HOLD, a player’s own deletion closes the account but keeps its content and preserves its identity, and no erasure runs.
+  """
+  setLegalHold(
+    """What to hold, and why."""
+    input: SetLegalHoldInput!
+  ): LegalHold! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  OPERATOR: release a legal hold. The hold stays as the record. Erasures it deferred resume once no other hold covers their accounts.
+  """
+  releaseLegalHold(
+    """The hold to release."""
+    holdId: BigInt!
+  ): LegalHold! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Claim the hosting slug for an app (idempotent; the same app re-claiming its slug is a no-op, a different slug MOVES the game). Registers https://<games host>/<slug>/ and https://<slug>.<content host> as the app's redirect URIs and sets launch_url to the former. Requires manage_apps on the app and a SESSION token. Refuses a slug that is not a DNS label, is reserved, or belongs to another app (HOSTED_SLUG_UNAVAILABLE), and answers CONTENT_HOSTING_DISABLED on a tier without a content CDN.
   """
@@ -10552,14 +10657,14 @@ type Mutation {
     input: ClientVideoPacketInput!
   ): Boolean! @requiresPermission(scope: "runtime", permission: "use_video_chat", scopeArg: "input.appId")
   """
-  Send a spatial text/chat packet, fanned out to nearby actors as a ClientTextNotification. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — NOT confirmation of delivery. The sender receives no echo; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays).
+  Send a spatial text/chat packet, fanned out to nearby actors as a ClientTextNotification. Requires a bearer game token and the use_text_chat runtime permission on the app (a tier that grants access grants it unless the app took it away); without it the game server answers asynchronously with a GenericErrorResponse (errorCode UNAUTHORIZED). Opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — NOT confirmation of delivery. The sender receives no echo; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays).
   """
   sendTextPacket(
     """
     The text/chat packet to send: target appId, chunk coordinates, 32-byte source uuid, UTF-8 text, and optional distance/decayRate/sequenceNumber. See ClientTextPacketInput.
     """
     input: ClientTextPacketInput!
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "runtime", permission: "use_text_chat", scopeArg: "input.appId")
   """
   Send a custom, app-defined client event (identified by eventType, a uint16) for spatial replication to nearby chunks; nearby actors receive it as a ClientEventNotification. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING — NOT that the world processed it. Failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays).
   """
@@ -10570,16 +10675,16 @@ type Mutation {
     input: ClientEventNotificationInput!
   ): Boolean!
   """
-  Send a direct actor-to-actor message, delivered only to the actor identified by targetUuid (NOT broadcast to nearby actors). The sender must know the destination actor’s current chunk. Requires a bearer game token; opens a UDP proxy session automatically if none exists. The target receives a SingleActorMessageNotification on udpNotifications; the sender receives no echo. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING — NOT confirmation of delivery; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays).
+  Send a direct actor-to-actor message, delivered only to the actor identified by targetUuid (NOT broadcast to nearby actors). The sender must know the destination actor’s current chunk. Requires a bearer game token and the use_direct_messages runtime permission on the app (a tier that grants access grants it unless the app took it away); without it the game server answers asynchronously with a GenericErrorResponse (errorCode UNAUTHORIZED). Opens a UDP proxy session automatically if none exists. The target receives a SingleActorMessageNotification on udpNotifications; the sender receives no echo. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING — NOT confirmation of delivery; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays).
   """
   sendSingleActorMessage(
     """
     The direct message to send: target appId, the DESTINATION actor’s chunk coordinates, the 32-byte targetUuid, base64 payload, and optional sequenceNumber. See SingleActorMessageInput.
     """
     input: SingleActorMessageInput!
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "runtime", permission: "use_direct_messages", scopeArg: "input.appId")
   """
-  Publish a message to a channel, delivered to every active member of the channel (not chunk-routed) as a ChannelMessageNotification on udpNotifications. Requires a bearer game token and the channel send_messages permission; lacking the permission the server drops the message. Opens a UDP proxy session automatically if none exists. The sender receives no echo. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING — NOT confirmation of delivery; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays).
+  Publish a message to a channel, delivered to every active member of the channel (not chunk-routed) as a ChannelMessageNotification on udpNotifications. Requires a bearer game token, the channel send_messages permission and the use_text_chat runtime permission on the channel’s app; lacking either the game server answers asynchronously with a GenericErrorResponse (errorCode UNAUTHORIZED). Opens a UDP proxy session automatically if none exists. The sender receives no echo. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING — NOT confirmation of delivery; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications, correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays).
   """
   sendChannelMessage(
     """
@@ -10597,14 +10702,14 @@ type Mutation {
     input: ChannelMessageInput!
   ): Boolean!
   """
-  Publish a message to a channel that only reaches members near an origin chunk: a member receives it, as an ordinary ChannelMessageNotification on udpNotifications, when one of its live actors is in the same app within maxDistance chunks of input.chunk (straight-line distance between chunk coordinates, boundary included). A member with no live actor does not receive it. Requires a bearer game token and the channel send_messages permission, as for sendChannelMessage; the origin app must be the token’s app. Opens a UDP proxy session automatically if none exists. The sender receives no echo. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING — NOT confirmation of delivery; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications (UNAUTHORIZED without the send right, INVALID_APP_ID for another app), correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays).
+  Publish a message to a channel that only reaches members near an origin chunk: a member receives it, as an ordinary ChannelMessageNotification on udpNotifications, when one of its live actors is in the same app within maxDistance chunks of input.chunk (straight-line distance between chunk coordinates, boundary included). A member with no live actor does not receive it. Requires a bearer game token, the channel send_messages permission and use_text_chat, as for sendChannelMessage; the origin app must be the token’s app. Opens a UDP proxy session automatically if none exists. The sender receives no echo. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING — NOT confirmation of delivery; failures arrive ASYNCHRONOUSLY as GenericErrorResponse on udpNotifications (UNAUTHORIZED without the send right or use_text_chat, INVALID_APP_ID for another app), correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays).
   """
   sendRangedChannelMessage(
     """
     The channel message to publish: channelId (groups.group_id), the sender’s 32-byte actor uuid, base64 payload (max 1024 bytes), the origin appId and chunk, maxDistance in chunks, and optional sequenceNumber. See RangedChannelMessageInput.
     """
     input: RangedChannelMessageInput!
-  ): Boolean!
+  ): Boolean! @requiresPermission(scope: "runtime", permission: "use_text_chat", scopeArg: "input.appId")
 }
 
 input UpdateGamertagInput {
@@ -10786,6 +10891,10 @@ input CreateAccessTierInput {
   Optional runtime permission keys to grant on this tier (must be valid runtimePermissions). Defaults to ["access"] when omitted.
   """
   permissionKeys: [String!]
+  """
+  When true (the default) and the tier grants access, it also grants use_text_chat and use_direct_messages, whether or not permissionKeys names them: without them the realtime servers refuse the tier’s text chat and direct messages. Pass false to grant exactly permissionKeys, for example a tier without text chat.
+  """
+  applyCommunicationDefaults: Boolean
 }
 
 """
@@ -10816,6 +10925,10 @@ input UpdateAccessTierInput {
   Replacement set of runtime permission keys for the tier (must be valid runtimePermissions). When provided, replaces the existing set entirely.
   """
   permissionKeys: [String!]
+  """
+  With permissionKeys: when true (the default) and the new set grants access, it also grants use_text_chat and use_direct_messages, whether or not permissionKeys names them. Pass false to set exactly permissionKeys, for example to take text chat away. Ignored without permissionKeys.
+  """
+  applyCommunicationDefaults: Boolean
 }
 
 """
@@ -11098,6 +11211,10 @@ input UpdateAppInput {
   """
   replayLoggingEnabled: Boolean
   """
+  With replay logging on, record the app's voice (sendAudioPacket), webcam video (sendVideoPacket) and channel audio (sendChannelAudio) too (true, the default) or leave them out of the input log (false); every other message is recorded either way. Takes effect within about 15 seconds; what was already recorded stays until it ages out. Omit to leave unchanged.
+  """
+  replayLoggingRecordsMedia: Boolean
+  """
   Grid permission keys a player's claim grants its owner on the claimed grid (at most 8; active grid keys; never a player-code key). An empty list grants none. Applies to claims made from now on. Omit to leave unchanged.
   """
   claimOwnerKeys: [String!]
@@ -11282,6 +11399,20 @@ input ExchangeManagedPlayerAssertionInput {
   The compact JWS your organization signed for this player (header alg EdDSA, ES256 or RS256 with a registered kid; claims iss, aud, sub, iat, exp at most 300 s after iat, a fresh jti, and optionally gamertag). Use each once.
   """
   assertion: String!
+}
+
+"""
+A legal hold to set: exactly one of orgId (an organization and its managed players) and userId (one account), and why.
+"""
+input SetLegalHoldInput {
+  """The organization to hold (its public id). Covers its managed players."""
+  orgId: BigInt
+  """The account to hold."""
+  userId: BigInt
+  """
+  Why the hold is set (the matter it preserves for), at most 500 characters.
+  """
+  reason: String!
 }
 
 """Claim (or re-assert) the hosting slug for an app."""
