@@ -41,8 +41,14 @@ doc comments say so, and a refused channel message is answered `UNAUTHORIZED`, n
 silently as the old comment said. The operator-only erasure and legal-hold fields in the schema
 are not wrapped. `test/e2e/two-client-managed-players.test.mjs` reads the input log as the
 players with `CROWDY_MANAGED_APP_RECORDS=1` (A reads its own, B gets `NOT_FOUND`; passed on dev,
-test and prod on 2026-10-23); turn logging on 20 s before the run. README: the admin surface
-takes an org admin's session, or an org token for the managed-player calls.
+test and prod on 2026-10-23); turn logging on 20 s before the run.
+`test/e2e/managed-players-communication.test.mjs` runs on the binary relay: on
+`CROWDY_QUIET_APP_ID` (its default tier lacks both keys) a player moves but its text and direct
+message are refused `UNAUTHORIZED`; on `CROWDY_NO_MEDIA_APP_ID` (logging on,
+`replayLoggingRecordsMedia: false`, set 20 s before) its text is recorded and its voice is not.
+The relay keeps a player's sends on its session's socket; an HTTP send can reach another API
+instance behind the balancer. README: the admin surface takes an org admin's session, or an
+org token for the managed-player calls.
 
 **18.17.0: the Org-Managed Players Addendum, and every tier (2026-10-21).** ck-api v2.53.0
 (cks-game-api #560) serves org-managed players on dev, test and prod, and refuses an
