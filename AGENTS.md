@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.16.0** (18.0.0 was published only as
+**Current package:** `package.json` is **18.18.0** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -29,6 +29,20 @@ directly. So, before adding a wrapper:
 - 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
+
+**18.18.0: text chat and direct-message keys, the recording switch, managed players' input logs
+(2026-10-23).** `schema.gql` is ck-api `dev`'s v2.55.0 (cks-game-api #569 on #566/#567).
+`appAccess.createTier` / `updateTier` take `applyCommunicationDefaults` (the generated input): a
+tier that grants `access` also gets `use_text_chat` and `use_direct_messages` unless it is
+`false`. `apps.update` takes `replayLoggingRecordsMedia` (leave voice and video out of an app's
+recording). The realtime servers refuse text (`udp.sendTextPacket`, `world.sendText`), channel
+text and direct messages (`sendSingleActorMessage`, `world.sendToActor`) without the keys; the
+doc comments say so, and a refused channel message is answered `UNAUTHORIZED`, not dropped
+silently as the old comment said. The operator-only erasure and legal-hold fields in the schema
+are not wrapped. `test/e2e/two-client-managed-players.test.mjs` reads the input log as the
+players with `CROWDY_MANAGED_APP_RECORDS=1` (A reads its own, B gets `NOT_FOUND`; passed on dev,
+test and prod on 2026-10-23); turn logging on 20 s before the run. README: the admin surface
+takes an org admin's session, or an org token for the managed-player calls.
 
 **18.17.0: the Org-Managed Players Addendum, and every tier (2026-10-21).** ck-api v2.53.0
 (cks-game-api #560) serves org-managed players on dev, test and prod, and refuses an
