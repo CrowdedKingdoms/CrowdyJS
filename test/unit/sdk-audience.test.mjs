@@ -79,6 +79,13 @@ const PLATFORM_ONLY = [
   // org-managed players (cks-game-api #557): an operator turns them on for an
   // org and sets its limits. orgManagedPlayerSettings is an org admin's read and is wrapped.
   'setOrgManagedPlayerSettings',
+  // account erasure and legal holds (ck-api v2.54.0): an operator reads and retries an
+  // erasure and places or releases a hold.
+  'accountErasure',
+  'requestAccountErasure',
+  'legalHolds',
+  'setLegalHold',
+  'releaseLegalHold',
 ];
 
 /** How the schema's descriptions say a field is for super-admins or operators only. */
