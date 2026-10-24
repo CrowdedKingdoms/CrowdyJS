@@ -106,7 +106,7 @@
     "@graphql-codegen/typescript-operations": "^6.1.10",
     "@graphql-tools/merge": "^9.1.10",
     "@types/node": "^22.10.7",
-    "happy-dom": "^20.11.1",
+    "happy-dom": "^21.0.4",
     "typescript": "^5.7.3",
     "ws": "^8.21.3"
   },
