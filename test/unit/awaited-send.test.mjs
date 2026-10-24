@@ -241,3 +241,55 @@ test('waitForSequence still starts its clock at once', async () => {
     client.close();
   }
 });
+
+test("a text send's timeout is its success: it is not retried, and it answers for the session", async () => {
+  const client = await offlineClient();
+  try {
+    const sequences = [];
+    client.graphql.request = async (_document, variables) => {
+      sequences.push(variables.input.sequenceNumber);
+      return { sendTextPacket: true, sendActorUpdate: true };
+    };
+    const text = { appId: APP_ID, chunk: CHUNK, uuid: UUID, text: 'hi', distance: 8 };
+    await assert.rejects(
+      client.udp.sendTextPacketAndWait(text, { timeoutMs: 30 }),
+      (error) => error.code === 'UDP_SEQUENCE_TIMEOUT',
+    );
+    assert.equal(sequences.length, 1, 'no retry of a silent success');
+
+    // The session answered, so a later refused actor update is not retried.
+    client.graphql.request = async (_document, variables) => {
+      sequences.push(variables.input.sequenceNumber);
+      client.realtime.dispatch(refusal(variables.input.sequenceNumber));
+      return { sendActorUpdate: true };
+    };
+    await assert.rejects(
+      client.udp.sendActorUpdateAndWait(update(), { timeoutMs: 200 }),
+      (error) => error.code === 'UNAUTHORIZED',
+    );
+    assert.equal(sequences.length, 2);
+  } finally {
+    client.close();
+  }
+});
+
+test("a session's first text send is retried once when it is refused", async () => {
+  const client = await offlineClient();
+  try {
+    const sequences = [];
+    client.graphql.request = async (_document, variables) => {
+      const seq = variables.input.sequenceNumber;
+      sequences.push(seq);
+      if (sequences.length === 1) client.realtime.dispatch(refusal(seq));
+      return { sendTextPacket: true };
+    };
+    const text = { appId: APP_ID, chunk: CHUNK, uuid: UUID, text: 'hi', distance: 8 };
+    await assert.rejects(
+      client.udp.sendTextPacketAndWait(text, { timeoutMs: 30 }),
+      (error) => error.code === 'UDP_SEQUENCE_TIMEOUT',
+    );
+    assert.equal(sequences.length, 2, 'refused once, then sent again and accepted silently');
+  } finally {
+    client.close();
+  }
+});

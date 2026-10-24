@@ -342,10 +342,12 @@ export class UdpAPI {
    *   relay finishing its handshake) does not shorten the wait for the echo.
    * - The first awaited send of a new session (the first connect, a reconnect,
    *   a move to another instance) is retried once with a fresh sequence number
-   *   if it fails with `UNAUTHORIZED` or `UDP_SEQUENCE_TIMEOUT`, which is how a
-   *   game server older than v0.42.0 answers a session's first messages; the
-   *   resolved notification then carries the retry's sequence number. A send
-   *   whose `sequenceNumber` you chose is not retried.
+   *   if it is refused `UNAUTHORIZED` or, for the actor and voxel updates the
+   *   server echoes, if its echo times out (`UDP_SEQUENCE_TIMEOUT`), which is
+   *   how a game server older than v0.42.0 answers a session's first messages;
+   *   the resolved notification then carries the retry's sequence number. A
+   *   send whose `sequenceNumber` you chose is not retried, and neither is the
+   *   timeout of an audio, text or event send, which is how those succeed.
    *
    * @param options - `timeoutMs`: how long to wait for the echo once the send
    *   is accepted, in milliseconds; defaults to the client's realtime
@@ -376,7 +378,7 @@ export class UdpAPI {
     input: SendActorUpdateMutationVariables['input'],
     options: { timeoutMs?: number } = {},
   ): Promise<SpatialNotification> {
-    return this.sendAndWait(input, options.timeoutMs, (request) =>
+    return this.sendAndWait(input, options.timeoutMs, true, (request) =>
       this.sendActorUpdate(request),
     );
   }
@@ -458,7 +460,7 @@ export class UdpAPI {
     },
     options: { timeoutMs?: number } = {},
   ): Promise<SpatialNotification> {
-    return this.sendAndWait(input, options.timeoutMs, (request) =>
+    return this.sendAndWait(input, options.timeoutMs, true, (request) =>
       this.sendVoxelUpdate(request),
     );
   }
@@ -528,7 +530,7 @@ export class UdpAPI {
     input: SendAudioPacketMutationVariables['input'],
     options: { timeoutMs?: number } = {},
   ): Promise<SpatialNotification> {
-    return this.sendAndWait(input, options.timeoutMs, (request) =>
+    return this.sendAndWait(input, options.timeoutMs, false, (request) =>
       this.sendAudioPacket(request),
     );
   }
@@ -665,7 +667,7 @@ export class UdpAPI {
     input: SendTextPacketMutationVariables['input'],
     options: { timeoutMs?: number } = {},
   ): Promise<SpatialNotification> {
-    return this.sendAndWait(input, options.timeoutMs, (request) =>
+    return this.sendAndWait(input, options.timeoutMs, false, (request) =>
       this.sendTextPacket(request),
     );
   }
@@ -733,7 +735,7 @@ export class UdpAPI {
     input: SendClientEventMutationVariables['input'],
     options: { timeoutMs?: number } = {},
   ): Promise<SpatialNotification> {
-    return this.sendAndWait(input, options.timeoutMs, (request) =>
+    return this.sendAndWait(input, options.timeoutMs, false, (request) =>
       this.sendClientEvent(request),
     );
   }
@@ -985,38 +987,44 @@ export class UdpAPI {
    *
    * The first awaited send of a new session (the first connect, a reconnect, or
    * a move to another instance) is retried once, with a fresh sequence number,
-   * when it fails with `UNAUTHORIZED` or `UDP_SEQUENCE_TIMEOUT`: a game server
-   * from before the one that holds a session's first messages refuses or drops
-   * them while the session's permissions load. Only when the SDK chose the
-   * sequence number, because the retry needs one of its own and a caller who
-   * chose theirs is correlating by it.
+   * when it is refused `UNAUTHORIZED` or, for a send the server echoes, when
+   * its echo times out: a game server from before the one that holds a
+   * session's first messages refuses or drops them while the session's
+   * permissions load. A send the server does not echo (audio, text, a client
+   * event) succeeds by timing out, so its timeout is never retried. Only when
+   * the SDK chose the sequence number, because the retry needs one of its own
+   * and a caller who chose theirs is correlating by it.
    */
   private async sendAndWait<T extends { sequenceNumber?: number | null }>(
     input: T,
     timeoutMs: number | undefined,
+    echoed: boolean,
     send: (request: T & { sequenceNumber: number }) => Promise<boolean>,
   ): Promise<SpatialNotification> {
     const epoch = this.subs.sessionEpoch();
-    const firstOfSession = epoch !== this.confirmedEpoch;
-    let echo: SpatialNotification;
+    const retryable =
+      epoch !== this.confirmedEpoch && input.sequenceNumber == null;
     try {
-      echo = await this.sendOnceAndWait(this.withSequence(input), timeoutMs, send);
-    } catch (error) {
-      if (
-        !firstOfSession ||
-        input.sequenceNumber != null ||
-        !isFirstSendFailure(error)
-      ) {
-        throw error;
-      }
-      echo = await this.sendOnceAndWait(
-        this.withSequence({ ...input, sequenceNumber: undefined }),
+      const echo = await this.sendOnceAndWait(
+        this.withSequence(input),
         timeoutMs,
         send,
-      );
+      ).catch((error: unknown) => {
+        if (!retryable || !isFirstSendFailure(error, echoed)) throw error;
+        return this.sendOnceAndWait(
+          this.withSequence({ ...input, sequenceNumber: undefined }),
+          timeoutMs,
+          send,
+        );
+      });
+      this.confirmedEpoch = epoch;
+      return echo;
+    } catch (error) {
+      // A send the server does not echo succeeds by timing out, and that
+      // answers for the session as well as an echo would.
+      if (!echoed && isTimeout(error)) this.confirmedEpoch = epoch;
+      throw error;
     }
-    this.confirmedEpoch = epoch;
-    return echo;
   }
 
   private async sendOnceAndWait<R extends { sequenceNumber: number }>(
@@ -1049,9 +1057,13 @@ export class UdpAPI {
 }
 
 /** How a session's first message failed on a game server that did not hold it. */
-function isFirstSendFailure(error: unknown): boolean {
+function isFirstSendFailure(error: unknown, echoed: boolean): boolean {
   return (
     error instanceof CrowdyRealtimeError &&
-    (error.code === 'UNAUTHORIZED' || error.code === 'UDP_SEQUENCE_TIMEOUT')
+    (error.code === 'UNAUTHORIZED' || (echoed && isTimeout(error)))
   );
+}
+
+function isTimeout(error: unknown): boolean {
+  return error instanceof CrowdyRealtimeError && error.code === 'UDP_SEQUENCE_TIMEOUT';
 }

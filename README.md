@@ -558,10 +558,12 @@ result immediately. The `AndWait` variants allocate a `sequenceNumber` when
 one is missing and wait for either a matching notification or
 `GenericErrorResponse`, timing the wait from when the send was accepted. The
 first awaited send of each session (the first connect, a reconnect, or a move to
-another instance) is retried once with a fresh `sequenceNumber` if it fails with
-`UNAUTHORIZED` or `UDP_SEQUENCE_TIMEOUT`, which is how a realtime server older
-than v0.42.0 answers a session's first message; a send whose `sequenceNumber`
-you chose is not retried. `sendChannelMessage` broadcasts an opaque payload on a
+another instance) is retried once with a fresh `sequenceNumber` if it is refused
+`UNAUTHORIZED` or, for the actor and voxel updates the server echoes, if it times
+out (`UDP_SEQUENCE_TIMEOUT`), which is how a realtime server older than v0.42.0
+answers a session's first message. A send whose `sequenceNumber` you chose is
+not retried, and an audio, text or event send's timeout (its normal success) is
+never retried. `sendChannelMessage` broadcasts an opaque payload on a
 channel. `sendRangedChannelMessage` publishes on a channel too, but only members
 with a live actor within `maxDistance` chunks (straight-line distance between
 chunk coordinates) of `chunk` receive it; they get the same `channelMessage`
