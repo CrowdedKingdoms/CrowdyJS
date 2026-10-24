@@ -989,7 +989,7 @@ export class RealtimeClient {
             void this.handleBinaryRelayUnavailable();
           },
           onReconnectDirective: (target) => {
-            this.moveToDirectedEndpoint(target);
+            this.onRelayReconnectDirective(target);
           },
         },
       );
@@ -1021,7 +1021,10 @@ export class RealtimeClient {
    * that prompted the call, and the existing backoff keeps retrying the URL we
    * already have.
    */
-  private async rediscoverEndpoint(reason: string): Promise<void> {
+  private async rediscoverEndpoint(
+    reason: string,
+    opts: { moveNow?: boolean } = {},
+  ): Promise<void> {
     if (!this.rediscover) return;
     if (this.rediscovering) return this.rediscovering;
 
@@ -1045,6 +1048,10 @@ export class RealtimeClient {
         // reconnect already in flight picks this up. The binary relay holds
         // its URL at construction, so it has to be rebuilt.
         this.restartBinaryRelay();
+        // A move the SERVER asked for has no reconnect in flight: the old socket
+        // is open and stays open. HTTP has already moved, so the socket must
+        // follow now rather than when the draining instance finally stops.
+        if (opts.moveNow) this.restartGraphqlSubscription();
       } catch (error) {
         this.logger.warn?.(
           `Re-discovery (${reason}) failed; continuing with ${this.wsUrl}`,
@@ -1115,6 +1122,34 @@ export class RealtimeClient {
         ? `app is served from '${target.datacenter}'`
         : 'app is served from another datacenter',
     });
+  }
+
+  /**
+   * The relay asked this client to move. A draining instance's request also ends
+   * the balancer affinity: the cookie still names the instance that is going
+   * away, and a later balancer request carrying it would be routed back there.
+   */
+  private onRelayReconnectDirective(target: {
+    httpUrl: string;
+    wsUrl: string;
+    reason: string;
+  }): void {
+    if (target.reason === 'draining') this.lbCookieStore?.clear();
+    this.moveToDirectedEndpoint(target);
+  }
+
+  /**
+   * Reopen the GraphQL websocket against the current URL. Only for a move the
+   * server asked for: the socket is still open, so nothing else would make it
+   * follow HTTP to the new instance.
+   */
+  private restartGraphqlSubscription(): void {
+    if (this.usingBinaryTransport() || !this.client) return;
+    this.release?.();
+    this.release = null;
+    this.client.dispose();
+    this.client = null;
+    if (this.desired) this.ensureSubscription();
   }
 
   private moveToDirectedEndpoint(target: {
@@ -1217,7 +1252,10 @@ export class RealtimeClient {
       this.logger.warn?.(
         'Server is draining; re-discovering a realtime endpoint',
       );
-      void this.rediscoverEndpoint('server draining');
+      // The balancer cookie names the draining instance; without it the
+      // discovery request is placed on one that is staying.
+      this.lbCookieStore?.clear();
+      void this.rediscoverEndpoint('server draining', { moveNow: true });
     }
 
     // A non-retryable connection event (e.g. APP_ID_REQUIRED, AUTH_REQUIRED)
