@@ -324,7 +324,21 @@ export interface RealtimeConfig {
 interface PendingWait {
   resolve(notification: SpatialNotification): void;
   reject(error: CrowdyRealtimeError): void;
-  timer: ReturnType<typeof setTimeout>;
+  /** Unset until the wait is started: see {@link RealtimeClient.expectSequence}. */
+  timer?: ReturnType<typeof setTimeout>;
+}
+
+/**
+ * A wait for one sequence number, registered before its send and started after
+ * it: see {@link RealtimeClient.expectSequence}.
+ */
+export interface SequenceWait {
+  /** Settles with the matching notification, or rejects as {@link RealtimeClient.waitForSequence} does. */
+  readonly promise: Promise<SpatialNotification>;
+  /** Start the timeout. Idempotent; a no-op once the wait has settled. */
+  start(): void;
+  /** Drop the wait without settling it (its send failed). */
+  cancel(): void;
 }
 
 /**
@@ -382,6 +396,7 @@ export class RealtimeClient {
   private readonly statusListeners = new Set<(status: RealtimeStatus) => void>();
   private readonly subscribers = new Map<string, UdpNotificationHandlers>();
   private readonly pending = new Map<number, PendingWait[]>();
+  private sessionEpochValue = 0;
   private nextSubscriberId = 1;
   // App this realtime session is scoped to. Sent in connectionParams so the
   // game-api only fans this app's spatial notifications to this subscription.
@@ -664,21 +679,79 @@ export class RealtimeClient {
     sequenceNumber: number,
     timeoutMs = this.waitTimeoutMs,
   ): Promise<SpatialNotification> {
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.removePending(sequenceNumber, wait);
-        reject(
-          new CrowdyRealtimeError(
-            `Timed out waiting for UDP response sequence ${sequenceNumber}`,
-            { code: 'UDP_SEQUENCE_TIMEOUT', retryable: true },
-          ),
-        );
-      }, timeoutMs);
-      const wait: PendingWait = { resolve, reject, timer };
-      const waits = this.pending.get(sequenceNumber) ?? [];
-      waits.push(wait);
-      this.pending.set(sequenceNumber, waits);
+    const wait = this.expectSequence(sequenceNumber, timeoutMs);
+    wait.start();
+    return wait.promise;
+  }
+
+  /**
+   * Register a wait for `sequenceNumber` now and start its clock later.
+   *
+   * An awaited send registers before it sends, so an echo that arrives before
+   * the send's own response is not missed, and calls `start()` once the send has
+   * been accepted: the time the send leg took (a lazy proxy-session open, the
+   * binary relay's handshake) is then not taken from the echo's window.
+   * {@link waitForSequence} is this with the clock started at once.
+   *
+   * @param sequenceNumber - The uint8 sequence the response will carry.
+   * @param timeoutMs - How long to wait once started; defaults to
+   *   {@link RealtimeConfig.waitTimeoutMs}.
+   */
+  expectSequence(
+    sequenceNumber: number,
+    timeoutMs = this.waitTimeoutMs,
+  ): SequenceWait {
+    let settled = false;
+    let wait!: PendingWait;
+    const promise = new Promise<SpatialNotification>((resolve, reject) => {
+      wait = {
+        resolve: (notification) => {
+          settled = true;
+          resolve(notification);
+        },
+        reject: (error) => {
+          settled = true;
+          reject(error);
+        },
+      };
     });
+    // A rejection can land before the caller awaits (an error response racing
+    // the send's own response); the caller still sees it through `promise`.
+    promise.catch(() => undefined);
+    const waits = this.pending.get(sequenceNumber) ?? [];
+    waits.push(wait);
+    this.pending.set(sequenceNumber, waits);
+    return {
+      promise,
+      start: () => {
+        if (settled || wait.timer !== undefined) return;
+        wait.timer = setTimeout(() => {
+          this.removePending(sequenceNumber, wait);
+          wait.reject(
+            new CrowdyRealtimeError(
+              `Timed out waiting for UDP response sequence ${sequenceNumber}`,
+              { code: 'UDP_SEQUENCE_TIMEOUT', retryable: true },
+            ),
+          );
+        }, timeoutMs);
+      },
+      cancel: () => {
+        if (wait.timer !== undefined) clearTimeout(wait.timer);
+        settled = true;
+        this.removePending(sequenceNumber, wait);
+      },
+    };
+  }
+
+  /**
+   * How many times this client's realtime session has been established: every
+   * transition into `connected` (the first connect, each reconnect) and every
+   * move to another instance counts one. An awaited send compares it with the
+   * epoch of its last confirmed response to know it is the first send of a new
+   * session.
+   */
+  sessionEpoch(): number {
+    return this.sessionEpochValue;
   }
 
   /**
@@ -1044,6 +1117,7 @@ export class RealtimeClient {
         this.wsUrl = wsUrl;
         this.binaryRelayUrl = deriveBinaryRelayUrl(wsUrl);
         this.connectFailures = 0;
+        this.sessionEpochValue += 1;
         // The graphql-ws client reads its URL through a function, so the
         // reconnect already in flight picks this up. The binary relay holds
         // its URL at construction, so it has to be rebuilt.
@@ -1164,6 +1238,7 @@ export class RealtimeClient {
     this.wsUrl = target.wsUrl;
     this.binaryRelayUrl = deriveBinaryRelayUrl(target.wsUrl);
     this.connectFailures = 0;
+    this.sessionEpochValue += 1;
     // HTTP has to follow, or the session is split across two instances and the
     // client looks connected while receiving nothing.
     this.onEndpointMove?.({ httpUrl: target.httpUrl, wsUrl: target.wsUrl });
@@ -1380,6 +1455,7 @@ export class RealtimeClient {
   private setStatus(status: RealtimeStatus): void {
     if (status === this.statusValue) return;
     this.statusValue = status;
+    if (status === 'connected') this.sessionEpochValue += 1;
     for (const listener of [...this.statusListeners]) {
       listener(status);
     }
