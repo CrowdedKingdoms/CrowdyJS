@@ -116,9 +116,11 @@ export class ActorClient {
    * applied echo — your own `ActorUpdateNotification` (the sender is included in
    * the chunk fan-out), correlated by `sequenceNumber`.
    *
-   * The **first** spatial message to a brand-new chunk may be dropped
-   * server-side while grid permissions load, so if this rejects with a timeout,
-   * simply call `join` again (the two-client tests register twice).
+   * The game server holds the first message into a newly entered region until
+   * its permissions load (realtime server v0.42.0 and later). Against an older
+   * server the first awaited send of each session is retried once (see
+   * `UdpAPI.sendActorUpdateAndWait`); if `join` still rejects with a timeout,
+   * call it again.
    *
    * @param chunk - The chunk to enter, `{ x, y, z }` with each axis a signed
    *   int64 decimal string. A chunk is a 16x16x16 voxel cube.

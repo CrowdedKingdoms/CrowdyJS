@@ -83,14 +83,19 @@ import { encodeBase64 } from '../utils.js';
  *
  * Spatial caveats: a `sequenceNumber` is a uint8 (0-255) used for
  * **correlation only** — not an idempotency key, and the server does not dedupe
- * replays. The **first** spatial message to a brand-new chunk may be dropped
- * server-side while grid permissions load, so clients should re-send (the
- * two-client tests register twice for this reason). To receive any
- * `...AndWait` echo or notification you must have an active {@link subscribe}.
+ * replays. The game server holds a session's first messages, and the first
+ * message into a newly entered region, until the permissions they need have
+ * loaded (realtime server v0.42.0 and later); an older server dropped or
+ * refused them. Against one, the SDK retries the first awaited send of each
+ * session once (see {@link sendActorUpdateAndWait}), but a plain `send*` may
+ * still be lost. To receive any `...AndWait` echo or notification you must have
+ * an active {@link subscribe}.
  */
 export class UdpAPI {
   private readonly sequences = new SequenceAllocator();
   private readonly inFlightActorUpdates = new Set<Promise<unknown>>();
+  /** The session epoch of the last awaited send that was answered. */
+  private confirmedEpoch = -1;
 
   constructor(
     private gql: GraphQLClient,
@@ -331,8 +336,20 @@ export class UdpAPI {
    * @param input - {@link ActorUpdateRequestInput} (see {@link sendActorUpdate}
    *   for field units/encoding). Omit `sequenceNumber` to let the SDK allocate
    *   one.
-   * @param options - `timeoutMs`: how long to wait for the echo, in
-   *   milliseconds; defaults to the client's realtime `waitTimeoutMs` (5000).
+   * Every `send*AndWait` behaves as follows:
+   * - `timeoutMs` counts from when the send was accepted, not from the call, so
+   *   a slow send leg (the first send opening the proxy session, the binary
+   *   relay finishing its handshake) does not shorten the wait for the echo.
+   * - The first awaited send of a new session (the first connect, a reconnect,
+   *   a move to another instance) is retried once with a fresh sequence number
+   *   if it fails with `UNAUTHORIZED` or `UDP_SEQUENCE_TIMEOUT`, which is how a
+   *   game server older than v0.42.0 answers a session's first messages; the
+   *   resolved notification then carries the retry's sequence number. A send
+   *   whose `sequenceNumber` you chose is not retried.
+   *
+   * @param options - `timeoutMs`: how long to wait for the echo once the send
+   *   is accepted, in milliseconds; defaults to the client's realtime
+   *   `waitTimeoutMs` (5000).
    * @returns The correlated {@link SpatialNotification} (your own
    *   `ActorUpdateNotification` self-echo).
    * @throws {CrowdyGraphQLError} if the underlying send is rejected.
@@ -340,7 +357,8 @@ export class UdpAPI {
    *   request timeout.
    * @throws {CrowdyRealtimeError} if no echo arrives within `timeoutMs`
    *   (`code === 'UDP_SEQUENCE_TIMEOUT'`, retryable), or the server returns a
-   *   matching `GenericErrorResponse` (its `code` is the server's `errorCode`).
+   *   matching `GenericErrorResponse` (its `code` is the server's `errorCode`),
+   *   after the one retry described above when it applies.
    * @example
    * ```ts
    * const unsubscribe = client.udp.subscribe({}, appId); // echoes need an open WS
@@ -358,13 +376,9 @@ export class UdpAPI {
     input: SendActorUpdateMutationVariables['input'],
     options: { timeoutMs?: number } = {},
   ): Promise<SpatialNotification> {
-    const request = this.withSequence(input);
-    const wait = this.subs.waitForSequence(request.sequenceNumber, options.timeoutMs);
-    await this.sendActorUpdate(request);
-    // Nothing can be echoed that has not left: the bundled relay path holds a
-    // send for up to bundleWindowMs, so put it on the wire before waiting.
-    this.subs.flushSends();
-    return wait;
+    return this.sendAndWait(input, options.timeoutMs, (request) =>
+      this.sendActorUpdate(request),
+    );
   }
 
   /**
@@ -444,13 +458,9 @@ export class UdpAPI {
     },
     options: { timeoutMs?: number } = {},
   ): Promise<SpatialNotification> {
-    const request = this.withSequence(input);
-    const wait = this.subs.waitForSequence(request.sequenceNumber, options.timeoutMs);
-    await this.sendVoxelUpdate(request);
-    // Nothing can be echoed that has not left: the bundled relay path holds a
-    // send for up to bundleWindowMs, so put it on the wire before waiting.
-    this.subs.flushSends();
-    return wait;
+    return this.sendAndWait(input, options.timeoutMs, (request) =>
+      this.sendVoxelUpdate(request),
+    );
   }
 
   /**
@@ -518,13 +528,9 @@ export class UdpAPI {
     input: SendAudioPacketMutationVariables['input'],
     options: { timeoutMs?: number } = {},
   ): Promise<SpatialNotification> {
-    const request = this.withSequence(input);
-    const wait = this.subs.waitForSequence(request.sequenceNumber, options.timeoutMs);
-    await this.sendAudioPacket(request);
-    // Nothing can be echoed that has not left: the bundled relay path holds a
-    // send for up to bundleWindowMs, so put it on the wire before waiting.
-    this.subs.flushSends();
-    return wait;
+    return this.sendAndWait(input, options.timeoutMs, (request) =>
+      this.sendAudioPacket(request),
+    );
   }
 
   /**
@@ -659,13 +665,9 @@ export class UdpAPI {
     input: SendTextPacketMutationVariables['input'],
     options: { timeoutMs?: number } = {},
   ): Promise<SpatialNotification> {
-    const request = this.withSequence(input);
-    const wait = this.subs.waitForSequence(request.sequenceNumber, options.timeoutMs);
-    await this.sendTextPacket(request);
-    // Nothing can be echoed that has not left: the bundled relay path holds a
-    // send for up to bundleWindowMs, so put it on the wire before waiting.
-    this.subs.flushSends();
-    return wait;
+    return this.sendAndWait(input, options.timeoutMs, (request) =>
+      this.sendTextPacket(request),
+    );
   }
 
   /**
@@ -731,13 +733,9 @@ export class UdpAPI {
     input: SendClientEventMutationVariables['input'],
     options: { timeoutMs?: number } = {},
   ): Promise<SpatialNotification> {
-    const request = this.withSequence(input);
-    const wait = this.subs.waitForSequence(request.sequenceNumber, options.timeoutMs);
-    await this.sendClientEvent(request);
-    // Nothing can be echoed that has not left: the bundled relay path holds a
-    // send for up to bundleWindowMs, so put it on the wire before waiting.
-    this.subs.flushSends();
-    return wait;
+    return this.sendAndWait(input, options.timeoutMs, (request) =>
+      this.sendClientEvent(request),
+    );
   }
 
   /**
@@ -977,6 +975,69 @@ export class UdpAPI {
     return this.subs.subscribe(handlers, appId);
   }
 
+  /**
+   * What every `send*AndWait` does.
+   *
+   * The wait is registered before the send, so an echo that beats the send's
+   * own response is not missed, and its clock starts once the send has been
+   * accepted, so a lazy proxy-session open or the relay's handshake on the send
+   * leg is not taken from the echo's window.
+   *
+   * The first awaited send of a new session (the first connect, a reconnect, or
+   * a move to another instance) is retried once, with a fresh sequence number,
+   * when it fails with `UNAUTHORIZED` or `UDP_SEQUENCE_TIMEOUT`: a game server
+   * from before the one that holds a session's first messages refuses or drops
+   * them while the session's permissions load. Only when the SDK chose the
+   * sequence number, because the retry needs one of its own and a caller who
+   * chose theirs is correlating by it.
+   */
+  private async sendAndWait<T extends { sequenceNumber?: number | null }>(
+    input: T,
+    timeoutMs: number | undefined,
+    send: (request: T & { sequenceNumber: number }) => Promise<boolean>,
+  ): Promise<SpatialNotification> {
+    const epoch = this.subs.sessionEpoch();
+    const firstOfSession = epoch !== this.confirmedEpoch;
+    let echo: SpatialNotification;
+    try {
+      echo = await this.sendOnceAndWait(this.withSequence(input), timeoutMs, send);
+    } catch (error) {
+      if (
+        !firstOfSession ||
+        input.sequenceNumber != null ||
+        !isFirstSendFailure(error)
+      ) {
+        throw error;
+      }
+      echo = await this.sendOnceAndWait(
+        this.withSequence({ ...input, sequenceNumber: undefined }),
+        timeoutMs,
+        send,
+      );
+    }
+    this.confirmedEpoch = epoch;
+    return echo;
+  }
+
+  private async sendOnceAndWait<R extends { sequenceNumber: number }>(
+    request: R,
+    timeoutMs: number | undefined,
+    send: (request: R) => Promise<boolean>,
+  ): Promise<SpatialNotification> {
+    const wait = this.subs.expectSequence(request.sequenceNumber, timeoutMs);
+    try {
+      await send(request);
+    } catch (error) {
+      wait.cancel();
+      throw error;
+    }
+    // Nothing can be echoed that has not left: the bundled relay path holds a
+    // send for up to bundleWindowMs, so put it on the wire before waiting.
+    this.subs.flushSends();
+    wait.start();
+    return wait.promise;
+  }
+
   private withSequence<T extends { sequenceNumber?: number | null }>(
     input: T,
   ): T & { sequenceNumber: number } {
@@ -985,4 +1046,12 @@ export class UdpAPI {
       sequenceNumber: input.sequenceNumber ?? this.sequences.next(),
     };
   }
+}
+
+/** How a session's first message failed on a game server that did not hold it. */
+function isFirstSendFailure(error: unknown): boolean {
+  return (
+    error instanceof CrowdyRealtimeError &&
+    (error.code === 'UNAUTHORIZED' || error.code === 'UDP_SEQUENCE_TIMEOUT')
+  );
 }
