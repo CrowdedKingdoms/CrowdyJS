@@ -1,13 +1,18 @@
 import { CrowdyNetworkError, CrowdyTimeoutError } from './errors.js';
 
 /**
- * In-memory store for the Caddy load-balancer sticky cookie (`cks_ga`).
+ * In-memory store for the game load balancer's sticky cookie (`cks_ga`).
  *
- * CKS shared game LBs set `cks_ga` on the first HTTP response so GraphQL
+ * CKS game balancers set `cks_ga` on the first HTTP response so GraphQL
  * mutations and the graphql-transport-ws upgrade for the same client land on
  * one game-api. Browsers persist this automatically; Node `fetch` and `ws` do
  * not — this store bridges that gap for bots, e2e tests, and other non-browser
  * runtimes.
+ *
+ * A draining game-api expires the cookie on its responses, and a client that
+ * is told to move clears it, so the next balancer request is placed on an
+ * instance that is staying. An expired cookie is honoured here the way a
+ * browser honours it.
  */
 const CKS_GA_NAME = 'cks_ga';
 
@@ -19,7 +24,16 @@ export class LbCookieStore {
     return this.value ? `${CKS_GA_NAME}=${this.value}` : null;
   }
 
-  /** Parse `Set-Cookie` response headers and retain `cks_ga` when present. */
+  /** Forget the affinity: the next balancer request is placed afresh. */
+  clear(): void {
+    this.value = null;
+  }
+
+  /**
+   * Parse `Set-Cookie` response headers: retain `cks_ga` when present, forget it
+   * when the response expires it (an empty value, `Max-Age` of zero or less, or
+   * an `Expires` in the past).
+   */
   ingestSetCookie(headers: Headers): void {
     const setCookies =
       typeof headers.getSetCookie === 'function'
@@ -28,7 +42,8 @@ export class LbCookieStore {
     for (const raw of setCookies) {
       const pair = raw.split(';', 1)[0]?.trim();
       if (!pair?.startsWith(`${CKS_GA_NAME}=`)) continue;
-      this.value = pair.slice(CKS_GA_NAME.length + 1);
+      const value = pair.slice(CKS_GA_NAME.length + 1);
+      this.value = value === '' || isExpired(raw) ? null : value;
     }
   }
 
@@ -85,6 +100,24 @@ function isAbortError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
   const name = (error as { name?: unknown }).name;
   return name === 'AbortError' || name === 'TimeoutError';
+}
+
+/** True when a `Set-Cookie` line's attributes say the cookie is already gone. */
+function isExpired(setCookie: string, now = Date.now()): boolean {
+  for (const part of setCookie.split(';').slice(1)) {
+    const eq = part.indexOf('=');
+    if (eq < 0) continue;
+    const name = part.slice(0, eq).trim().toLowerCase();
+    const value = part.slice(eq + 1).trim();
+    if (name === 'max-age') {
+      const seconds = Number.parseInt(value, 10);
+      if (Number.isFinite(seconds) && seconds <= 0) return true;
+    } else if (name === 'expires') {
+      const at = Date.parse(value);
+      if (Number.isFinite(at) && at <= now) return true;
+    }
+  }
+  return false;
 }
 
 function parseSetCookieFallback(header: string | null): string[] {
