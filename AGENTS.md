@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.18.0** (18.0.0 was published only as
+**Current package:** `package.json` is **18.19.0** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -29,6 +29,18 @@ directly. So, before adding a wrapper:
 - 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
+
+**18.19.0: a draining instance moves every client, without splitting it (2026-10-24).** The
+game balancers move to HAProxy, which drains an instance without cutting its sockets, and ck-api
+(cks-game-api #581) now tells every client of a draining instance to move: `SERVER_DRAINING`
+on `udpNotifications`, a relay `reconnect` with reason `draining`, and an expired `cks_ga` on
+every HTTP response. The SDK follows in one step. `LbCookieStore` forgets `cks_ga` when a
+response expires it (empty value, `Max-Age` of zero, a past `Expires`) and has `clear()`; a
+draining move clears it, so the next balancer request is placed on an instance that is staying.
+After `SERVER_DRAINING` the rediscovery reopens the GraphQL websocket at once instead of on the
+next reconnect: the draining instance no longer drops it, and HTTP had already moved. A relay
+directive already moved HTTP and socket together. `schema.gql` carries the new
+`SERVER_DRAINING` description.
 
 **18.18.0: text chat and direct-message keys, the recording switch, managed players' input logs
 (2026-10-23).** `schema.gql` is ck-api `dev`'s v2.55.0 (cks-game-api #569 on #566/#567).

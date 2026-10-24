@@ -135,6 +135,80 @@ test('a draining server moves the client immediately', async () => {
   assert.equal(calls.length, 1);
 });
 
+/** A manager whose GraphQL socket is open, with the balancer cookie store watched. */
+function makeOpenManager(config = {}) {
+  const seen = { cleared: 0, disposed: 0, opened: 0, httpMoves: [] };
+  const { manager, calls } = makeManager({
+    lbCookieStore: {
+      clear: () => {
+        seen.cleared += 1;
+      },
+      headerValue: () => null,
+    },
+    onEndpointMove: (target) => seen.httpMoves.push(target.httpUrl),
+    ...config,
+  });
+  manager.desired = true;
+  manager.client = {
+    dispose: () => {
+      seen.disposed += 1;
+    },
+  };
+  manager.ensureSubscription = () => {
+    seen.opened += 1;
+  };
+  return { manager, calls, seen };
+}
+
+test('a draining server ends the balancer affinity and moves the open socket at once', async () => {
+  // The draining instance no longer drops the socket, and HTTP has already moved
+  // with the rediscovery, so waiting for a reconnect would split the session
+  // across two instances until the instance finally stopped.
+  const { manager, calls, seen } = makeOpenManager();
+  manager.dispatch({
+    __typename: 'RealtimeConnectionEvent',
+    code: SERVER_DRAINING_CODE,
+    retryable: true,
+    message: 'draining',
+  });
+  await new Promise((r) => setTimeout(r, 10));
+
+  assert.equal(calls.length, 1);
+  assert.equal(seen.cleared, 1);
+  assert.equal(manager.wsUrl, 'wss://ck-api-2.example.test/graphql');
+  assert.equal(seen.disposed, 1);
+  assert.equal(seen.opened, 1);
+});
+
+test('a rediscovery after failures does not reopen a socket on its own', async () => {
+  const { manager, seen } = makeOpenManager();
+  await manager.rediscoverEndpoint('repeated connection failures');
+  assert.equal(manager.wsUrl, 'wss://ck-api-2.example.test/graphql');
+  assert.equal(seen.disposed, 0);
+  assert.equal(seen.cleared, 0);
+});
+
+test('a relay directive to drain ends the balancer affinity; a rebalance keeps it', async () => {
+  const draining = makeOpenManager();
+  draining.manager.onRelayReconnectDirective({
+    httpUrl: 'https://ck-api-3.example.test',
+    wsUrl: 'wss://ck-api-3.example.test/graphql',
+    reason: 'draining',
+  });
+  assert.equal(draining.seen.cleared, 1);
+  assert.deepEqual(draining.seen.httpMoves, ['https://ck-api-3.example.test']);
+  assert.equal(draining.manager.wsUrl, 'wss://ck-api-3.example.test/graphql');
+
+  const rebalance = makeOpenManager();
+  rebalance.manager.onRelayReconnectDirective({
+    httpUrl: 'https://ck-api-3.example.test',
+    wsUrl: 'wss://ck-api-3.example.test/graphql',
+    reason: 'rebalance',
+  });
+  assert.equal(rebalance.seen.cleared, 0);
+  assert.deepEqual(rebalance.seen.httpMoves, ['https://ck-api-3.example.test']);
+});
+
 test('a drain event does not stop the client wanting a connection', async () => {
   // Unlike AUTH_REQUIRED, draining means "go elsewhere", not "give up".
   const { manager } = makeManager();
