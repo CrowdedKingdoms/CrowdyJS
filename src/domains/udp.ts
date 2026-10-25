@@ -88,8 +88,10 @@ import { encodeBase64 } from '../utils.js';
  * loaded (realtime server v0.42.0 and later); an older server dropped or
  * refused them. Against one, the SDK retries the first awaited send of each
  * session once (see {@link sendActorUpdateAndWait}), but a plain `send*` may
- * still be lost. To receive any `...AndWait` echo or notification you must have
- * an active {@link subscribe}.
+ * still be lost. An awaited actor or voxel update still waiting when the client
+ * reconnects or moves to another instance is resent as soon as the new session
+ * is up. To receive any `...AndWait` echo or notification you must have an
+ * active {@link subscribe}.
  */
 export class UdpAPI {
   private readonly sequences = new SequenceAllocator();
@@ -348,6 +350,10 @@ export class UdpAPI {
    *   the resolved notification then carries the retry's sequence number. A
    *   send whose `sequenceNumber` you chose is not retried, and neither is the
    *   timeout of an audio, text or event send, which is how those succeed.
+   * - An actor or voxel update still waiting when the client reconnects or moves
+   *   to another instance is resent, with a fresh sequence number, as soon as
+   *   the new session is up, rather than at its timeout: its echo went to the
+   *   session the client left. That is the send's one retry.
    *
    * @param options - `timeoutMs`: how long to wait for the echo once the send
    *   is accepted, in milliseconds; defaults to the client's realtime
@@ -991,9 +997,14 @@ export class UdpAPI {
    * its echo times out: a game server from before the one that holds a
    * session's first messages refuses or drops them while the session's
    * permissions load. A send the server does not echo (audio, text, a client
-   * event) succeeds by timing out, so its timeout is never retried. Only when
-   * the SDK chose the sequence number, because the retry needs one of its own
-   * and a caller who chose theirs is correlating by it.
+   * event) succeeds by timing out, so its timeout is never retried.
+   *
+   * A send the server echoes that is still waiting when a new session is
+   * established is resent then, once, rather than at its timeout: its echo went
+   * to the session the client left. That retry is the send's one retry.
+   *
+   * Only when the SDK chose the sequence number, because a retry needs one of
+   * its own and a caller who chose theirs is correlating by it.
    */
   private async sendAndWait<T extends { sequenceNumber?: number | null }>(
     input: T,
@@ -1002,27 +1013,36 @@ export class UdpAPI {
     send: (request: T & { sequenceNumber: number }) => Promise<boolean>,
   ): Promise<SpatialNotification> {
     const epoch = this.subs.sessionEpoch();
-    const retryable =
-      epoch !== this.confirmedEpoch && input.sequenceNumber == null;
+    const ownSequence = input.sequenceNumber == null;
+    const retryable = epoch !== this.confirmedEpoch && ownSequence;
+    // The session the answered attempt went to.
+    let sentEpoch = epoch;
+    const again = () => {
+      sentEpoch = this.subs.sessionEpoch();
+      return this.sendOnceAndWait(
+        this.withSequence({ ...input, sequenceNumber: undefined }),
+        timeoutMs,
+        send,
+        false,
+      );
+    };
     try {
       const echo = await this.sendOnceAndWait(
         this.withSequence(input),
         timeoutMs,
         send,
+        echoed && ownSequence,
       ).catch((error: unknown) => {
+        if (error instanceof SessionChanged) return again();
         if (!retryable || !isFirstSendFailure(error, echoed)) throw error;
-        return this.sendOnceAndWait(
-          this.withSequence({ ...input, sequenceNumber: undefined }),
-          timeoutMs,
-          send,
-        );
+        return again();
       });
-      this.confirmedEpoch = epoch;
+      this.confirmedEpoch = sentEpoch;
       return echo;
     } catch (error) {
       // A send the server does not echo succeeds by timing out, and that
       // answers for the session as well as an echo would.
-      if (!echoed && isTimeout(error)) this.confirmedEpoch = epoch;
+      if (!echoed && isTimeout(error)) this.confirmedEpoch = sentEpoch;
       throw error;
     }
   }
@@ -1031,6 +1051,7 @@ export class UdpAPI {
     request: R,
     timeoutMs: number | undefined,
     send: (request: R) => Promise<boolean>,
+    endOnNewSession: boolean,
   ): Promise<SpatialNotification> {
     const wait = this.subs.expectSequence(request.sequenceNumber, timeoutMs);
     try {
@@ -1043,7 +1064,22 @@ export class UdpAPI {
     // send for up to bundleWindowMs, so put it on the wire before waiting.
     this.subs.flushSends();
     wait.start();
-    return wait.promise;
+    if (!endOnNewSession) return wait.promise;
+    // A session established while this waits (a reconnect, or the new instance
+    // after a move) will not carry the echo, which went to the session the
+    // client left: end the wait then rather than at its timeout. onStatus
+    // reports the current status at once; only a later `connected` counts.
+    const epoch = this.subs.sessionEpoch();
+    let stop: () => void = () => undefined;
+    const changed = new Promise<never>((_, reject) => {
+      stop = this.subs.onStatus((status) => {
+        if (status !== 'connected' || this.subs.sessionEpoch() === epoch) return;
+        wait.cancel();
+        reject(new SessionChanged());
+      });
+    });
+    changed.catch(() => undefined);
+    return Promise.race([wait.promise, changed]).finally(() => stop());
   }
 
   private withSequence<T extends { sequenceNumber?: number | null }>(
@@ -1055,6 +1091,9 @@ export class UdpAPI {
     };
   }
 }
+
+/** A new realtime session was established while an echoed send waited. */
+class SessionChanged extends Error {}
 
 /** How a session's first message failed on a game server that did not hold it. */
 function isFirstSendFailure(error: unknown, echoed: boolean): boolean {
