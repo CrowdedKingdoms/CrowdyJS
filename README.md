@@ -561,7 +561,10 @@ first awaited send of each session (the first connect, a reconnect, or a move to
 another instance) is retried once with a fresh `sequenceNumber` if it is refused
 `UNAUTHORIZED` or, for the actor and voxel updates the server echoes, if it times
 out (`UDP_SEQUENCE_TIMEOUT`), which is how a realtime server older than v0.42.0
-answers a session's first message. A send whose `sequenceNumber` you chose is
+answers a session's first message. An actor or voxel update still waiting when
+the client reconnects or moves to another instance is resent as soon as the new
+session is up, rather than at its timeout, since its echo went to the session it
+left; that is its one retry. A send whose `sequenceNumber` you chose is
 not retried, and an audio, text or event send's timeout (its normal success) is
 never retried. `sendChannelMessage` broadcasts an opaque payload on a
 channel. `sendRangedChannelMessage` publishes on a channel too, but only members
