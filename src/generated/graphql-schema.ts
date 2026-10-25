@@ -4882,7 +4882,7 @@ export type ManagedPlayer = {
 export type ManagedPlayerSpecInput = {
   /** The id your organization knows the player by. */
   externalId: Scalars['String']['input'];
-  /** Display name (at most 64 characters). */
+  /** Display name (at most 64 characters, none of them control, line-break or bidirectional-formatting characters). */
   gamertag?: InputMaybe<Scalars['String']['input']>;
 };
 
@@ -4915,7 +4915,7 @@ export type MintManagedPlayerTokenInput = {
   appId: Scalars['BigInt']['input'];
   /** The id your organization knows the player by (1-256 characters, no control characters). Use your own stable account id, not an email address. The first sign-in creates the player. */
   externalId: Scalars['String']['input'];
-  /** Display name (at most 64 characters). Set when the player is created; later sign-ins leave it (rename with updateManagedPlayer). */
+  /** Display name (at most 64 characters, none of them control, line-break or bidirectional-formatting characters). Set when the player is created; later sign-ins leave it (rename with updateManagedPlayer). */
   gamertag?: InputMaybe<Scalars['String']['input']>;
   /** How long this sign-in lasts, in seconds (default and maximum: the org's settings). The app token refreshes (refreshAppToken) until then; after it, sign the player in again. */
   sessionTtlSeconds?: InputMaybe<Scalars['Int']['input']>;
@@ -9134,7 +9134,7 @@ export type RegisterUserInput = {
   attestAgeOfMajority?: InputMaybe<Scalars['Boolean']['input']>;
   /** Email for the new account; the confirmation email is sent here. */
   email: Scalars['String']['input'];
-  /** Optional initial public gamertag (min 3 characters). Can be set later via updateGamertag. */
+  /** Optional initial public gamertag (3 to 64 characters, none of them control, line-break or bidirectional-formatting characters). Can be set later via updateGamertag. */
   gamertag?: InputMaybe<Scalars['String']['input']>;
   /** Password for the new account (min 8 characters). */
   password: Scalars['String']['input'];
@@ -10298,9 +10298,9 @@ export type UpdateChunkStateInput = {
 };
 
 export type UpdateGamertagInput = {
-  /** Discriminator paired with `gamertag` (max 128 characters) to form a unique handle. */
+  /** Discriminator paired with `gamertag` (max 128 characters, the same characters refused as in `gamertag`) to form a unique handle. */
   disambiguation: Scalars['String']['input'];
-  /** New gamertag (max 64 characters). Must be unique in combination with `disambiguation`. */
+  /** New gamertag (max 64 characters, none of them control, line-break or bidirectional-formatting characters). Must be unique in combination with `disambiguation`. */
   gamertag: Scalars['String']['input'];
 };
 
@@ -10319,10 +10319,10 @@ export type UpdateGroupRoleInput = {
 export type UpdateManagedPlayerInput = {
   /** True disables the player (no sign-in; every session ends now, Buddy and ck-exec included). False enables a player the org disabled. */
   disabled?: InputMaybe<Scalars['Boolean']['input']>;
-  /** New disambiguation (at most 128 characters). */
+  /** New disambiguation (at most 128 characters, the same characters refused as in the display name). */
   disambiguation?: InputMaybe<Scalars['String']['input']>;
   externalId: Scalars['String']['input'];
-  /** New display name. */
+  /** New display name (at most 64 characters, none of them control, line-break or bidirectional-formatting characters). */
   gamertag?: InputMaybe<Scalars['String']['input']>;
   orgId: Scalars['BigInt']['input'];
 };

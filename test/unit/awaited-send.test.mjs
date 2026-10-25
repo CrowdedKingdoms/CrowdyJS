@@ -228,6 +228,103 @@ test('a send whose sequence number the caller chose is never retried', async () 
   }
 });
 
+/**
+ * A send whose session ends while it waits: its echo goes to the session the
+ * client left. Seen on dev on 2026-10-24, answered by the retry only after its
+ * 5 s timeout (OI-2026-10-25-002). `answering` decides whether a send's echo
+ * comes back; the first send confirms the session, so the first-send rule
+ * cannot be what retries.
+ */
+async function confirmedClient() {
+  const client = await offlineClient();
+  const state = { answering: true };
+  const sequences = stubSend(client, {
+    reply: (seq) => {
+      if (state.answering) client.realtime.dispatch(echo(seq));
+    },
+  });
+  await client.udp.sendActorUpdateAndWait(update(), { timeoutMs: 200 });
+  state.answering = false;
+  return { client, state, sequences };
+}
+
+test('an echoed send still waiting when a new session connects is resent then, not at its timeout', async () => {
+  const { client, state, sequences } = await confirmedClient();
+  try {
+    const started = Date.now();
+    const pending = client.udp.sendActorUpdateAndWait(update(), { timeoutMs: 5000 });
+    await sleep(20);
+    state.answering = true;
+    newSession(client);
+    const result = await pending;
+    assert.ok(Date.now() - started < 1000, `answered after ${Date.now() - started} ms`);
+    assert.equal(sequences.length, 3);
+    assert.notEqual(sequences[1], sequences[2]);
+    assert.equal(result.sequenceNumber, sequences[2]);
+    assert.equal(client.realtime.pending.size, 0, 'the first wait was dropped, not left to time out');
+  } finally {
+    client.close();
+  }
+});
+
+test('a move resends when the new instance\'s session connects, not when the move starts', async () => {
+  const { client, state, sequences } = await confirmedClient();
+  try {
+    client.realtime.setStatus('connected');
+    const pending = client.udp.sendActorUpdateAndWait(update(), { timeoutMs: 5000 });
+    await sleep(20);
+    client.realtime.moveToDirectedEndpoint({
+      httpUrl: 'https://other.invalid/graphql',
+      wsUrl: 'wss://other.invalid/graphql',
+      reason: 'draining',
+    });
+    await sleep(20);
+    assert.equal(sequences.length, 2, 'nothing resent while the new session is not up');
+    state.answering = true;
+    client.realtime.setStatus('connecting');
+    client.realtime.setStatus('connected');
+    const result = await pending;
+    assert.equal(sequences.length, 3);
+    assert.equal(result.sequenceNumber, sequences[2]);
+  } finally {
+    client.close();
+  }
+});
+
+test('the resend after a new session is the one retry', async () => {
+  const { client, sequences } = await confirmedClient();
+  try {
+    const pending = client.udp.sendActorUpdateAndWait(update(), { timeoutMs: 100 });
+    await sleep(20);
+    newSession(client);
+    await assert.rejects(pending, (error) => error.code === 'UDP_SEQUENCE_TIMEOUT');
+    assert.equal(sequences.length, 3, 'the confirming send, the lost one, its resend: no more');
+  } finally {
+    client.close();
+  }
+});
+
+test('a text send, or a sequence the caller chose, is not resent on a new session', async () => {
+  const { client, sequences } = await confirmedClient();
+  try {
+    const text = { appId: APP_ID, chunk: CHUNK, uuid: UUID, text: 'hi', distance: 8 };
+    client.graphql.request = async (_document, variables) => {
+      sequences.push(variables.input.sequenceNumber);
+      return { sendTextPacket: true, sendActorUpdate: true };
+    };
+    const silent = client.udp.sendTextPacketAndWait(text, { timeoutMs: 100 });
+    const chosen = client.udp.sendActorUpdateAndWait(update({ sequenceNumber: 42 }), { timeoutMs: 100 });
+    await sleep(20);
+    newSession(client);
+    await assert.rejects(silent, (error) => error.code === 'UDP_SEQUENCE_TIMEOUT');
+    await assert.rejects(chosen, (error) => error.code === 'UDP_SEQUENCE_TIMEOUT');
+    assert.equal(sequences.length, 3, 'the confirming send, then one each');
+    assert.equal(sequences[2], 42);
+  } finally {
+    client.close();
+  }
+});
+
 test('waitForSequence still starts its clock at once', async () => {
   const client = await offlineClient();
   try {
