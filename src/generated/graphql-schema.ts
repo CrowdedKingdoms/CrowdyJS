@@ -10148,7 +10148,7 @@ export enum UdpErrorCode {
   PasswordTooShort = 'PASSWORD_TOO_SHORT',
   /** The app-scoped gameplay token has expired. Refresh it (same app, via refreshAppToken) before it lapses, or re-portal through the Overworld for a fresh token, then re-authorize the realtime session. */
   TokenExpired = 'TOKEN_EXPIRED',
-  /** The caller lacks the runtime/grid permission required for this action. Grid permissions can load asynchronously, so the first message to a newly entered region may transiently return this — retry shortly. */
+  /** The caller lacks the runtime/grid permission required for this action. A message sent right after connecting or entering a new region waits for that permission to load rather than being refused, so this means the permission is missing or could not be confirmed in time; after a move or a new session, one retry is enough to tell the two apart. */
   Unauthorized = 'UNAUTHORIZED',
   /** Unspecified server error (1). Retry; if it persists, report it. */
   UnknownError = 'UNKNOWN_ERROR',
