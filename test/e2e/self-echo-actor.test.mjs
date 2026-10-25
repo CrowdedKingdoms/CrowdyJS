@@ -71,13 +71,10 @@ test(
       const unsubscribe = client.udp.subscribe({}, appId);
       await sleep(2000);
 
-      // The first spatial message into a fresh chunk is dropped while the server
-      // loads grid permissions, so register, wait, then do the awaited send.
-      await client.udp.sendActorUpdate({
-        appId, chunk: CHUNK, distance: 8, uuid: TEST_UUID, state: 'AA==', sequenceNumber: 1,
-      });
-      await sleep(1500);
-
+      // No warm-up send: the realtime server holds a session's first message,
+      // and the first message into a new region, until their permissions load
+      // (v0.42.0). The sequence number is the test's own, so the SDK does not
+      // retry it either: this send is answered the first time or the test fails.
       const echo = await client.udp.sendActorUpdateAndWait({
         appId, chunk: CHUNK, distance: 8, uuid: TEST_UUID, state: 'AA==', sequenceNumber: 42,
       });
