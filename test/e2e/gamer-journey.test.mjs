@@ -90,17 +90,16 @@ test('gamer: avatars, host, state, actors, idempotency', { skip, timeout: 90_000
   }
 });
 
-test('gamer: dual-success spatial model (accept -> async NAK)', { skip, timeout: 90_000 }, async () => {
+test('gamer: dual-success model (accept -> async NAK)', { skip, timeout: 90_000 }, async () => {
   const { createCrowdyClient } = await loadSdk();
   const { appId, clients } = await provisionClients(createCrowdyClient, 1);
   const client = clients[0];
   const cleanup = [];
   try {
-    const received = { genericErrors: [], voxelUpdates: [] };
+    const received = { genericErrors: [] };
     cleanup.push(
       client.udp.subscribe(
         {
-          voxelUpdate: (n) => received.voxelUpdates.push(n),
           genericError: (e) => received.genericErrors.push(e),
         },
         appId,
@@ -108,17 +107,18 @@ test('gamer: dual-success spatial model (accept -> async NAK)', { skip, timeout:
     );
     await sleep(2000); // let the WS connect + subscribe
 
-    // Send a voxel update addressed to a chunk far outside any granted grid.
-    // The mutation returns true (the datagram was ACCEPTED for sending), but the
-    // world rejects it asynchronously with a GenericErrorResponse — the
-    // dual-success model.
-    const accepted = await client.udp.sendVoxelUpdate({
-      appId,
-      chunk: { x: '5000000', y: '5000000', z: '5000000' },
+    // Send a channel message to a channel this player does not belong to. The
+    // mutation returns true (the datagram was ACCEPTED for sending), but the
+    // realtime server refuses it asynchronously with a GenericErrorResponse — the
+    // dual-success model. Until 2026-10-24 this sent a voxel edit to a chunk "far
+    // outside any granted grid", but every app's world grid covers every chunk: what
+    // it observed was the transient refusal of the first message into a new region,
+    // which the realtime server stopped sending in v0.42.0 (it holds the message
+    // until the region's permissions load).
+    const accepted = await client.udp.sendChannelMessage({
+      channelId: '999999999999',
       uuid: randomActorUuid(),
-      voxel: { x: 0, y: 0, z: 0 },
-      voxelType: 1,
-      voxelState: 'AA==',
+      payload: Buffer.from('dual-success').toString('base64'),
       sequenceNumber: 7,
     });
     assert.equal(accepted, true, 'send mutation returns true (accepted for sending)');
@@ -126,7 +126,7 @@ test('gamer: dual-success spatial model (accept -> async NAK)', { skip, timeout:
     await sleep(NOTIFY_WAIT_MS);
     assert.ok(
       received.genericErrors.length > 0,
-      `an out-of-grid send should surface an async GenericErrorResponse (dual-success). diagnostics=${JSON.stringify(received)}`,
+      `a send to a channel the player is not in should surface an async GenericErrorResponse (dual-success). diagnostics=${JSON.stringify(received)}`,
     );
   } finally {
     for (const unsub of cleanup) { try { unsub(); } catch { /* swallow */ } }
