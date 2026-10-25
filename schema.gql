@@ -10714,11 +10714,11 @@ type Mutation {
 
 input UpdateGamertagInput {
   """
-  New gamertag (max 64 characters). Must be unique in combination with `disambiguation`.
+  New gamertag (max 64 characters, none of them control, line-break or bidirectional-formatting characters). Must be unique in combination with `disambiguation`.
   """
   gamertag: String!
   """
-  Discriminator paired with `gamertag` (max 128 characters) to form a unique handle.
+  Discriminator paired with `gamertag` (max 128 characters, the same characters refused as in `gamertag`) to form a unique handle.
   """
   disambiguation: String!
 }
@@ -11023,7 +11023,7 @@ input RegisterUserInput {
   """Password for the new account (min 8 characters)."""
   password: String!
   """
-  Optional initial public gamertag (min 3 characters). Can be set later via updateGamertag.
+  Optional initial public gamertag (3 to 64 characters, none of them control, line-break or bidirectional-formatting characters). Can be set later via updateGamertag.
   """
   gamertag: String
   """
@@ -11320,7 +11320,7 @@ input MintManagedPlayerTokenInput {
   """
   externalId: String!
   """
-  Display name (at most 64 characters). Set when the player is created; later sign-ins leave it (rename with updateManagedPlayer).
+  Display name (at most 64 characters, none of them control, line-break or bidirectional-formatting characters). Set when the player is created; later sign-ins leave it (rename with updateManagedPlayer).
   """
   gamertag: String
   """
@@ -11339,16 +11339,22 @@ input ProvisionManagedPlayersInput {
 input ManagedPlayerSpecInput {
   """The id your organization knows the player by."""
   externalId: String!
-  """Display name (at most 64 characters)."""
+  """
+  Display name (at most 64 characters, none of them control, line-break or bidirectional-formatting characters).
+  """
   gamertag: String
 }
 
 input UpdateManagedPlayerInput {
   orgId: BigInt!
   externalId: String!
-  """New display name."""
+  """
+  New display name (at most 64 characters, none of them control, line-break or bidirectional-formatting characters).
+  """
   gamertag: String
-  """New disambiguation (at most 128 characters)."""
+  """
+  New disambiguation (at most 128 characters, the same characters refused as in the display name).
+  """
   disambiguation: String
   """
   True disables the player (no sign-in; every session ends now, Buddy and ck-exec included). False enables a player the org disabled.
