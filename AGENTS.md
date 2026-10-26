@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.21.0** (18.0.0 was published only as
+**Current package:** `package.json` is **18.22.0** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -29,6 +29,15 @@ directly. So, before adding a wrapper:
 - 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
+
+**18.22.0: `ExecInstance.orphaned` (2026-10-26).** `ExecInstances` selects `orphaned`
+(cks-game-api #603, v2.58.0): true for an instance whose node type the app's active version no
+longer deploys. ck-exec 0.19 stops such an instance at once when a deploy or a rollback drops its
+type, keeps its saved state, and drops the type from `disabledTypes` (the Unreal SDK team's report
+of 2026-10-26). It is null from a manager older than 0.19. **Needs ck-api v2.58.0 on the tier:** an
+older API refuses the selection, so `exec.instances` throws there. The `deploy`,
+`activateVersion`, `setEnabled` and `restartType` doc comments say what a deploy or a rollback now
+stops and unswitches. `schema.gql` is ck-api `dev`'s v2.58.0.
 
 **18.19.0: a draining instance moves every client, without splitting it (2026-10-24).** The
 game balancers move to HAProxy, which drains an instance without cutting its sockets, and ck-api

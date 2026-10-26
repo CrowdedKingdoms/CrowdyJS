@@ -62,6 +62,7 @@ query ExecInstances($appId: BigInt!) {
     epoch
     sinceMs
     heldBack
+    orphaned
   }
 }
 

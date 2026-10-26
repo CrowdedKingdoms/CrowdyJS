@@ -283,7 +283,12 @@ test('operations pass their arguments through and drop __typename', async () => 
   const status = { __typename: 'ExecAppStatus', activeVersion: 2, disabled: false, disabledTypes: ['bare'], budgetPaused: false };
   const answers = {
     ExecLogs: { execLogs: [{ __typename: 'ExecLogLine', id: '9', nodeType: 'arena', key: 'm1', level: 2, host: 'h', at: '2026-09-25T00:00:00.000Z', text: 'hi', flow: flowId }] },
-    ExecInstances: { execInstances: [{ __typename: 'ExecInstance', instanceId: '1', nodeType: 'lobby', key: '', kind: 'hub', phase: 'running', host: 'h', epoch: 3, sinceMs: 5, heldBack: null }] },
+    ExecInstances: {
+      execInstances: [
+        { __typename: 'ExecInstance', instanceId: '1', nodeType: 'lobby', key: '', kind: 'hub', phase: 'running', host: 'h', epoch: 3, sinceMs: 5, heldBack: null, orphaned: false },
+        { __typename: 'ExecInstance', instanceId: '2', nodeType: 'market', key: 'm', kind: 'hub', phase: 'idle', host: null, epoch: 2, sinceMs: 9, heldBack: null, orphaned: true },
+      ],
+    },
     ExecVersions: {
       execVersions: [
         { __typename: 'ExecVersion', version: 2, createdBy: 'user:1', createdAt: '2026-09-25T00:00:00.000Z', types: 2, active: true, manifestJson },
@@ -295,16 +300,22 @@ test('operations pass their arguments through and drop __typename', async () => 
     ExecActivateVersion: { execActivateVersion: status },
     ExecSetEnabled: { execSetEnabled: status },
   };
+  const selected = {};
   const exec = new ExecAPI({
     request: async (doc, vars) => {
-      const name = doc.definitions.find((d) => d.kind === 'OperationDefinition').name.value;
+      const op = doc.definitions.find((d) => d.kind === 'OperationDefinition');
+      const name = op.name.value;
       seen.push([name, vars]);
+      selected[name] = op.selectionSet.selections[0].selectionSet?.selections.map((s) => s.name?.value);
       return answers[name];
     },
   });
   const [line] = await exec.logs('77', { nodeType: 'arena', maxLevel: 1, limit: 10, flow: flowId });
   assert.deepEqual(line, { id: '9', nodeType: 'arena', key: 'm1', level: 2, host: 'h', at: '2026-09-25T00:00:00.000Z', text: 'hi', flow: flowId });
-  assert.equal((await exec.instances('77'))[0].phase, 'running');
+  const [running, dropped] = await exec.instances('77');
+  assert.equal(running.phase, 'running');
+  assert.deepEqual(dropped, { instanceId: '2', nodeType: 'market', key: 'm', kind: 'hub', phase: 'idle', host: null, epoch: 2, sinceMs: 9, heldBack: null, orphaned: true });
+  assert.ok(selected.ExecInstances.includes('orphaned'), 'execInstances asks for orphaned');
   const [active, gone] = await exec.versions('77');
   assert.equal(active.active, true);
   assert.equal(active.manifestJson, manifestJson);

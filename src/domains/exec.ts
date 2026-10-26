@@ -1021,7 +1021,12 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
  * any host), or null outside a call; pass it as {@link ExecLogsOptions.flow} to follow it.
  */
 export type ExecLogLine = Omit<ExecLogsQuery['execLogs'][number], '__typename'>;
-/** An instance the execution manager has placed. */
+/**
+ * An instance the execution manager has placed. `orphaned` is true when its node type is not in
+ * the app's active version: a deploy or a rollback dropped the type and stopped the instance,
+ * which keeps its saved state for a version that deploys the type again. It is null from a
+ * manager older than ck-exec 0.19.
+ */
 export type ExecInstance = Omit<ExecInstancesQuery['execInstances'][number], '__typename'>;
 /** A node type in a deployed manifest, as {@link ExecVersion.manifest} shows it. */
 export interface ExecManifestType {
@@ -1299,8 +1304,10 @@ export class ExecAPI {
   }
 
   /**
-   * Makes an earlier version active again, a rollback; instances pick it up when they
-   * next start. Requires `manage_compute`.
+   * Makes an earlier version active again, a rollback. As after a deploy, instances of the
+   * types it keeps pick it up when they next start, and those of a type it lacks are
+   * persisted and stopped at once; a type it lacks leaves the switched-off list. Requires
+   * `manage_compute`.
    */
   async activateVersion(appId: string, version: number): Promise<ExecAppStatus> {
     const data = await this.graphql.request(ExecActivateVersionDocument, { appId, version });
@@ -1309,8 +1316,9 @@ export class ExecAPI {
 
   /**
    * The kill switch, for the whole app or one node type. Off: nothing of it is placed,
-   * what runs is persisted and stopped, and calls are refused with `Denied`. Requires
-   * `manage_compute`.
+   * what runs is persisted and stopped, and calls are refused with `Denied`. A type's switch
+   * lasts while the active version deploys the type: a deploy or a rollback that drops the
+   * type drops its switch. Requires `manage_compute`.
    */
   async setEnabled(appId: string, enabled: boolean, nodeType?: string): Promise<ExecAppStatus> {
     const data = await this.graphql.request(ExecSetEnabledDocument, { appId, enabled, nodeType });
@@ -1320,8 +1328,9 @@ export class ExecAPI {
   /**
    * Moves one node type's running instances to the app's active version: each is
    * persisted and stopped, and starts again on the active version at its next
-   * call. A deploy changes what NEW instances run; this moves the running ones
-   * without switching the type off. Requires `manage_compute`.
+   * call. A deploy changes what NEW instances run, and stops those of a type it drops
+   * itself; this moves the running ones of a type it keeps without switching the type
+   * off. Requires `manage_compute`.
    *
    * @returns The node type and how many instances were stopped.
    */
@@ -1736,8 +1745,10 @@ export class ExecAPI {
   /**
    * Deploys a new version of the app's nodes and makes it active: the manifest, and
    * each distinct module once. A type gives its module as `wasm`, or names a `crate` of
-   * `buildId`, whose modules the platform already holds. Running instances pick it up
-   * when they next start. Requires the org `manage_compute` permission.
+   * `buildId`, whose modules the platform already holds. Running instances of the types
+   * it keeps pick it up when they next start; those of a type it drops are persisted and
+   * stopped at once, and the type leaves the switched-off list. Requires the org
+   * `manage_compute` permission.
    */
   async deploy(options: ExecDeployOptions): Promise<{ version: number }> {
     const types: Record<string, unknown> = {};
