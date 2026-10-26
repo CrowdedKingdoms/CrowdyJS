@@ -3633,7 +3633,7 @@ export type ExecAppStatus = {
   budgetPaused: Scalars['Boolean']['output'];
   /** The whole app is switched off (`execSetEnabled` without a node type). */
   disabled: Scalars['Boolean']['output'];
-  /** Node types switched off one by one. */
+  /** Node types of the active version switched off one by one. A deploy or a rollback that drops a type drops its switch too, so a version that deploys the type again starts it switched on. */
   disabledTypes: Array<Scalars['String']['output']>;
   /** The instance limit in force: maxInstances, or the manager’s default when that is null. Null from a manager older than ck-exec 0.15. */
   instanceLimit: Maybe<Scalars['Int']['output']>;
@@ -3833,6 +3833,8 @@ export type ExecInstance = {
   /** `hub` or `spoke`. */
   kind: Scalars['String']['output'];
   nodeType: Scalars['String']['output'];
+  /** Its node type is not in the app’s active version: a deploy or a rollback dropped the type and stopped the instance. It keeps its saved state, which a version that deploys the type again starts it from. Never true for a mod. Null from a manager older than ck-exec 0.19. */
+  orphaned: Maybe<Scalars['Boolean']['output']>;
   /** `idle`, `starting`, `running` or `stopping`. */
   phase: Scalars['String']['output'];
   /** Milliseconds since it entered this phase. */
@@ -5089,7 +5091,7 @@ export type Mutation = {
   exchangeManagedPlayerAssertion: AppTokenResponse;
   /** Exchange a one-time portal authorization code (with the matching PKCE verifier) for an app-scoped gameplay token. Public (the code + verifier authorize the call); called by the destination game at its own origin so the game never sees the player's session token. */
   exchangePortalCode: AppTokenResponse;
-  /** Make an earlier ck-exec version active again, a rollback. Running instances pick it up when they next start, as after a deploy. Requires the org 'manage_compute' permission. */
+  /** Make an earlier ck-exec version active again, a rollback. As after a deploy, running instances of the types it keeps pick it up when they next start, and those of a type it lacks are persisted and stopped at once; a type it lacks leaves the switched-off list. Requires the org 'manage_compute' permission. */
   execActivateVersion: ExecAppStatus;
   /** Build ck-exec modules from Rust source: each crate is compiled with the platform's pinned toolchain and `ckx-sdk`, for wasm32-unknown-unknown, and checked against the guest ABI. Returns at once with the build queued; poll `execBuildStatus`, then pass its id to `execDeploy`. Requires the org 'manage_compute' permission. */
   execBuild: ExecBuild;
@@ -5099,7 +5101,7 @@ export type Mutation = {
   execConnectAsDeveloper: ExecConnection;
   /** Consent to run a mod's CLIENT half in your browser at its current capability hash. A CLIENT half whose capabilities change carries a new hash, and the consent stops holding until you consent again. Answers CONFLICT when the hash is not the current one. Requires access to the app. */
   execConsentClientMod: Scalars['Boolean']['output'];
-  /** Deploy a new version of an app's ck-exec topology: the manifest and any modules it names that were not uploaded before. The execution manager checks the manifest's tree and bounds and each module's digest, stores them, and makes the version active; running instances pick it up when they next start. Requires the org 'manage_compute' permission. */
+  /** Deploy a new version of an app's ck-exec topology: the manifest and any modules it names that were not uploaded before. The execution manager checks the manifest's tree and bounds and each module's digest, stores them, and makes the version active. Running instances of the types it keeps pick it up when they next start; those of a type it drops are persisted and stopped at once, and the type leaves the switched-off list. Requires the org 'manage_compute' permission. */
   execDeploy: ExecDeployResult;
   /** Build a mod from one ckx-sdk crate, as `execBuild` builds a developer's crates. Returns at once with the build queued; poll `execModBuildStatus`, then pass its id to `execModDeploy`. One build at a time per player. Requires the 'write_server_code' permission in the app. */
   execModBuild: ExecBuild;
@@ -5123,13 +5125,13 @@ export type Mutation = {
   execModSetSwitch: Array<ExecModSwitch>;
   /** Delist a listing you published: nobody installs it any more; installed copies keep running. */
   execModUnpublish: Scalars['Boolean']['output'];
-  /** Moves one node type's running instances to the app's active version: each is persisted and stopped, and starts again on the active version at its next call. A deploy (execDeploy, execActivateVersion) changes which version NEW instances run but leaves running ones on theirs until they stop; this is how to move them without switching the type off. Requires the org 'manage_compute' permission. */
+  /** Moves one node type's running instances to the app's active version: each is persisted and stopped, and starts again on the active version at its next call. A deploy (execDeploy, execActivateVersion) changes which version NEW instances run but leaves the running instances of the types it keeps on theirs until they stop (it stops those of a type it drops itself); this is how to move them without switching the type off. Requires the org 'manage_compute' permission. */
   execRestartType: ExecRestartResult;
   /** Stop trusting an author on a grid, and take back your consent to each of their CLIENT halves there, so none is served to you until you consent or trust again; true when anything was taken back. Works from anywhere, not only inside the grid. Needs only the app-scoped token of the app, not access to it. */
   execRevokeAuthorTrust: Scalars['Boolean']['output'];
   /** Take back your consent to a mod's CLIENT half, whatever hash you consented to; true when you had consented. While you trust the mod's author on its grid, their CLIENT halves there are still served to you: take that back with `execRevokeAuthorTrust`. Needs only the app-scoped token of the app, not access to it. */
   execRevokeClientModConsent: Scalars['Boolean']['output'];
-  /** The kill switch for an app's ck-exec code, or one node type of it. Switched off, nothing of it is placed, what runs is persisted and stopped, and calls are refused with `Denied`; switched on, instances start as they are called. Requires the org 'manage_compute' permission. */
+  /** The kill switch for an app's ck-exec code, or one node type of it. Switched off, nothing of it is placed, what runs is persisted and stopped, and calls are refused with `Denied`; switched on, instances start as they are called. A type's switch lasts while the active version deploys the type: a deploy or a rollback that drops the type drops its switch. Requires the org 'manage_compute' permission. */
   execSetEnabled: ExecAppStatus;
   /** Trust one author's CLIENT halves on a grid you stand in, at the hash of their union (`authorCapabilityHash`): it covers the author's CLIENT halves there while their union is no wider, and consents to each current one at its own hash. Answers CONFLICT when the hash is not the current one. Requires access to the app. */
   execTrustAuthor: Scalars['Boolean']['output'];
