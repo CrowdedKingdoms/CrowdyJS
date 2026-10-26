@@ -24,6 +24,7 @@ import type {
   CrowdyStudioGitHubTransport,
 } from './github/transport.js';
 import { githubNewRepositoryUrl, githubRepositorySlug } from './github/new-repo.js';
+import { isWritableGamePath } from '../crowdy-dsh/game-paths.js';
 import {
   cloneCrowdyStudioProject,
   crowdyStudioFileKey,
@@ -975,6 +976,36 @@ export class CrowdyStudioController {
     } finally {
       this.update({ githubBusy: false });
     }
+  }
+
+  /**
+   * Commit one game file onto the bound branch.
+   *
+   * Scenes, the catalog and the world hub are not Studio crates. The write
+   * goes through crowdyStudioGitHubPutFile with the mirror's commit as
+   * expectedCommitSha. A draft test does not rebuild the hosted bundle; that
+   * file is on the branch until the game is published again.
+   */
+  async putGameFile(path: string, content: string): Promise<{ commitSha: string }> {
+    if (!isWritableGamePath(path)) {
+      throw new Error('That path is not a scene, the catalog, or a world-hub file.');
+    }
+    if (!this.options.github) throw new Error('GitHub is not available in this Studio.');
+    const scope = this.githubScope();
+    const project = this.state.project;
+    const sha = project?.github?.sha ?? null;
+    if (!scope || project?.source !== 'GITHUB' || !sha) {
+      throw new Error('Bind a repository before writing game files.');
+    }
+    const written = await this.options.github.putFile({
+      ...scope,
+      path,
+      content,
+      message: `Crowdy Studio agent: update ${path}`,
+      expectedCommitSha: sha,
+    });
+    await this.reloadProject();
+    return { commitSha: written.commitSha ?? sha };
   }
 
   async retrySave(): Promise<boolean> {

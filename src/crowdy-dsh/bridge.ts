@@ -47,6 +47,7 @@ import {
   type DshWorkerEventMap,
 } from './protocol.js';
 import type { CrowdyStudioDshTransport, CrowdyStudioModelCatalogEntry } from './transport.js';
+import { assertPlaybookPage } from './game-paths.js';
 
 /** What the game supplies so the model can see and act. */
 export interface CrowdyStudioDshHost {
@@ -67,6 +68,18 @@ export interface CrowdyStudioDshHost {
   playerHost?: Pick<PlayerHostAdapterV1, 'observe'>;
   /** Recent `crowdy::log` lines from the CLIENT module and browser runtime errors. */
   clientLogs?(): readonly string[];
+  /**
+   * Where the game serves the MMO Anything playbook, usually `<base>mmo/`.
+   * Relative values resolve against this page. Omit when the game does not
+   * ship the playbook.
+   */
+  playbookBase?: string;
+  /**
+   * Ask ck-api whether this player may draft or deploy live. The API refuses
+   * when Allow Live Modding is off. Omit and the dock's deploy is not gated
+   * here; the construct supplies it.
+   */
+  authorizeLiveModding?(action: 'draft_test' | 'deploy_live'): Promise<void>;
   /**
    * Grid capability (bridge v4, DN-10). With it the agent can read the grid
    * the open project is bound to and run a JS grid program from a project
@@ -494,9 +507,29 @@ export class StudioDshBridge {
       }
       case 'grid.programStatus':
         return { programs: this.gridHost().programs() } as never;
+      case 'studio.readPlaybook':
+        return this.readPlaybook((params as { page?: string } | undefined)?.page ?? '') as never;
+      case 'studio.putGameFile': {
+        const { path, content } = params as { path: string; content: string };
+        return controller.putGameFile(path, content) as never;
+      }
       default:
         throw new Error(`Unsupported bridge method ${String(method)}`);
     }
+  }
+
+  private async readPlaybook(page: string): Promise<{ text: string }> {
+    const safe = assertPlaybookPage(page);
+    const configured = this.options.host?.playbookBase;
+    if (!configured) throw new Error('This game does not ship the MMO Anything playbook.');
+    const root = playbookRoot(configured);
+    const url = new URL(safe, root);
+    if (url.origin !== root.origin || !url.pathname.startsWith(root.pathname)) {
+      throw new Error('Playbook pages stay inside the game.');
+    }
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`No playbook page ${safe}.`);
+    return { text: await response.text() };
   }
 
   private gridHost(): CrowdyStudioDshGridHost {
@@ -508,6 +541,8 @@ export class StudioDshBridge {
   private async build(mode: 'draft' | 'live'): Promise<DshBuildResult> {
     const controller = this.options.controller;
     if (!controller.getState().project) throw new Error('No project is open in Crowdy Studio.');
+    const authorize = this.options.host?.authorizeLiveModding;
+    if (authorize) await authorize(mode === 'draft' ? 'draft_test' : 'deploy_live');
     const result: CrowdyStudioDeployResult = mode === 'draft' ? await controller.testDraft() : await controller.deployLive();
     const state = controller.getState();
     const diagnostics = [...state.authoritativeDiagnostics, ...state.localDiagnostics].map(toDshDiagnostic);
@@ -680,6 +715,12 @@ export function renderSettingsYaml(modelBaseUrl: string, models: readonly Crowdy
     lines.push('agent-default-model:', '  provider: deepseek-official', `  model: ${quote(first.id)}`);
   }
   return `${lines.join('\n')}\n`;
+}
+
+function playbookRoot(base: string): URL {
+  const withSlash = base.endsWith('/') ? base : `${base}/`;
+  if (/^https?:\/\//.test(withSlash)) return new URL(withSlash);
+  return new URL(withSlash, window.location.origin);
 }
 
 /** Downscale and PNG-encode a frame in the page. */

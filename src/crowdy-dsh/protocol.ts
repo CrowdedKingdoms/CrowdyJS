@@ -143,6 +143,8 @@ export interface DshBridgeRequestMap {
     result: { program: DshGridProgramStatus };
   };
   'grid.programStatus': { params: Record<string, never>; result: { programs: DshGridProgramStatus[] } };
+  'studio.readPlaybook': { params: { page: string }; result: { text: string } };
+  'studio.putGameFile': { params: { path: string; content: string }; result: { commitSha: string } };
 }
 
 export type DshBridgeMethod = keyof DshBridgeRequestMap;
