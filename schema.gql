@@ -6262,6 +6262,10 @@ type ExecInstance {
   Why the manager will not place it right now (a crash loop, a failed start), when it will not.
   """
   heldBack: String
+  """
+  Its node type is not in the app’s active version: a deploy or a rollback dropped the type and stopped the instance. It keeps its saved state, which a version that deploys the type again starts it from. Never true for a mod. Null from a manager older than ck-exec 0.19.
+  """
+  orphaned: Boolean
 }
 
 """A deployed version of an app’s ck-exec topology."""
@@ -6288,7 +6292,9 @@ type ExecAppStatus {
   activeVersion: Int
   """The whole app is switched off (`execSetEnabled` without a node type)."""
   disabled: Boolean!
-  """Node types switched off one by one."""
+  """
+  Node types of the active version switched off one by one. A deploy or a rollback that drops a type drops its switch too, so a version that deploys the type again starts it switched on.
+  """
   disabledTypes: [String!]!
   """
   Paused while the app's runtime gate is not active (no funds, a spend cap, a lapsed subscription) or it is over its compute budget; it resumes by itself once the cause clears.
@@ -10267,14 +10273,14 @@ type Mutation {
     key: String
   ): ExecConnection!
   """
-  Deploy a new version of an app's ck-exec topology: the manifest and any modules it names that were not uploaded before. The execution manager checks the manifest's tree and bounds and each module's digest, stores them, and makes the version active; running instances pick it up when they next start. Requires the org 'manage_compute' permission.
+  Deploy a new version of an app's ck-exec topology: the manifest and any modules it names that were not uploaded before. The execution manager checks the manifest's tree and bounds and each module's digest, stores them, and makes the version active. Running instances of the types it keeps pick it up when they next start; those of a type it drops are persisted and stopped at once, and the type leaves the switched-off list. Requires the org 'manage_compute' permission.
   """
   execDeploy(
     """The app, its manifest and new modules."""
     input: ExecDeployInput!
   ): ExecDeployResult! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "input.appId")
   """
-  Make an earlier ck-exec version active again, a rollback. Running instances pick it up when they next start, as after a deploy. Requires the org 'manage_compute' permission.
+  Make an earlier ck-exec version active again, a rollback. As after a deploy, running instances of the types it keeps pick it up when they next start, and those of a type it lacks are persisted and stopped at once; a type it lacks leaves the switched-off list. Requires the org 'manage_compute' permission.
   """
   execActivateVersion(
     """The app whose ck-exec code this is about."""
@@ -10283,7 +10289,7 @@ type Mutation {
     version: Int!
   ): ExecAppStatus! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
   """
-  The kill switch for an app's ck-exec code, or one node type of it. Switched off, nothing of it is placed, what runs is persisted and stopped, and calls are refused with `Denied`; switched on, instances start as they are called. Requires the org 'manage_compute' permission.
+  The kill switch for an app's ck-exec code, or one node type of it. Switched off, nothing of it is placed, what runs is persisted and stopped, and calls are refused with `Denied`; switched on, instances start as they are called. A type's switch lasts while the active version deploys the type: a deploy or a rollback that drops the type drops its switch. Requires the org 'manage_compute' permission.
   """
   execSetEnabled(
     """The app whose ck-exec code this is about."""
@@ -10294,7 +10300,7 @@ type Mutation {
     nodeType: String
   ): ExecAppStatus! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
   """
-  Moves one node type's running instances to the app's active version: each is persisted and stopped, and starts again on the active version at its next call. A deploy (execDeploy, execActivateVersion) changes which version NEW instances run but leaves running ones on theirs until they stop; this is how to move them without switching the type off. Requires the org 'manage_compute' permission.
+  Moves one node type's running instances to the app's active version: each is persisted and stopped, and starts again on the active version at its next call. A deploy (execDeploy, execActivateVersion) changes which version NEW instances run but leaves the running instances of the types it keeps on theirs until they stop (it stops those of a type it drops itself); this is how to move them without switching the type off. Requires the org 'manage_compute' permission.
   """
   execRestartType(
     """The app whose ck-exec code this is about."""
