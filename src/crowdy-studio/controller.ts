@@ -217,6 +217,14 @@ export interface CrowdyStudioControllerOptions {
    * card is purely bind / unbind / refresh / status.
    */
   github?: CrowdyStudioGitHubTransport;
+  /**
+   * Draft working copy for scene, catalog and world-hub files. A write updates
+   * the copy the local game is serving. Committing that copy is a separate call.
+   */
+  gameFiles?: {
+    writeDraft(path: string, content: string): Promise<void>;
+    readDraft(path: string): Promise<string>;
+  };
   appId: string;
   gridId: string;
   initialProjectId?: string;
@@ -979,24 +987,42 @@ export class CrowdyStudioController {
   }
 
   /**
-   * Commit one game file onto the bound branch.
+   * Write one game file into the draft working copy.
    *
-   * Scenes, the catalog and the world hub are not Studio crates. The write
-   * goes through crowdyStudioGitHubPutFile with the mirror's commit as
-   * expectedCommitSha. A draft test does not rebuild the hosted bundle; that
-   * file is on the branch until the game is published again.
+   * Scenes, the catalog and the world hub are not Studio crates. The draft is
+   * what the local game serves. It is not a GitHub commit; {@link commitGameFile}
+   * pushes a draft when asked.
    */
-  async putGameFile(path: string, content: string): Promise<{ commitSha: string }> {
+  async putGameFile(path: string, content: string): Promise<{ path: string }> {
     if (!isWritableGamePath(path)) {
       throw new Error('That path is not a scene, the catalog, or a world-hub file.');
     }
+    const draft = this.options.gameFiles;
+    if (!draft) throw new Error('This page has no draft working copy for game files.');
+    await draft.writeDraft(path, content);
+    return { path };
+  }
+
+  /**
+   * Commit one drafted game file onto the bound branch.
+   *
+   * The bytes are the draft working copy. The write goes through
+   * crowdyStudioGitHubPutFile with the mirror's commit as expectedCommitSha.
+   */
+  async commitGameFile(path: string): Promise<{ commitSha: string }> {
+    if (!isWritableGamePath(path)) {
+      throw new Error('That path is not a scene, the catalog, or a world-hub file.');
+    }
+    const draft = this.options.gameFiles;
+    if (!draft) throw new Error('This page has no draft working copy for game files.');
     if (!this.options.github) throw new Error('GitHub is not available in this Studio.');
     const scope = this.githubScope();
     const project = this.state.project;
     const sha = project?.github?.sha ?? null;
     if (!scope || project?.source !== 'GITHUB' || !sha) {
-      throw new Error('Bind a repository before writing game files.');
+      throw new Error('Bind a repository before committing game files.');
     }
+    const content = await draft.readDraft(path);
     const written = await this.options.github.putFile({
       ...scope,
       path,

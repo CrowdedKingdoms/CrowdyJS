@@ -513,6 +513,10 @@ export class StudioDshBridge {
         const { path, content } = params as { path: string; content: string };
         return controller.putGameFile(path, content) as never;
       }
+      case 'studio.commitGameFile': {
+        const { path } = params as { path: string };
+        return controller.commitGameFile(path) as never;
+      }
       default:
         throw new Error(`Unsupported bridge method ${String(method)}`);
     }
