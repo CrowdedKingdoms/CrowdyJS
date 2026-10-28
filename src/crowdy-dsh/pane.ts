@@ -27,6 +27,8 @@ export interface CrowdyStudioDshPaneOptions {
   host?: CrowdyStudioDshHost;
   /** Studio origin for the wallet link; omitted hides the link. */
   studioOrigin?: string;
+  /** Exclusive harness pair. Omitted boots the mod editor. */
+  studioMode?: 'mod' | 'game';
   layout?: StudioLayoutController;
   onWarning?(message: string): void;
 }
@@ -101,6 +103,7 @@ export class CrowdyStudioDshPane {
       persistScope: options.persistScope,
       getToken: options.getToken,
       graphqlUrl: options.graphqlUrl,
+      ...(options.studioMode ? { studioMode: options.studioMode } : {}),
       host: options.host,
       confirmLiveDeploy: (summary) => this.confirmLiveDeploy(summary.projectName, summary.mode),
       onWarning: (text) => {

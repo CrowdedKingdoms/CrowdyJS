@@ -17,6 +17,7 @@ import {
   type CrowdyStudioReferenceFile,
   type CrowdyStudioTarget,
 } from './models.js';
+import { repositoryTree, type RepositoryNode } from './repository-tree.js';
 import { CROWDY_STUDIO_STYLES } from './styles.js';
 
 type PanelName = 'problems' | 'build' | 'logs' | 'invoke';
@@ -131,6 +132,8 @@ export class CrowdyStudioDomShell {
   private readonly unsubscribeLayout: () => void;
   private activePanel: PanelName = 'problems';
   private explorerForm: ExplorerFormState | null = null;
+  /** Repository directories the Files pane is showing the children of. */
+  private readonly repositoryExpanded = new Set(['src', 'src/scenes', 'src/game']);
   private lastState: CrowdyStudioState | null = null;
   private lastPhase = 'IDLE';
   private disposed = false;
@@ -788,6 +791,11 @@ export class CrowdyStudioDomShell {
   private renderExplorer(state: CrowdyStudioState): void {
     const focused = focusedExplorerField(this.explorer);
     this.explorer.replaceChildren();
+    if (state.repositoryMode) {
+      this.renderRepository(state);
+      restoreExplorerFocus(this.explorer, focused);
+      return;
+    }
     if (!state.project) {
       this.explorer.append(empty('Create a project to start authoring.'));
       return;
@@ -810,6 +818,71 @@ export class CrowdyStudioDomShell {
       this.referenceSection('Common files', state.commonFiles),
     );
     restoreExplorerFocus(this.explorer, focused);
+  }
+
+  private renderRepository(state: CrowdyStudioState): void {
+    const header = element('div', 'ck-crowdy-studio-section-header');
+    const title = document.createElement('span');
+    title.textContent = 'Repository';
+    const refresh = button('Refresh');
+    refresh.addEventListener('click', () => {
+      void this.run(() => this.controller.reloadRepository());
+    });
+    const commit = button('Commit');
+    commit.title = 'Commit drafted files to the bound GitHub branch';
+    commit.addEventListener('click', () => {
+      void this.run(() => this.controller.commitRepository());
+    });
+    header.append(title, refresh, commit);
+    this.explorer.append(header);
+    if (state.repositoryMessage) this.explorer.append(empty(state.repositoryMessage));
+    if (!state.repositoryFiles) {
+      this.explorer.append(empty('Loading the repository…'));
+      return;
+    }
+    const tree = repositoryTree(state.repositoryDirectories ?? [], state.repositoryFiles);
+    if (tree.children.length === 0) {
+      this.explorer.append(empty('The repository has no files.'));
+      return;
+    }
+    this.explorer.append(...this.repositoryNodes(state, tree.children, 0));
+  }
+
+  private repositoryNodes(
+    state: CrowdyStudioState,
+    nodes: readonly RepositoryNode[],
+    depth: number,
+  ): HTMLElement[] {
+    const rows: HTMLElement[] = [];
+    for (const node of nodes) {
+      const row = element('div', 'ck-crowdy-studio-file');
+      row.style.paddingLeft = `${depth * 12}px`;
+      if (node.type === 'directory') {
+        const open = this.repositoryExpanded.has(node.path);
+        const toggle = button(`${open ? '▾' : '▸'} ${node.name}`);
+        toggle.title = node.path;
+        toggle.addEventListener('click', () => {
+          if (open) this.repositoryExpanded.delete(node.path);
+          else this.repositoryExpanded.add(node.path);
+          this.rerenderExplorer();
+        });
+        row.append(toggle);
+        rows.push(row);
+        if (open) rows.push(...this.repositoryNodes(state, node.children, depth + 1));
+        continue;
+      }
+      const open = button(node.name);
+      open.title = node.path;
+      open.dataset.active = String(
+        state.activeFile?.source === 'REPOSITORY' && state.activeFile.path === node.path,
+      );
+      open.addEventListener('click', () => {
+        void this.run(() => this.controller.openRepositoryFile(node.path));
+      });
+      row.append(open);
+      rows.push(row);
+    }
+    return rows;
   }
 
   private projectSection(

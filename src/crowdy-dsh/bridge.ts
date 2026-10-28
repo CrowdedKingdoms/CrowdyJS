@@ -114,6 +114,11 @@ export interface StudioDshBridgeOptions {
   getToken(): string | null;
   /** GraphQL endpoint the harness reads/writes project files through. */
   graphqlUrl: string;
+  /**
+   * Which exclusive pair the harness mounts. Omitted means the mod editor.
+   * `game` lists the bound repository instead of the server and client crates.
+   */
+  studioMode?: 'mod' | 'game';
   host?: CrowdyStudioDshHost;
   /** Longest screenshot side, in pixels. */
   maxCaptureSide?: number;
@@ -126,7 +131,7 @@ export interface StudioDshBridgeOptions {
    */
   confirmLiveDeploy?(summary: { projectName: string; mode: 'draft' | 'live' }): Promise<boolean>;
   /** Called when the worker changed a project file, after the controller reloaded. */
-  onFileChanged?(change: { target: 'SERVER' | 'CLIENT'; path: string }): void;
+  onFileChanged?(change: { target: 'SERVER' | 'CLIENT' | 'REPO'; path: string }): void;
   onWarning?(message: string): void;
   onStatus?(status: StudioDshBridgeStatus): void;
 }
@@ -295,6 +300,7 @@ export class StudioDshBridge {
       bridgeNonce: this.nonce,
       root: '/dsh/workspace',
       persistScope: this.options.persistScope,
+      ...(this.options.studioMode ? { studioMode: this.options.studioMode } : {}),
     };
     return {
       type: 'crowdy-dsh:boot',
@@ -379,6 +385,18 @@ export class StudioDshBridge {
       }
       case 'worker.fileChanged': {
         const change = payload as DshWorkerEventMap['worker.fileChanged'];
+        if (change.target === 'REPO') {
+          void this.options.controller
+            .reloadRepository()
+            .then(() => this.options.controller.openRepositoryFile(change.path))
+            .then(() => this.options.onFileChanged?.(change))
+            .catch((error: unknown) =>
+              this.options.onWarning?.(
+                `The agent changed ${change.path} but the editor could not reload: ${String(error)}`,
+              ),
+            );
+          return;
+        }
         void this.options.controller.reloadProject().then(
           () => this.options.onFileChanged?.(change),
           (error: unknown) => this.options.onWarning?.(`The agent changed ${change.path} but the editor could not reload: ${String(error)}`),
@@ -391,6 +409,12 @@ export class StudioDshBridge {
       }
       case 'worker.openFile': {
         const ref = payload as DshWorkerEventMap['worker.openFile'];
+        if (this.options.controller.getState().repositoryMode) {
+          void this.options.controller.openRepositoryFile(ref.path).catch(() => {
+            // The draft may not have the file yet; the tree shows what it listed.
+          });
+          return;
+        }
         try {
           this.options.controller.openFile({ source: 'PROJECT', target: ref.target, path: ref.path });
         } catch {
@@ -517,6 +541,16 @@ export class StudioDshBridge {
         const { path } = params as { path: string };
         return controller.commitGameFile(path) as never;
       }
+      case 'studio.listRepo': {
+        const path = (params as { path?: string } | undefined)?.path ?? '';
+        return { entries: await controller.listGameDir(path) } as never;
+      }
+      case 'studio.readRepoFile': {
+        const { path } = params as { path: string };
+        return controller.readGameFile(path) as never;
+      }
+      case 'studio.listDirty':
+        return controller.dirtyGameFiles() as never;
       default:
         throw new Error(`Unsupported bridge method ${String(method)}`);
     }

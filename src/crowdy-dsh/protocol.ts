@@ -146,6 +146,12 @@ export interface DshBridgeRequestMap {
   'studio.readPlaybook': { params: { page: string }; result: { text: string } };
   'studio.putGameFile': { params: { path: string; content: string }; result: { path: string } };
   'studio.commitGameFile': { params: { path: string }; result: { commitSha: string } };
+  'studio.listRepo': {
+    params: { path: string };
+    result: { entries: Array<{ name: string; type: 'file' | 'directory' }> };
+  };
+  'studio.readRepoFile': { params: { path: string }; result: { content: string } };
+  'studio.listDirty': { params: Record<string, never>; result: { paths: string[] } };
 }
 
 export type DshBridgeMethod = keyof DshBridgeRequestMap;
@@ -177,7 +183,7 @@ export interface DshPageEventMap {
 
 export interface DshWorkerEventMap {
   'worker.ready': { root: string; store?: string };
-  'worker.fileChanged': { target: 'SERVER' | 'CLIENT'; path: string };
+  'worker.fileChanged': { target: 'SERVER' | 'CLIENT' | 'REPO'; path: string };
   'worker.warning': { message: string };
   'worker.openFile': { target: 'SERVER' | 'CLIENT'; path: string; line?: number };
 }

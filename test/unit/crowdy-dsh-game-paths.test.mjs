@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-const { isWritableGamePath, assertPlaybookPage } = await import('../../dist/crowdy-dsh/game-paths.js');
+const { isWritableGamePath, isRepoPath, assertPlaybookPage } = await import('../../dist/crowdy-dsh/game-paths.js');
 
 test('game writes are scenes, the catalog, and the world hub', () => {
   assert.equal(isWritableGamePath('src/scenes/holodeck.mjs'), true);
@@ -11,6 +11,15 @@ test('game writes are scenes, the catalog, and the world hub', () => {
   assert.equal(isWritableGamePath('src/main.rs'), false);
   assert.equal(isWritableGamePath('../secrets.env'), false);
   assert.equal(isWritableGamePath('/etc/passwd'), false);
+});
+
+test('the repository listing accepts the copied game and refuses secrets', () => {
+  assert.equal(isRepoPath('src/main.ts'), true);
+  assert.equal(isRepoPath('src/scenes/pool.mjs'), true);
+  assert.equal(isRepoPath('src/game/programs.ts'), true);
+  assert.equal(isRepoPath('.git/config'), false);
+  assert.equal(isRepoPath('node_modules/left-pad/index.js'), false);
+  assert.equal(isRepoPath('.env'), false);
 });
 
 test('playbook pages stay under the shipped markdown', () => {
