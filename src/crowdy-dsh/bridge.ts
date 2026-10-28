@@ -47,6 +47,7 @@ import {
   type DshWorkerEventMap,
 } from './protocol.js';
 import type { CrowdyStudioDshTransport, CrowdyStudioModelCatalogEntry } from './transport.js';
+import { assertPlaybookPage } from './game-paths.js';
 
 /** What the game supplies so the model can see and act. */
 export interface CrowdyStudioDshHost {
@@ -67,6 +68,18 @@ export interface CrowdyStudioDshHost {
   playerHost?: Pick<PlayerHostAdapterV1, 'observe'>;
   /** Recent `crowdy::log` lines from the CLIENT module and browser runtime errors. */
   clientLogs?(): readonly string[];
+  /**
+   * Where the game serves the MMO Anything playbook, usually `<base>mmo/`.
+   * Relative values resolve against this page. Omit when the game does not
+   * ship the playbook.
+   */
+  playbookBase?: string;
+  /**
+   * Ask ck-api whether this player may draft or deploy live. The API refuses
+   * when Allow Live Modding is off. Omit and the dock's deploy is not gated
+   * here; the construct supplies it.
+   */
+  authorizeLiveModding?(action: 'draft_test' | 'deploy_live'): Promise<void>;
   /**
    * Grid capability (bridge v4, DN-10). With it the agent can read the grid
    * the open project is bound to and run a JS grid program from a project
@@ -101,6 +114,11 @@ export interface StudioDshBridgeOptions {
   getToken(): string | null;
   /** GraphQL endpoint the harness reads/writes project files through. */
   graphqlUrl: string;
+  /**
+   * Which exclusive pair the harness mounts. Omitted means the mod editor.
+   * `game` lists the bound repository instead of the server and client crates.
+   */
+  studioMode?: 'mod' | 'game';
   host?: CrowdyStudioDshHost;
   /** Longest screenshot side, in pixels. */
   maxCaptureSide?: number;
@@ -113,7 +131,7 @@ export interface StudioDshBridgeOptions {
    */
   confirmLiveDeploy?(summary: { projectName: string; mode: 'draft' | 'live' }): Promise<boolean>;
   /** Called when the worker changed a project file, after the controller reloaded. */
-  onFileChanged?(change: { target: 'SERVER' | 'CLIENT'; path: string }): void;
+  onFileChanged?(change: { target: 'SERVER' | 'CLIENT' | 'REPO'; path: string }): void;
   onWarning?(message: string): void;
   onStatus?(status: StudioDshBridgeStatus): void;
 }
@@ -282,6 +300,7 @@ export class StudioDshBridge {
       bridgeNonce: this.nonce,
       root: '/dsh/workspace',
       persistScope: this.options.persistScope,
+      ...(this.options.studioMode ? { studioMode: this.options.studioMode } : {}),
     };
     return {
       type: 'crowdy-dsh:boot',
@@ -366,6 +385,18 @@ export class StudioDshBridge {
       }
       case 'worker.fileChanged': {
         const change = payload as DshWorkerEventMap['worker.fileChanged'];
+        if (change.target === 'REPO') {
+          void this.options.controller
+            .reloadRepository()
+            .then(() => this.options.controller.openRepositoryFile(change.path))
+            .then(() => this.options.onFileChanged?.(change))
+            .catch((error: unknown) =>
+              this.options.onWarning?.(
+                `The agent changed ${change.path} but the editor could not reload: ${String(error)}`,
+              ),
+            );
+          return;
+        }
         void this.options.controller.reloadProject().then(
           () => this.options.onFileChanged?.(change),
           (error: unknown) => this.options.onWarning?.(`The agent changed ${change.path} but the editor could not reload: ${String(error)}`),
@@ -378,6 +409,12 @@ export class StudioDshBridge {
       }
       case 'worker.openFile': {
         const ref = payload as DshWorkerEventMap['worker.openFile'];
+        if (this.options.controller.getState().repositoryMode) {
+          void this.options.controller.openRepositoryFile(ref.path).catch(() => {
+            // The draft may not have the file yet; the tree shows what it listed.
+          });
+          return;
+        }
         try {
           this.options.controller.openFile({ source: 'PROJECT', target: ref.target, path: ref.path });
         } catch {
@@ -494,9 +531,43 @@ export class StudioDshBridge {
       }
       case 'grid.programStatus':
         return { programs: this.gridHost().programs() } as never;
+      case 'studio.readPlaybook':
+        return this.readPlaybook((params as { page?: string } | undefined)?.page ?? '') as never;
+      case 'studio.putGameFile': {
+        const { path, content } = params as { path: string; content: string };
+        return controller.putGameFile(path, content) as never;
+      }
+      case 'studio.commitGameFile': {
+        const { path } = params as { path: string };
+        return controller.commitGameFile(path) as never;
+      }
+      case 'studio.listRepo': {
+        const path = (params as { path?: string } | undefined)?.path ?? '';
+        return { entries: await controller.listGameDir(path) } as never;
+      }
+      case 'studio.readRepoFile': {
+        const { path } = params as { path: string };
+        return controller.readGameFile(path) as never;
+      }
+      case 'studio.listDirty':
+        return controller.dirtyGameFiles() as never;
       default:
         throw new Error(`Unsupported bridge method ${String(method)}`);
     }
+  }
+
+  private async readPlaybook(page: string): Promise<{ text: string }> {
+    const safe = assertPlaybookPage(page);
+    const configured = this.options.host?.playbookBase;
+    if (!configured) throw new Error('This game does not ship the MMO Anything playbook.');
+    const root = playbookRoot(configured);
+    const url = new URL(safe, root);
+    if (url.origin !== root.origin || !url.pathname.startsWith(root.pathname)) {
+      throw new Error('Playbook pages stay inside the game.');
+    }
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`No playbook page ${safe}.`);
+    return { text: await response.text() };
   }
 
   private gridHost(): CrowdyStudioDshGridHost {
@@ -508,6 +579,8 @@ export class StudioDshBridge {
   private async build(mode: 'draft' | 'live'): Promise<DshBuildResult> {
     const controller = this.options.controller;
     if (!controller.getState().project) throw new Error('No project is open in Crowdy Studio.');
+    const authorize = this.options.host?.authorizeLiveModding;
+    if (authorize) await authorize(mode === 'draft' ? 'draft_test' : 'deploy_live');
     const result: CrowdyStudioDeployResult = mode === 'draft' ? await controller.testDraft() : await controller.deployLive();
     const state = controller.getState();
     const diagnostics = [...state.authoritativeDiagnostics, ...state.localDiagnostics].map(toDshDiagnostic);
@@ -680,6 +753,12 @@ export function renderSettingsYaml(modelBaseUrl: string, models: readonly Crowdy
     lines.push('agent-default-model:', '  provider: deepseek-official', `  model: ${quote(first.id)}`);
   }
   return `${lines.join('\n')}\n`;
+}
+
+function playbookRoot(base: string): URL {
+  const withSlash = base.endsWith('/') ? base : `${base}/`;
+  if (/^https?:\/\//.test(withSlash)) return new URL(withSlash);
+  return new URL(withSlash, window.location.origin);
 }
 
 /** Downscale and PNG-encode a frame in the page. */

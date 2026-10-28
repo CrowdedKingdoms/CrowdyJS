@@ -108,7 +108,7 @@ export interface CrowdyStudioProjectSummary {
 export type CrowdyStudioSaveState = 'SAVING' | 'SAVED' | 'CONFLICT' | 'OFFLINE';
 
 export interface CrowdyStudioFileRef {
-  source: 'PROJECT' | 'PERSONAL_LIBRARY' | 'COMMON';
+  source: 'PROJECT' | 'PERSONAL_LIBRARY' | 'COMMON' | 'REPOSITORY';
   target?: CrowdyStudioTarget;
   path: string;
   referenceId?: string;

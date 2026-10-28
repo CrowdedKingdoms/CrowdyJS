@@ -24,6 +24,7 @@ import type {
   CrowdyStudioGitHubTransport,
 } from './github/transport.js';
 import { githubNewRepositoryUrl, githubRepositorySlug } from './github/new-repo.js';
+import { isRepoDir, isRepoPath } from '../crowdy-dsh/game-paths.js';
 import {
   cloneCrowdyStudioProject,
   crowdyStudioFileKey,
@@ -161,6 +162,18 @@ export interface CrowdyStudioState {
   logs: readonly CrowdyStudioLogLine[];
   wallet: CrowdyStudioWalletSnapshot | null;
   invokeResult: CrowdyStudioInvokeResult | null;
+  /**
+   * True when this dock is editing the bound game repository. The Files pane
+   * lists that checkout instead of the mod crates.
+   */
+  repositoryMode?: boolean;
+  /** Relative file paths in the bound repository. Absent while the first listing is in flight. */
+  repositoryFiles?: readonly string[];
+  /** Relative directory paths in the bound repository, excluding the root. */
+  repositoryDirectories?: readonly string[];
+  /** Open repository files and their draft text. */
+  repositoryDocuments?: readonly { path: string; content: string }[];
+  repositoryMessage?: string;
 }
 
 export type CrowdyStudioPlayerWallet = Pick<PlayerWalletAPI, 'balance'>;
@@ -216,6 +229,16 @@ export interface CrowdyStudioControllerOptions {
    * card is purely bind / unbind / refresh / status.
    */
   github?: CrowdyStudioGitHubTransport;
+  /**
+   * Draft working copy for scene, catalog and world-hub files. A write updates
+   * the copy the local game is serving. Committing that copy is a separate call.
+   */
+  gameFiles?: {
+    writeDraft(path: string, content: string): Promise<void>;
+    readDraft(path: string): Promise<string>;
+    listDraft(dir: string): Promise<Array<{ name: string; type: 'file' | 'directory' }>>;
+    dirtyDraft(): Promise<string[]>;
+  };
   appId: string;
   gridId: string;
   initialProjectId?: string;
@@ -331,6 +354,7 @@ export class CrowdyStudioController {
       throw new Error('Crowdy Studio needs mods (client.exec): the SERVER target runs as a ck-exec mod');
     }
     this.mods = options.mods;
+    if (options.gameFiles?.listDraft) this.state.repositoryMode = true;
     if (options.onStateChange) this.listeners.add(options.onStateChange);
   }
 
@@ -479,6 +503,7 @@ export class CrowdyStudioController {
         (project) => project.projectId === this.options.initialProjectId,
       ) ?? projects[0];
     if (first) await this.loadProject(first.projectId);
+    if (this.options.gameFiles?.listDraft) await this.reloadRepository();
   }
 
   async createProject(
@@ -601,7 +626,7 @@ export class CrowdyStudioController {
   }
 
   openFile(ref: CrowdyStudioFileRef): void {
-    this.requireFile(ref);
+    if (ref.source !== 'REPOSITORY') this.requireFile(ref);
     const exists = this.state.openFiles.some((entry) => sameFileRef(entry, ref));
     this.update({
       openFiles: exists ? this.state.openFiles : [...this.state.openFiles, ref],
@@ -621,7 +646,93 @@ export class CrowdyStudioController {
   }
 
   fileContent(ref: CrowdyStudioFileRef): string {
+    if (ref.source === 'REPOSITORY') {
+      return this.state.repositoryDocuments?.find((file) => file.path === ref.path)?.content ?? '';
+    }
     return this.requireFile(ref).content;
+  }
+
+  /** Re-read the bound repository for the Files pane. */
+  async reloadRepository(): Promise<void> {
+    const list = this.options.gameFiles?.listDraft;
+    if (!list) return;
+    const files: string[] = [];
+    const directories: string[] = [];
+    const walk = async (dir: string): Promise<void> => {
+      const entries = await list(dir);
+      for (const entry of [...entries].sort((a, b) => a.name.localeCompare(b.name))) {
+        const path = dir ? `${dir}/${entry.name}` : entry.name;
+        if (entry.type === 'directory') {
+          directories.push(path);
+          await walk(path);
+        } else {
+          files.push(path);
+        }
+      }
+    };
+    try {
+      await walk('');
+      this.update({
+        repositoryMode: true,
+        repositoryFiles: files,
+        repositoryDirectories: directories,
+        repositoryMessage: undefined,
+      });
+    } catch (error) {
+      this.update({
+        repositoryMode: true,
+        repositoryMessage: errorMessage(error),
+      });
+    }
+  }
+
+  /** Open one repository file from the draft working copy. */
+  async openRepositoryFile(path: string): Promise<void> {
+    const draft = this.options.gameFiles;
+    if (!draft) throw new Error('This page has no draft working copy for game files.');
+    const content = await draft.readDraft(path);
+    const ref: CrowdyStudioFileRef = { source: 'REPOSITORY', path };
+    const exists = this.state.openFiles.some((entry) => sameFileRef(entry, ref));
+    this.update({
+      repositoryDocuments: upsertRepositoryDocument(this.state.repositoryDocuments ?? [], path, content),
+      openFiles: exists ? this.state.openFiles : [...this.state.openFiles, ref],
+      activeFile: ref,
+    });
+  }
+
+  /**
+   * Commit every file the draft has changed since the page loaded.
+   * Each file is one commit on the bound branch.
+   */
+  async commitRepository(): Promise<void> {
+    const draft = this.options.gameFiles;
+    if (!draft?.dirtyDraft) throw new Error('This page has no draft working copy for game files.');
+    const paths = await draft.dirtyDraft();
+    if (paths.length === 0) {
+      this.update({ repositoryMessage: 'No drafted files to commit.' });
+      return;
+    }
+    this.update({ repositoryMessage: `Committing ${paths.length} file${paths.length === 1 ? '' : 's'}…` });
+    const notes: string[] = [];
+    for (const path of paths) {
+      const written = await this.commitGameFile(path);
+      notes.push(`${path} @ ${written.commitSha.slice(0, 7)}`);
+    }
+    this.update({ repositoryMessage: `Committed ${notes.join(', ')}.` });
+  }
+
+  /** Write one repository file into the draft. This does not save the Studio project. */
+  updateRepositoryFile(path: string, content: string): void {
+    const current = this.state.repositoryDocuments?.find((file) => file.path === path);
+    if (current?.content === content) return;
+    this.update({
+      repositoryDocuments: upsertRepositoryDocument(this.state.repositoryDocuments ?? [], path, content),
+    });
+    const draft = this.options.gameFiles;
+    if (!draft) return;
+    void draft.writeDraft(path, content).catch((error) => {
+      this.update({ repositoryMessage: errorMessage(error) });
+    });
   }
 
   addFile(target: CrowdyStudioTarget, path: string, content = ''): void {
@@ -975,6 +1086,86 @@ export class CrowdyStudioController {
     } finally {
       this.update({ githubBusy: false });
     }
+  }
+
+  /**
+   * Write one repository file into the draft working copy.
+   *
+   * The draft is what the local game serves. It is not a GitHub commit;
+   * {@link commitGameFile} pushes a draft when asked.
+   */
+  async putGameFile(path: string, content: string): Promise<{ path: string }> {
+    if (!isRepoPath(path)) {
+      throw new Error('That path is not a file in the bound repository.');
+    }
+    const draft = this.options.gameFiles;
+    if (!draft) throw new Error('This page has no draft working copy for game files.');
+    await draft.writeDraft(path, content);
+    if (this.state.repositoryMode) {
+      const ref: CrowdyStudioFileRef = { source: 'REPOSITORY', path };
+      const exists = this.state.openFiles.some((entry) => sameFileRef(entry, ref));
+      this.update({
+        repositoryDocuments: upsertRepositoryDocument(this.state.repositoryDocuments ?? [], path, content),
+        openFiles: exists ? this.state.openFiles : [...this.state.openFiles, ref],
+        activeFile: ref,
+      });
+      void this.reloadRepository();
+    }
+    return { path };
+  }
+
+  /**
+   * Commit one drafted game file onto the bound branch.
+   *
+   * The bytes are the draft working copy. The write goes through
+   * crowdyStudioGitHubPutFile with the mirror's commit as expectedCommitSha.
+   */
+  async commitGameFile(path: string): Promise<{ commitSha: string }> {
+    if (!isRepoPath(path)) {
+      throw new Error('That path is not a file in the bound repository.');
+    }
+    const draft = this.options.gameFiles;
+    if (!draft) throw new Error('This page has no draft working copy for game files.');
+    if (!this.options.github) throw new Error('GitHub is not available in this Studio.');
+    const scope = this.githubScope();
+    const project = this.state.project;
+    const sha = project?.github?.sha ?? null;
+    if (!scope || project?.source !== 'GITHUB' || !sha) {
+      throw new Error('Bind a repository before committing game files.');
+    }
+    const content = await draft.readDraft(path);
+    const written = await this.options.github.putFile({
+      ...scope,
+      path,
+      content,
+      message: `Crowdy Studio agent: update ${path}`,
+      expectedCommitSha: sha,
+    });
+    await this.reloadProject();
+    return { commitSha: written.commitSha ?? sha };
+  }
+
+  /** Directory listing of the draft working copy. `dir` is `''` at the repository root. */
+  async listGameDir(dir: string): Promise<Array<{ name: string; type: 'file' | 'directory' }>> {
+    if (!isRepoDir(dir)) throw new Error('That path is not a directory in the bound repository.');
+    const draft = this.options.gameFiles;
+    if (!draft?.listDraft) throw new Error('This page has no draft working copy for game files.');
+    return draft.listDraft(dir);
+  }
+
+  /** One file from the draft working copy. */
+  async readGameFile(path: string): Promise<{ content: string }> {
+    if (!isRepoPath(path)) throw new Error('That path is not a file in the bound repository.');
+    const draft = this.options.gameFiles;
+    if (!draft) throw new Error('This page has no draft working copy for game files.');
+    return { content: await draft.readDraft(path) };
+  }
+
+  /** Paths the draft has changed since the page loaded. */
+  async dirtyGameFiles(): Promise<{ paths: string[] }> {
+    const draft = this.options.gameFiles;
+    if (!draft?.dirtyDraft) throw new Error('This page has no draft working copy for game files.');
+    return { paths: await draft.dirtyDraft() };
   }
 
   async retrySave(): Promise<boolean> {
@@ -2368,11 +2559,22 @@ function upsertCheckpoint(
   ];
 }
 
+function upsertRepositoryDocument(
+  documents: readonly { path: string; content: string }[],
+  path: string,
+  content: string,
+): { path: string; content: string }[] {
+  const next = documents.filter((file) => file.path !== path);
+  next.push({ path, content });
+  return next;
+}
+
 function fileRefExists(
   project: CrowdyStudioProject,
   state: CrowdyStudioState,
   ref: CrowdyStudioFileRef,
 ): boolean {
+  if (ref.source === 'REPOSITORY') return true;
   if (ref.source === 'PROJECT') {
     return project.files.some(
       (file) =>

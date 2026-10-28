@@ -29,13 +29,12 @@ export function createTextareaCrowdyStudioEditor(
   let disposed = false;
 
   const onInput = (): void => {
-    if (
-      disposed ||
-      active?.source !== 'PROJECT' ||
-      !active.target
-    ) {
+    if (disposed || !active) return;
+    if (active.source === 'REPOSITORY') {
+      callbacks.onRepositoryFileChange?.(active.path, textarea.value);
       return;
     }
+    if (active.source !== 'PROJECT' || !active.target) return;
     callbacks.onProjectFileChange(active.target, active.path, textarea.value);
   };
   textarea.addEventListener('input', onInput);
@@ -55,7 +54,7 @@ export function createTextareaCrowdyStudioEditor(
         return;
       }
       textarea.disabled = false;
-      textarea.readOnly = next.source !== 'PROJECT';
+      textarea.readOnly = next.source !== 'PROJECT' && next.source !== 'REPOSITORY';
       textarea.dataset.target = next.target ?? 'SHARED';
       textarea.dataset.path = next.path;
       const content = contentFor(state, next);
@@ -72,6 +71,9 @@ export function createTextareaCrowdyStudioEditor(
 }
 
 function contentFor(state: CrowdyStudioState, ref: CrowdyStudioFileRef): string {
+  if (ref.source === 'REPOSITORY') {
+    return state.repositoryDocuments?.find((file) => file.path === ref.path)?.content ?? '';
+  }
   if (ref.source === 'PROJECT') {
     return (
       state.project?.files.find(

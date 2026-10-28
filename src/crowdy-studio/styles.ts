@@ -56,6 +56,7 @@ export const CROWDY_STUDIO_STYLES = `
 .ck-crowdy-studio-section-header{display:flex;align-items:center;justify-content:space-between;color:var(--ck-muted);font-weight:700;text-transform:uppercase;font-size:11px;margin-bottom:4px}
 .ck-crowdy-studio-file{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px;align-items:center}
 .ck-crowdy-studio-file>button:first-child{text-align:left;overflow:hidden;text-overflow:ellipsis;border:0;background:transparent}
+.ck-crowdy-studio-file>button[data-active=true]{color:#bae6fd}
 .ck-crowdy-studio-file-action{padding:1px 6px}
 .ck-crowdy-studio-file .ck-crowdy-studio-menu{left:auto;right:0;min-width:130px}
 .ck-crowdy-studio-inline-form{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0;padding:6px;border:1px solid var(--ck-line);border-radius:4px;background:#0f172a}

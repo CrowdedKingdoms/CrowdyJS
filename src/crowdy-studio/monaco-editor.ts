@@ -348,6 +348,9 @@ export async function createMonacoCrowdyStudioEditor(
                 })
                 .catch(() => {});
             }
+            if (!entry.suppressChanges && entry.ref.source === 'REPOSITORY') {
+              callbacks.onRepositoryFileChange?.(entry.ref.path, model.getValue());
+            }
             if (
               !entry.suppressChanges &&
               entry.ref.source === 'PROJECT' &&
@@ -463,8 +466,23 @@ function collectFiles(
         uri: crowdyStudioFileUri(workspaceUri, file.target, file.path),
       };
     }) ?? [];
+  const repositoryFiles = (state.repositoryDocuments ?? [])
+    .filter((file) =>
+      state.openFiles.some((ref) => ref.source === 'REPOSITORY' && ref.path === file.path),
+    )
+    .map((file) => {
+      const ref: CrowdyStudioFileRef = { source: 'REPOSITORY', path: file.path };
+      const encoded = file.path.split('/').map(encodeURIComponent).join('/');
+      return {
+        key: keyForRef(ref),
+        ref,
+        content: file.content,
+        uri: `${workspaceUri.replace(/\/+$/u, '')}/repository/${encoded}`,
+      };
+    });
   return [
     ...projectFiles,
+    ...repositoryFiles,
     ...state.personalLibraryFiles.map((file) =>
       collectReference(workspaceUri, file),
     ),
