@@ -120,7 +120,7 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
-## Unreleased: Crowded Kingdoms no longer hosts games
+## 18.23.1: Crowded Kingdoms no longer hosts games
 
 No breaking change. On 2026-10-29 Crowded Kingdoms retired Crowdy Games: the games site, the
 shell that framed published games, the Overworld lobby and the content CDN are gone on every
@@ -1013,7 +1013,7 @@ No removals.
 `client.hosting` (with `@crowdedkingdoms/crowdyjs/hosting`) and `EmbeddedHost`, are deprecated
 and dormant: the hosting API answers `CONTENT_HOSTING_DISABLED` on every tier, and no shell
 frames a game. See
-[Unreleased: Crowded Kingdoms no longer hosts games](#unreleased-crowded-kingdoms-no-longer-hosts-games).
+[18.23.1: Crowded Kingdoms no longer hosts games](#18231-crowded-kingdoms-no-longer-hosts-games).
 
 **Additive.** `17.2.0` (2026-09-14). Tracks ck-api `v2.1.0` (third-party game
 hosting). Nothing existing changes shape; two things are new.

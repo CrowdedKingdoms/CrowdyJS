@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.23.0** (18.0.0 was published only as
+**Current package:** `package.json` is **18.23.1** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -30,13 +30,11 @@ directly. So, before adding a wrapper:
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
 
-**Unreleased: Crowded Kingdoms no longer hosts games (2026-10-29).** Crowdy Games is retired
+**18.23.1: Crowded Kingdoms no longer hosts games (2026-10-29).** Crowdy Games is retired
 on every tier, and the hosting API is switched off: writes answer `CONTENT_HOSTING_DISABLED`,
 reads return null or an empty list. The 17.2.0 surface stays in the package, `@deprecated`
 and unchanged (the 17.2.0 paragraph below says what it is and what to keep). The README's
-"Hosting your game" and MIGRATION.md's "Unreleased" entry send developers to their own
-origin; the release that ships this renames that MIGRATION.md heading to its version and
-updates the link to it from MIGRATION.md's v17.2 section.
+"Hosting your game" and MIGRATION.md's 18.23.1 entry send developers to their own origin.
 
 **18.23.0: the game editor and bridge protocol v5 (2026-10-29).** A project the API reports
 as a Construct game (`crowdyStudioGitHubLayout.kind === 'CONSTRUCT_GAME'`, cks-game-api on the
