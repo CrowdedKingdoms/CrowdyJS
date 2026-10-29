@@ -5295,6 +5295,63 @@ type CrowdyStudioGitHubLayout {
   A crowdy.json exists at the repository root. False means the layout was inferred from the tree.
   """
   fromFile: Boolean!
+  """
+  STUDIO_CRATES for a mod repository, CONSTRUCT_GAME for a Construct game with no Studio rust under the layout roots (the same test TAKE_REPOSITORY adopts by).
+  """
+  kind: CrowdyStudioGitHubLayoutKind!
+}
+
+"""
+What the bound repository is, at one commit. The server decides it from the tree; a client picks its editor from it and does not inspect the tree itself.
+"""
+enum CrowdyStudioGitHubLayoutKind {
+  """
+  A Studio mod: the SERVER and CLIENT crates sit under the layout roots (or the repository is empty and the project will push them).
+  """
+  STUDIO_CRATES
+  """
+  A game generated from the Construct template, with no Studio rust under the layout roots. The whole repository is the working tree, and the Studio mirror is empty.
+  """
+  CONSTRUCT_GAME
+}
+
+"""
+One file of a batched read. content is null when the blob is not UTF-8 text or is larger than this tier reads; size and sha are always set.
+"""
+type CrowdyStudioGitHubFileContent {
+  path: String!
+  """Blob SHA at the commit read."""
+  sha: String!
+  """Blob size in bytes."""
+  size: Int!
+  """The blob is not valid UTF-8 text (or contains NUL)."""
+  binary: Boolean!
+  """UTF-8 content, or null when binary or over the size cap."""
+  content: String
+}
+
+"""
+Several files of the bound repository at one commit, read in one call (one operation against the per-user GitHub budget).
+"""
+type CrowdyStudioGitHubFiles {
+  """Commit the files were read at."""
+  commitSha: String!
+  files: [CrowdyStudioGitHubFileContent!]!
+  """Requested paths that are not files at that commit."""
+  missing: [String!]!
+}
+
+"""
+The commit a multi-file write created. githubSha is now commitSha; every change in it landed, or none did.
+"""
+type CrowdyStudioGitHubCommit {
+  commitSha: String!
+  """The expectedCommitSha it builds on."""
+  parentSha: String!
+  """Paths created or updated."""
+  written: [String!]!
+  """Paths deleted."""
+  deleted: [String!]!
 }
 
 """
@@ -8333,6 +8390,15 @@ type Query {
     limit: Int = 20
   ): CrowdyStudioModelUsage! @requiresPermission(scope: "runtime", permission: "use_studio_agent", scopeArg: "appId")
   """
+  Whether this player may draft_test or deploy_live. Requires use_studio_agent and an enabled agent policy. A missing policy row, a kill switch, or a missing permission refuses. The dock calls this before either action. The Studio Test button does not.
+  """
+  crowdyStudioLiveModding(
+    """App the draft or live deploy would change."""
+    appId: BigInt!
+    """draft_test or deploy_live."""
+    action: String!
+  ): Boolean! @requiresPermission(scope: "runtime", permission: "use_studio_agent", scopeArg: "appId")
+  """
   GitHub connection for the caller and the repository bound to a Crowdy Studio project, with the commit the project mirror is at (githubSha). GitHub is a Studio filesystem capability, not a login provider, and it is never required: a project starts in Crowdy Studio and may be bound later.
   """
   crowdyStudioGitHubStatus(
@@ -8361,6 +8427,10 @@ type Query {
   One UTF-8 file from the bound repository at one commit (default: githubSha), with its blob SHA.
   """
   crowdyStudioGitHubFile(input: CrowdyStudioGitHubFileInput!): CrowdyStudioGitHubFile!
+  """
+  Up to 100 files of the bound repository at one commit (default: githubSha), for one operation against the per-user GitHub budget. A path that is not a file there is listed in missing; a blob that is not UTF-8 text, or is larger than this tier reads, comes back with content null and its sha and size.
+  """
+  crowdyStudioGitHubFiles(input: CrowdyStudioGitHubFilesInput!): CrowdyStudioGitHubFiles!
   """
   UDP proxy session status for the game token on this request. Without a game token, returns connected: false. Does not open a session—use udpNotifications or connectUdpProxy.
   """
@@ -8626,6 +8696,17 @@ input CrowdyStudioGitHubFileInput {
   """
   commitSha: String
   path: String!
+}
+
+input CrowdyStudioGitHubFilesInput {
+  appId: BigInt!
+  projectId: String!
+  """
+  Full 40-hex commit to read at. Omitted reads the project githubSha (the mirror commit), never the branch head.
+  """
+  commitSha: String
+  """Repo-relative paths, 1 to 100."""
+  paths: [String!]!
 }
 
 type Mutation {
@@ -10599,7 +10680,7 @@ type Mutation {
   """
   crowdyStudioGitHubConnectUrl: CrowdyStudioGitHubConnectStart!
   """
-  Bind a Crowdy Studio project you own to a repository granted to your installation, and make the two agree in one commit: PUSH_PROJECT commits the project files to the branch (refused with GITHUB_REPO_HAS_FILES when the branch already has rust under the layout roots); TAKE_REPOSITORY replaces the project files with the rust on the branch (refused with GITHUB_REPO_EMPTY when there is none). From then on the repository is the working tree and the project files are a mirror of it at githubSha. Identity session only.
+  Bind a Crowdy Studio project you own to a repository granted to your installation, and make the two agree in one commit: PUSH_PROJECT commits the project files to the branch (refused with GITHUB_REPO_HAS_FILES when the branch already has rust under the layout roots); TAKE_REPOSITORY replaces the project files with the rust on the branch, or adopts a Construct game that has none (refused with GITHUB_REPO_EMPTY when the branch has neither). From then on the repository is the working tree and the project files are a mirror of it at githubSha. Identity session only.
   """
   crowdyStudioGitHubBind(input: BindCrowdyStudioGitHubInput!): CrowdyStudioGitHubStatus!
   """
@@ -10610,6 +10691,10 @@ type Mutation {
   Bring the project mirror forward to the branch head. This is how a push made outside Crowdy Studio reaches the editor and the agent; githubSha becomes the head commit. A no-op when already at head.
   """
   crowdyStudioGitHubRefresh(input: CrowdyStudioGitHubProjectInput!): CrowdyStudioGitHubStatus!
+  """
+  Write and delete up to 100 files of the bound repository as ONE commit on the bound branch, on top of expectedCommitSha. Refused with GITHUB_STALE_SHA, writing nothing, when the project or the branch has moved on. Project files under the layout roots move the mirror in the same transaction as githubSha. Workflow files and the deletion of crowdy.json are refused.
+  """
+  crowdyStudioGitHubCommitFiles(input: CrowdyStudioGitHubCommitFilesInput!): CrowdyStudioGitHubCommit!
   """
   Create or update one UTF-8 file in the bound repository as a commit on the bound branch. Send the blob sha on update and the project githubSha as expectedCommitSha; either being stale is refused with GITHUB_STALE_SHA and nothing moves. When the path is a project file under the layout roots the project mirror advances with it; the returned commitSha is the new githubSha.
   """
@@ -12749,7 +12834,7 @@ enum CrowdyStudioGitHubBindInitial {
   """
   PUSH_PROJECT
   """
-  The repository is adopted as it is; the Studio project files are replaced by the rust under the layout roots at branch HEAD. Refused with GITHUB_REPO_EMPTY when there is nothing to take.
+  The repository is adopted as it is. Rust under the layout roots replaces the Studio project files. A Construct game is adopted at branch HEAD when it has no such rust, and the Studio mirror is cleared. Refused with GITHUB_REPO_EMPTY when the branch has neither.
   """
   TAKE_REPOSITORY
 }
@@ -12757,6 +12842,26 @@ enum CrowdyStudioGitHubBindInitial {
 input CrowdyStudioGitHubProjectInput {
   appId: BigInt!
   projectId: String!
+}
+
+input CrowdyStudioGitHubCommitFilesInput {
+  appId: BigInt!
+  projectId: String!
+  message: String!
+  """
+  The project githubSha the writer drafted against. Refused with GITHUB_STALE_SHA when the project or the branch has moved on, and nothing is written.
+  """
+  expectedCommitSha: String!
+  """1 to 100 changes, one per path."""
+  changes: [CrowdyStudioGitHubCommitChangeInput!]!
+}
+
+input CrowdyStudioGitHubCommitChangeInput {
+  path: String!
+  """New UTF-8 content. Required unless delete is true."""
+  content: String
+  """Remove the path instead of writing it."""
+  delete: Boolean = false
 }
 
 input CrowdyStudioGitHubPutFileInput {

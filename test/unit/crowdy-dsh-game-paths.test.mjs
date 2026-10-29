@@ -1,30 +1,35 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-const { isWritableGamePath, isRepoPath, assertPlaybookPage } = await import('../../dist/crowdy-dsh/game-paths.js');
+const { assertPlaybookPage } = await import('../../dist/crowdy-dsh/game-paths.js');
+const { isRepoPath, isRepoDir, normalizeRepoPath, isLikelyBinaryPath } = await import(
+  '../../dist/crowdy-studio/draft/paths.js'
+);
 
-test('game writes are scenes, the catalog, and the world hub', () => {
-  assert.equal(isWritableGamePath('src/scenes/holodeck.mjs'), true);
-  assert.equal(isWritableGamePath('model/catalog.mjs'), true);
-  assert.equal(isWritableGamePath('exec/construct'), true);
-  assert.equal(isWritableGamePath('exec/construct/lib.rs'), true);
-  assert.equal(isWritableGamePath('src/main.rs'), false);
-  assert.equal(isWritableGamePath('../secrets.env'), false);
-  assert.equal(isWritableGamePath('/etc/passwd'), false);
-});
-
-test('the repository listing accepts the copied game and refuses secrets', () => {
+test('the game editor lists and writes the repository and refuses secrets, dependencies and workflows', () => {
   assert.equal(isRepoPath('src/main.ts'), true);
-  assert.equal(isRepoPath('src/scenes/pool.mjs'), true);
-  assert.equal(isRepoPath('src/game/programs.ts'), true);
+  assert.equal(isRepoPath('src/scenes/pool/PoolScene.ts'), true);
+  assert.equal(isRepoPath('model/catalog.mjs'), true);
+  assert.equal(isRepoPath('exec/construct/src/lib.rs'), true);
   assert.equal(isRepoPath('.git/config'), false);
+  assert.equal(isRepoPath('src/.git/HEAD'), false);
   assert.equal(isRepoPath('node_modules/left-pad/index.js'), false);
   assert.equal(isRepoPath('.env'), false);
+  assert.equal(isRepoPath('config/.env.local'), false);
+  assert.equal(isRepoPath('.github/workflows/ci.yml'), false);
+  assert.equal(isRepoPath('../secrets'), false);
+  assert.equal(isRepoPath('/etc/passwd'), false);
+  assert.equal(isRepoPath('src//main.ts'), false);
+  assert.equal(isRepoDir(''), true);
+  assert.equal(normalizeRepoPath('./src//scenes/./a.ts'), 'src/scenes/a.ts');
+  assert.equal(normalizeRepoPath('src/../x.ts'), null);
+  assert.equal(isLikelyBinaryPath('public/logo.png'), true);
+  assert.equal(isLikelyBinaryPath('src/main.ts'), false);
 });
 
 test('playbook pages stay under the shipped markdown', () => {
   assert.equal(assertPlaybookPage('playbook/authoring-loop.md'), 'playbook/authoring-loop.md');
-  assert.equal(assertPlaybookPage('/skills/mmo-scene/SKILL.md'), 'skills/mmo-scene/SKILL.md');
+  assert.equal(assertPlaybookPage('/skills/dock-scene/SKILL.md'), 'skills/dock-scene/SKILL.md');
   assert.throws(() => assertPlaybookPage('../README.md'));
   assert.throws(() => assertPlaybookPage('https://example.com/a.md'));
   assert.throws(() => assertPlaybookPage('playbook/notes.txt'));

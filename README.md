@@ -334,7 +334,7 @@ never told about, so a native refresh without it is a re-placement.
 | `client.playerWallet` | Player spend: balance, ledger, hourly charges, spend caps, card setup, auto-recharge. A ck-exec mod's compute is billed here, to its owner. |
 | `client.marketplace` | Player-authorized grid claims (`claimGridOwnership`, `claimGridChunk`, `releaseClaimedGrid`, requests and invites) and studio moderation of player code (admission queue, listing administration, claim policy). Mods publish and install through `client.exec`. |
 | `client.crowdyStudio` | Cloud project, personal-library, and common-file APIs for Crowdy Studio: target-scoped files, metadata/module names, optimistic revisions, copy-by-value imports, atomic saves. |
-| `client.crowdyStudioGitHub` | Optional GitHub repository for a Crowdy Studio project: status, `bind` (push the project in, or take the repository), `unbind`, `refresh`, `layout`, `tree`, `getFile`, commit-guarded `putFile` / `deleteFile`. While bound the repository is the working tree and every Studio save commits; the project's `files` are the server's mirror at `github.sha`. Never required. |
+| `client.crowdyStudioGitHub` | Optional GitHub repository for a Crowdy Studio project: status, `bind` (push the project in, or take the repository), `unbind`, `refresh`, `layout` (with `kind`: a mod or a Construct game), `tree`, `getFile`, batched `getFiles`, commit-guarded `putFile` / `deleteFile`, and `commitFiles` (many changes as one commit). While bound the repository is the working tree and every Studio save commits; the project's `files` are the server's mirror at `github.sha`. Never required. |
 | `client.udp` | UDP proxy subscriptions + spatial mutations (`sendActorUpdate`, `sendVoxelUpdate`, `sendAudioPacket`, `sendVideoPacket` / `sendVideoFrame`, `sendTextPacket`, `sendClientEvent`, `sendSingleActorMessage`, `sendChannelMessage`, `sendRangedChannelMessage`). |
 | `client.realtime` | Connection status, manual `connect()` / `disconnect()`, `onStatus()` listener. |
 | `client.refreshGameplayToken()` | Safely rotates an active game client's app token (see [Token refresh](#token-refresh-during-gameplay)). |
@@ -1236,6 +1236,41 @@ is same-origin by design (`BroadcastChannel` and OPFS are origin-scoped), so
 its `sandbox="allow-scripts allow-same-origin"` does not isolate it from the
 page; that CSP is the control. See the
 [`@crowdedkingdoms/crowdy-dsh` README on npm](https://www.npmjs.com/package/@crowdedkingdoms/crowdy-dsh).
+
+### The game editor (a Construct game's repository)
+
+When the open project is bound to a game generated from the Construct
+template, the API reports it as such (`crowdyStudioGitHubLayout.kind ===
+'CONSTRUCT_GAME'`) and Studio edits the game itself instead of mod crates,
+provided the host gives the controller a draft store:
+
+```ts
+import { GitHubDraftStore, IndexedDbDraftOverlayStorage } from '@crowdedkingdoms/crowdyjs/crowdy-studio';
+
+const storage = new IndexedDbDraftOverlayStorage();
+const studio = createCrowdyStudioEmbed({
+  // ...
+  runtimeOverrides: {
+    draftStore: ({ appId, projectId, githubSha }) =>
+      new GitHubDraftStore({ transport: game.crowdyStudioGitHub, appId, projectId, baseCommitSha: githubSha, storage }),
+  },
+});
+```
+
+The draft is the game's working copy until the player commits. Everything
+reads it: the Files pane (dirty files marked, discard per file), the editor,
+the agent (in game mode), and whatever the game hot-reloads from it. Versions
+are git blob ids, so an untouched file carries its GitHub blob id. The hosted
+store keeps edits in IndexedDB on the game's own origin and reads the bound
+branch through `crowdyStudioGitHub.tree` and `getFiles` (100 paths a call);
+**Commit** (or the agent's `commit_game_files`, which the player confirms in
+the pane) publishes the draft as ONE commit through `commitFiles`. When the
+branch moved meanwhile, the store rebases every edit that does not collide and
+lists the rest as conflicts the player settles (keep mine / take theirs). A
+game that runs a local dev server can implement `DraftStore` over its checkout
+instead. The page answers the agent's draft requests and its `preview_status`
+(through the host's `dshHost.previewStatus`), and boots the harness in game
+mode, rebooting it when the open project changes editor.
 
 ## Errors
 

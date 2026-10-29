@@ -20,11 +20,19 @@ import {
 import { parseRustcDiagnostics, type CrowdyStudioDiagnostic } from './diagnostics.js';
 import type {
   CrowdyStudioGitHubBindInitial,
+  CrowdyStudioGitHubLayoutKind,
   CrowdyStudioGitHubStatus,
   CrowdyStudioGitHubTransport,
 } from './github/transport.js';
 import { githubNewRepositoryUrl, githubRepositorySlug } from './github/new-repo.js';
-import { isRepoDir, isRepoPath } from '../crowdy-dsh/game-paths.js';
+import {
+  DraftError,
+  normalizeRepoPath,
+  type DraftChangeEvent,
+  type DraftCommitResult,
+  type DraftConflict,
+  type DraftStore,
+} from './draft/index.js';
 import {
   cloneCrowdyStudioProject,
   crowdyStudioFileKey,
@@ -163,17 +171,32 @@ export interface CrowdyStudioState {
   wallet: CrowdyStudioWalletSnapshot | null;
   invokeResult: CrowdyStudioInvokeResult | null;
   /**
-   * True when this dock is editing the bound game repository. The Files pane
-   * lists that checkout instead of the mod crates.
+   * True when the open project is a Construct game (`crowdyStudioGitHubLayout.kind`
+   * is CONSTRUCT_GAME) and the host gave a draft store: the Files pane lists the
+   * game's repository draft instead of the mod crates, and the agent boots in
+   * game mode.
    */
   repositoryMode?: boolean;
-  /** Relative file paths in the bound repository. Absent while the first listing is in flight. */
+  /** Draft backend in use (`github`, `dev-server`). */
+  repositoryStore?: string;
+  /** Relative file paths in the draft. Absent while the first listing is in flight. */
   repositoryFiles?: readonly string[];
-  /** Relative directory paths in the bound repository, excluding the root. */
+  /** Relative directory paths in the draft, excluding the root. */
   repositoryDirectories?: readonly string[];
-  /** Open repository files and their draft text. */
-  repositoryDocuments?: readonly { path: string; content: string }[];
+  /** Draft paths that differ from the base commit. */
+  repositoryDirty?: readonly string[];
+  /** Paths the draft deletes. */
+  repositoryDeleted?: readonly string[];
+  /** Paths the branch and the draft both changed; the player settles each. */
+  repositoryConflicts?: readonly DraftConflict[];
+  /** Commit the draft builds on. */
+  repositoryBaseCommitSha?: string | null;
+  /** Draft revision; bumps on every change. */
+  repositoryRevision?: number;
+  /** Open draft files and their text, with the hash they were read at. */
+  repositoryDocuments?: readonly { path: string; content: string; hash?: string }[];
   repositoryMessage?: string;
+  repositoryBusy?: boolean;
 }
 
 export type CrowdyStudioPlayerWallet = Pick<PlayerWalletAPI, 'balance'>;
@@ -210,6 +233,8 @@ const CRATE_NAME = /^[a-z][a-z0-9_-]{0,63}$/;
 /** ck-exec's server log levels (`ExecLogLine.level`); a CLIENT half's are crowdy-client-sdk's. */
 const LOG_LEVELS: readonly CrowdyStudioLogLevel[] = ['error', 'warn', 'info', 'debug'];
 const PREVIEW_LOG_LINES_KEPT = 100;
+/** Editor keystrokes reach the game draft after this pause. */
+const REPOSITORY_WRITE_DEBOUNCE_MS = 250;
 
 export interface CrowdyStudioBroker {
   start(bytes: ArrayBuffer): Promise<void>;
@@ -230,15 +255,13 @@ export interface CrowdyStudioControllerOptions {
    */
   github?: CrowdyStudioGitHubTransport;
   /**
-   * Draft working copy for scene, catalog and world-hub files. A write updates
-   * the copy the local game is serving. Committing that copy is a separate call.
+   * The game editor's draft. Called when the open project is a Construct game
+   * (`crowdyStudioGitHubLayout.kind` is CONSTRUCT_GAME, decided by the API) to
+   * give the controller that project's draft store: usually a
+   * {@link GitHubDraftStore} on a hosted page, or the game's dev-server store on
+   * a local checkout. Omitted, or returning null, keeps the mod editor.
    */
-  gameFiles?: {
-    writeDraft(path: string, content: string): Promise<void>;
-    readDraft(path: string): Promise<string>;
-    listDraft(dir: string): Promise<Array<{ name: string; type: 'file' | 'directory' }>>;
-    dirtyDraft(): Promise<string[]>;
-  };
+  draftStore?: (project: { appId: string; projectId: string; githubSha: string }) => DraftStore | null;
   appId: string;
   gridId: string;
   initialProjectId?: string;
@@ -335,6 +358,16 @@ export class CrowdyStudioController {
   private conflictRemote: CrowdyStudioProject | null = null;
   private broker: CrowdyStudioBroker | null = null;
   private operationGeneration = 0;
+  /** Game editor: the open Construct game's draft, or null in the mod editor. */
+  private draft: DraftStore | null = null;
+  private draftProjectId: string | null = null;
+  private draftUnsubscribe: (() => void) | null = null;
+  /** Layout kind per `projectId@githubSha`; a commit's tree never changes. */
+  private readonly layoutKinds = new Map<string, CrowdyStudioGitHubLayoutKind>();
+  /** Debounced editor writes into the draft, by path. */
+  private readonly repositoryWrites = new Map<string, ReturnType<typeof setTimeout>>();
+  private editorKnown = false;
+  private readonly editorKnownWaiters: Array<() => void> = [];
   private agentOperationGeneration = 0;
   private readonly visibleSurfaces = new Set<CrowdyStudioPolledSurface>();
   private readonly surfaceTimers = new Map<
@@ -354,7 +387,6 @@ export class CrowdyStudioController {
       throw new Error('Crowdy Studio needs mods (client.exec): the SERVER target runs as a ck-exec mod');
     }
     this.mods = options.mods;
-    if (options.gameFiles?.listDraft) this.state.repositoryMode = true;
     if (options.onStateChange) this.listeners.add(options.onStateChange);
   }
 
@@ -503,7 +535,7 @@ export class CrowdyStudioController {
         (project) => project.projectId === this.options.initialProjectId,
       ) ?? projects[0];
     if (first) await this.loadProject(first.projectId);
-    if (this.options.gameFiles?.listDraft) await this.reloadRepository();
+    else this.markEditorKnown();
   }
 
   async createProject(
@@ -578,6 +610,7 @@ export class CrowdyStudioController {
       projectId,
     });
     this.installProject(project);
+    await this.refreshRepositoryMode();
     if (this.options.synchronizationProvider) {
       await this.refreshCheckpoints();
     }
@@ -652,87 +685,315 @@ export class CrowdyStudioController {
     return this.requireFile(ref).content;
   }
 
-  /** Re-read the bound repository for the Files pane. */
-  async reloadRepository(): Promise<void> {
-    const list = this.options.gameFiles?.listDraft;
-    if (!list) return;
-    const files: string[] = [];
-    const directories: string[] = [];
-    const walk = async (dir: string): Promise<void> => {
-      const entries = await list(dir);
-      for (const entry of [...entries].sort((a, b) => a.name.localeCompare(b.name))) {
-        const path = dir ? `${dir}/${entry.name}` : entry.name;
-        if (entry.type === 'directory') {
-          directories.push(path);
-          await walk(path);
-        } else {
-          files.push(path);
-        }
-      }
-    };
+  // ----- game editor: the draft of a bound Construct game -------------------
+
+  /** The open project's draft in the game editor; null in the mod editor. */
+  get draftStore(): DraftStore | null {
+    return this.draft;
+  }
+
+  /**
+   * Resolves once the first project load decided between the mod editor and
+   * the game editor. Bounded, so a page that cannot reach the API still boots
+   * its agent (in the mod editor) instead of waiting forever.
+   */
+  whenEditorKnown(timeoutMs = 15_000): Promise<void> {
+    if (this.editorKnown) return Promise.resolve();
+    return new Promise((resolve) => {
+      const timer = setTimeout(resolve, timeoutMs);
+      this.editorKnownWaiters.push(() => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
+  }
+
+  /**
+   * Pick the editor for the open project. A GITHUB project the API classifies
+   * as CONSTRUCT_GAME gets the host's draft store; anything else, or a host
+   * without one, the mod editor. The kind is asked once per mirror commit.
+   */
+  async refreshRepositoryMode(): Promise<void> {
     try {
-      await walk('');
+      const project = this.state.project;
+      const factory = this.options.draftStore;
+      const github = this.options.github;
+      const sha = project?.github?.sha ?? null;
+      if (!project || project.source !== 'GITHUB' || !sha || !github || !factory) {
+        this.closeDraft();
+        return;
+      }
+      const key = `${project.projectId}@${sha}`;
+      let kind = this.layoutKinds.get(key);
+      if (!kind) {
+        const layout = await github.layout({ appId: this.options.appId, projectId: project.projectId });
+        kind = layout.kind ?? 'STUDIO_CRATES';
+        this.layoutKinds.set(key, kind);
+      }
+      if (kind !== 'CONSTRUCT_GAME') {
+        this.closeDraft();
+        return;
+      }
+      // The same game keeps its store: the store follows its own commits.
+      if (this.draft && this.draftProjectId === project.projectId) return;
+      this.closeDraft();
+      const store = factory({ appId: this.options.appId, projectId: project.projectId, githubSha: sha });
+      if (!store) return;
+      this.draft = store;
+      this.draftProjectId = project.projectId;
+      this.draftUnsubscribe = store.subscribe((event) => this.onDraftChange(event));
       this.update({
         repositoryMode: true,
-        repositoryFiles: files,
-        repositoryDirectories: directories,
+        repositoryStore: store.kind,
+        repositoryFiles: undefined,
+        repositoryDirectories: undefined,
+        repositoryDocuments: [],
         repositoryMessage: undefined,
+        openFiles: this.state.openFiles.filter((ref) => ref.source !== 'PROJECT'),
+        activeFile: this.state.activeFile?.source === 'PROJECT' ? null : this.state.activeFile,
       });
+      await this.reloadRepository();
     } catch (error) {
-      this.update({
-        repositoryMode: true,
-        repositoryMessage: errorMessage(error),
-      });
+      this.update({ repositoryMessage: errorMessage(error) });
+    } finally {
+      this.markEditorKnown();
     }
   }
 
-  /** Open one repository file from the draft working copy. */
+  /** Re-load the draft (base tree and stored edits) for the Files pane. */
+  async reloadRepository(): Promise<void> {
+    const store = this.draft;
+    if (!store) return;
+    this.update({ repositoryBusy: true });
+    try {
+      const snapshot = await store.load();
+      if (store !== this.draft) return;
+      this.applyDraftSnapshot();
+      const open = (this.state.repositoryDocuments ?? []).map((doc) => doc.path);
+      if (open.length > 0) await this.refreshRepositoryDocuments(open);
+      this.update({
+        repositoryMessage: snapshot.truncated
+          ? 'The repository is larger than the editor lists; some files are hidden.'
+          : undefined,
+      });
+    } catch (error) {
+      this.update({ repositoryMessage: errorMessage(error) });
+    } finally {
+      this.update({ repositoryBusy: false });
+    }
+  }
+
+  /** Open one draft file in the editor. */
   async openRepositoryFile(path: string): Promise<void> {
-    const draft = this.options.gameFiles;
-    if (!draft) throw new Error('This page has no draft working copy for game files.');
-    const content = await draft.readDraft(path);
-    const ref: CrowdyStudioFileRef = { source: 'REPOSITORY', path };
+    const store = this.requireDraft();
+    const normalized = normalizeRepoPath(path);
+    if (!normalized) throw new Error(`${path} is not a file the game editor opens.`);
+    const read = await store.read([normalized]);
+    if (read.binary.includes(normalized)) {
+      this.update({ repositoryMessage: `${normalized} is a binary file; the editor opens text only.` });
+      return;
+    }
+    const file = read.files[0];
+    if (!file) throw new Error(`${normalized} is not in the draft.`);
+    const ref: CrowdyStudioFileRef = { source: 'REPOSITORY', path: normalized };
     const exists = this.state.openFiles.some((entry) => sameFileRef(entry, ref));
     this.update({
-      repositoryDocuments: upsertRepositoryDocument(this.state.repositoryDocuments ?? [], path, content),
+      repositoryDocuments: upsertRepositoryDocument(
+        this.state.repositoryDocuments ?? [],
+        normalized,
+        file.content,
+        file.hash,
+      ),
       openFiles: exists ? this.state.openFiles : [...this.state.openFiles, ref],
       activeFile: ref,
     });
   }
 
   /**
-   * Commit every file the draft has changed since the page loaded.
-   * Each file is one commit on the bound branch.
+   * A keystroke in a draft file. The text reaches the draft a moment later;
+   * the player's typing wins over a concurrent agent write (the agent writes
+   * under a hash precondition, so its next write re-reads). Never a commit.
    */
-  async commitRepository(): Promise<void> {
-    const draft = this.options.gameFiles;
-    if (!draft?.dirtyDraft) throw new Error('This page has no draft working copy for game files.');
-    const paths = await draft.dirtyDraft();
-    if (paths.length === 0) {
-      this.update({ repositoryMessage: 'No drafted files to commit.' });
-      return;
-    }
-    this.update({ repositoryMessage: `Committing ${paths.length} file${paths.length === 1 ? '' : 's'}…` });
-    const notes: string[] = [];
-    for (const path of paths) {
-      const written = await this.commitGameFile(path);
-      notes.push(`${path} @ ${written.commitSha.slice(0, 7)}`);
-    }
-    this.update({ repositoryMessage: `Committed ${notes.join(', ')}.` });
-  }
-
-  /** Write one repository file into the draft. This does not save the Studio project. */
   updateRepositoryFile(path: string, content: string): void {
     const current = this.state.repositoryDocuments?.find((file) => file.path === path);
     if (current?.content === content) return;
     this.update({
-      repositoryDocuments: upsertRepositoryDocument(this.state.repositoryDocuments ?? [], path, content),
+      repositoryDocuments: upsertRepositoryDocument(this.state.repositoryDocuments ?? [], path, content, current?.hash),
     });
-    const draft = this.options.gameFiles;
-    if (!draft) return;
-    void draft.writeDraft(path, content).catch((error) => {
+    if (!this.draft) return;
+    const pending = this.repositoryWrites.get(path);
+    if (pending) clearTimeout(pending);
+    this.repositoryWrites.set(
+      path,
+      setTimeout(() => {
+        this.repositoryWrites.delete(path);
+        void this.writeRepositoryDocument(path);
+      }, REPOSITORY_WRITE_DEBOUNCE_MS),
+    );
+  }
+
+  /**
+   * Publish the draft (or the named paths) as one commit on the bound branch.
+   * When the branch moved, the store rebases what does not collide and lists
+   * the rest in `repositoryConflicts` for {@link resolveRepositoryConflict}.
+   */
+  async commitRepository(request: { message: string; paths?: readonly string[] }): Promise<DraftCommitResult> {
+    const store = this.requireDraft();
+    await this.flushRepositoryWrites();
+    this.update({ repositoryBusy: true, repositoryMessage: 'Committing…' });
+    try {
+      const result = await store.commit(request);
+      this.update({
+        repositoryMessage: `Committed ${result.committed.length} file${result.committed.length === 1 ? '' : 's'} as ${result.commitSha.slice(0, 7)}.`,
+      });
+      // The project's githubSha moved; the GitHub card and the mod tools read it.
+      if (this.state.saveState === 'SAVED') void this.reloadProject().catch(() => undefined);
+      return result;
+    } catch (error) {
+      this.update({
+        repositoryConflicts: store.conflicts(),
+        repositoryMessage: errorMessage(error),
+      });
+      throw error;
+    } finally {
+      this.update({ repositoryBusy: false });
+    }
+  }
+
+  /** Drop draft edits (every one when `paths` is omitted). */
+  async discardRepositoryFiles(paths?: readonly string[]): Promise<void> {
+    const store = this.requireDraft();
+    for (const path of paths ?? [...this.repositoryWrites.keys()]) {
+      const pending = this.repositoryWrites.get(path);
+      if (pending) clearTimeout(pending);
+      this.repositoryWrites.delete(path);
+    }
+    await store.discard(paths);
+  }
+
+  /** `mine` commits the draft over the branch's change; `theirs` drops the draft edit. */
+  async resolveRepositoryConflict(path: string, keep: 'mine' | 'theirs'): Promise<void> {
+    const store = this.requireDraft();
+    await store.resolveConflict(path, keep);
+    this.update({ repositoryConflicts: store.conflicts() });
+    if (keep === 'theirs') await this.refreshRepositoryDocuments([path]);
+  }
+
+  private requireDraft(): DraftStore {
+    if (!this.draft) throw new DraftError('DRAFT_UNAVAILABLE', 'This project has no game draft.');
+    return this.draft;
+  }
+
+  private markEditorKnown(): void {
+    if (this.editorKnown) return;
+    this.editorKnown = true;
+    for (const wake of this.editorKnownWaiters.splice(0)) wake();
+  }
+
+  private closeDraft(): void {
+    for (const timer of this.repositoryWrites.values()) clearTimeout(timer);
+    this.repositoryWrites.clear();
+    this.draftUnsubscribe?.();
+    this.draftUnsubscribe = null;
+    this.draft?.dispose();
+    const wasOn = this.state.repositoryMode === true;
+    this.draft = null;
+    this.draftProjectId = null;
+    if (!wasOn) return;
+    this.update({
+      repositoryMode: false,
+      repositoryStore: undefined,
+      repositoryFiles: undefined,
+      repositoryDirectories: undefined,
+      repositoryDirty: undefined,
+      repositoryDeleted: undefined,
+      repositoryConflicts: undefined,
+      repositoryBaseCommitSha: undefined,
+      repositoryRevision: undefined,
+      repositoryDocuments: undefined,
+      repositoryMessage: undefined,
+      openFiles: this.state.openFiles.filter((ref) => ref.source !== 'REPOSITORY'),
+      activeFile: this.state.activeFile?.source === 'REPOSITORY' ? null : this.state.activeFile,
+    });
+  }
+
+  private applyDraftSnapshot(): void {
+    const store = this.draft;
+    if (!store) return;
+    const snapshot = store.snapshot();
+    const files = snapshot.entries.map((entry) => entry.path);
+    this.update({
+      repositoryFiles: files,
+      repositoryDirectories: directoriesOf(files),
+      repositoryDirty: snapshot.entries.filter((entry) => entry.dirty).map((entry) => entry.path),
+      repositoryDeleted: snapshot.deleted,
+      repositoryConflicts: store.conflicts(),
+      repositoryBaseCommitSha: snapshot.baseCommitSha,
+      repositoryRevision: snapshot.revision,
+    });
+  }
+
+  private onDraftChange(event: DraftChangeEvent): void {
+    if (!this.draft) return;
+    this.applyDraftSnapshot();
+    // The editor already shows its own keystrokes.
+    if (event.source === 'player') return;
+    const open = new Set((this.state.repositoryDocuments ?? []).map((doc) => doc.path));
+    const touched =
+      event.source === 'agent' || event.source === 'commit'
+        ? event.changes.map((change) => change.path).filter((path) => open.has(path))
+        : [...open];
+    if (touched.length > 0) void this.refreshRepositoryDocuments(touched);
+  }
+
+  /** Re-read open documents from the draft; a document the player is still typing in is left alone. */
+  private async refreshRepositoryDocuments(paths: readonly string[]): Promise<void> {
+    const store = this.draft;
+    if (!store) return;
+    const wanted = paths.filter((path) => !this.repositoryWrites.has(path));
+    if (wanted.length === 0) return;
+    const read = await store.read(wanted);
+    if (store !== this.draft) return;
+    let documents = [...(this.state.repositoryDocuments ?? [])];
+    for (const file of read.files) {
+      if (this.repositoryWrites.has(file.path)) continue;
+      documents = upsertRepositoryDocument(documents, file.path, file.content, file.hash);
+    }
+    const gone = new Set(read.missing);
+    documents = documents.filter((doc) => !gone.has(doc.path));
+    const openFiles = this.state.openFiles.filter((ref) => !(ref.source === 'REPOSITORY' && gone.has(ref.path)));
+    const activeGone = this.state.activeFile?.source === 'REPOSITORY' && gone.has(this.state.activeFile.path);
+    this.update({
+      repositoryDocuments: documents,
+      openFiles,
+      activeFile: activeGone ? (openFiles.at(-1) ?? null) : this.state.activeFile,
+    });
+  }
+
+  private async writeRepositoryDocument(path: string): Promise<void> {
+    const store = this.draft;
+    const doc = this.state.repositoryDocuments?.find((file) => file.path === path);
+    if (!store || !doc) return;
+    try {
+      const result = await store.write(path, doc.content, { source: 'player' });
+      const latest = this.state.repositoryDocuments?.find((file) => file.path === path);
+      if (latest && latest.content === doc.content) {
+        this.update({
+          repositoryDocuments: upsertRepositoryDocument(this.state.repositoryDocuments ?? [], path, doc.content, result.hash),
+        });
+      }
+    } catch (error) {
       this.update({ repositoryMessage: errorMessage(error) });
-    });
+    }
+  }
+
+  private async flushRepositoryWrites(): Promise<void> {
+    const pending = [...this.repositoryWrites.keys()];
+    for (const path of pending) {
+      clearTimeout(this.repositoryWrites.get(path));
+      this.repositoryWrites.delete(path);
+    }
+    await Promise.all(pending.map((path) => this.writeRepositoryDocument(path)));
   }
 
   addFile(target: CrowdyStudioTarget, path: string, content = ''): void {
@@ -1088,85 +1349,6 @@ export class CrowdyStudioController {
     }
   }
 
-  /**
-   * Write one repository file into the draft working copy.
-   *
-   * The draft is what the local game serves. It is not a GitHub commit;
-   * {@link commitGameFile} pushes a draft when asked.
-   */
-  async putGameFile(path: string, content: string): Promise<{ path: string }> {
-    if (!isRepoPath(path)) {
-      throw new Error('That path is not a file in the bound repository.');
-    }
-    const draft = this.options.gameFiles;
-    if (!draft) throw new Error('This page has no draft working copy for game files.');
-    await draft.writeDraft(path, content);
-    if (this.state.repositoryMode) {
-      const ref: CrowdyStudioFileRef = { source: 'REPOSITORY', path };
-      const exists = this.state.openFiles.some((entry) => sameFileRef(entry, ref));
-      this.update({
-        repositoryDocuments: upsertRepositoryDocument(this.state.repositoryDocuments ?? [], path, content),
-        openFiles: exists ? this.state.openFiles : [...this.state.openFiles, ref],
-        activeFile: ref,
-      });
-      void this.reloadRepository();
-    }
-    return { path };
-  }
-
-  /**
-   * Commit one drafted game file onto the bound branch.
-   *
-   * The bytes are the draft working copy. The write goes through
-   * crowdyStudioGitHubPutFile with the mirror's commit as expectedCommitSha.
-   */
-  async commitGameFile(path: string): Promise<{ commitSha: string }> {
-    if (!isRepoPath(path)) {
-      throw new Error('That path is not a file in the bound repository.');
-    }
-    const draft = this.options.gameFiles;
-    if (!draft) throw new Error('This page has no draft working copy for game files.');
-    if (!this.options.github) throw new Error('GitHub is not available in this Studio.');
-    const scope = this.githubScope();
-    const project = this.state.project;
-    const sha = project?.github?.sha ?? null;
-    if (!scope || project?.source !== 'GITHUB' || !sha) {
-      throw new Error('Bind a repository before committing game files.');
-    }
-    const content = await draft.readDraft(path);
-    const written = await this.options.github.putFile({
-      ...scope,
-      path,
-      content,
-      message: `Crowdy Studio agent: update ${path}`,
-      expectedCommitSha: sha,
-    });
-    await this.reloadProject();
-    return { commitSha: written.commitSha ?? sha };
-  }
-
-  /** Directory listing of the draft working copy. `dir` is `''` at the repository root. */
-  async listGameDir(dir: string): Promise<Array<{ name: string; type: 'file' | 'directory' }>> {
-    if (!isRepoDir(dir)) throw new Error('That path is not a directory in the bound repository.');
-    const draft = this.options.gameFiles;
-    if (!draft?.listDraft) throw new Error('This page has no draft working copy for game files.');
-    return draft.listDraft(dir);
-  }
-
-  /** One file from the draft working copy. */
-  async readGameFile(path: string): Promise<{ content: string }> {
-    if (!isRepoPath(path)) throw new Error('That path is not a file in the bound repository.');
-    const draft = this.options.gameFiles;
-    if (!draft) throw new Error('This page has no draft working copy for game files.');
-    return { content: await draft.readDraft(path) };
-  }
-
-  /** Paths the draft has changed since the page loaded. */
-  async dirtyGameFiles(): Promise<{ paths: string[] }> {
-    const draft = this.options.gameFiles;
-    if (!draft?.dirtyDraft) throw new Error('This page has no draft working copy for game files.');
-    return { paths: await draft.dirtyDraft() };
-  }
 
   async retrySave(): Promise<boolean> {
     this.clearTimer('retry');
@@ -2027,6 +2209,7 @@ export class CrowdyStudioController {
 
   destroy(): void {
     if (this.destroyed) return;
+    this.closeDraft();
     this.destroyed = true;
     ++this.operationGeneration;
     this.clearSaveTimers();
@@ -2560,13 +2743,29 @@ function upsertCheckpoint(
 }
 
 function upsertRepositoryDocument(
-  documents: readonly { path: string; content: string }[],
+  documents: readonly { path: string; content: string; hash?: string }[],
   path: string,
   content: string,
-): { path: string; content: string }[] {
+  hash?: string,
+): { path: string; content: string; hash?: string }[] {
   const next = documents.filter((file) => file.path !== path);
-  next.push({ path, content });
+  next.push(hash ? { path, content, hash } : { path, content });
   return next;
+}
+
+/** Every directory that holds one of `files`, excluding the root. */
+function directoriesOf(files: readonly string[]): string[] {
+  const dirs = new Set<string>();
+  for (const file of files) {
+    let slash = file.lastIndexOf('/');
+    while (slash > 0) {
+      const dir = file.slice(0, slash);
+      if (dirs.has(dir)) break;
+      dirs.add(dir);
+      slash = dir.lastIndexOf('/');
+    }
+  }
+  return [...dirs].sort();
 }
 
 function fileRefExists(

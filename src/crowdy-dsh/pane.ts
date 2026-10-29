@@ -27,7 +27,11 @@ export interface CrowdyStudioDshPaneOptions {
   host?: CrowdyStudioDshHost;
   /** Studio origin for the wallet link; omitted hides the link. */
   studioOrigin?: string;
-  /** Exclusive harness pair. Omitted boots the mod editor. */
+  /**
+   * Force the editor the harness boots. Omitted, it follows the open project:
+   * the game editor for a Construct game with a draft store, the mod editor
+   * otherwise, rebooting the harness when that changes.
+   */
   studioMode?: 'mod' | 'game';
   layout?: StudioLayoutController;
   onWarning?(message: string): void;
@@ -47,6 +51,9 @@ export class CrowdyStudioDshPane {
   private usageTimer: ReturnType<typeof setInterval> | null = null;
   private started = false;
   private disposed = false;
+  private booted = false;
+  private rebooting = false;
+  private unsubscribeMode: (() => void) | null = null;
 
   constructor(
     parent: HTMLElement,
@@ -106,13 +113,87 @@ export class CrowdyStudioDshPane {
       ...(options.studioMode ? { studioMode: options.studioMode } : {}),
       host: options.host,
       confirmLiveDeploy: (summary) => this.confirmLiveDeploy(summary.projectName, summary.mode),
+      confirmCommit: (summary) => this.confirmCommit(summary),
       onWarning: (text) => {
         this.say(text);
         options.onWarning?.(text);
       },
       onStatus: (status) => this.renderStatus(status),
       onFileChanged: (change) => this.say(`Agent updated ${change.target.toLowerCase()}/${change.path}.`),
+      onDraftChanged: (change) => this.say(`Agent drafted ${change.paths.join(', ')}.`),
     });
+    // The editor is fixed per harness boot: a project that needs the other one reboots it.
+    this.unsubscribeMode = options.controller.subscribe(() => {
+      if (!this.booted || this.rebooting || this.disposed) return;
+      if (this.bridge.desiredStudioMode() !== this.bridge.studioMode) void this.reboot();
+    });
+  }
+
+  /**
+   * The page-side gate on a commit to the bound branch. The agent wrote the
+   * message; the player sees it and every file, and says yes here. Auto-declines
+   * after two minutes so a stale prompt cannot be accepted later.
+   */
+  private confirmCommit(summary: {
+    projectName: string;
+    message: string;
+    files: string[];
+    deleted: string[];
+  }): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
+      this.message.hidden = false;
+      this.message.replaceChildren();
+      const text = el('span');
+      const count = summary.files.length + summary.deleted.length;
+      text.textContent = `The agent wants to commit ${count} file${count === 1 ? '' : 's'} of ${summary.projectName} to GitHub: "${summary.message}". `;
+      const list = el('ul', 'ck-crowdy-studio-dsh-commit-files');
+      for (const path of summary.files) {
+        const item = el('li');
+        item.textContent = path;
+        list.append(item);
+      }
+      for (const path of summary.deleted) {
+        const item = el('li');
+        item.textContent = `${path} (delete)`;
+        list.append(item);
+      }
+      const approve = el('button', 'ck-crowdy-studio-dsh-confirm');
+      approve.type = 'button';
+      approve.textContent = 'Commit';
+      const decline = el('button', 'ck-crowdy-studio-dsh-decline');
+      decline.type = 'button';
+      decline.textContent = 'Not now';
+      let settled = false;
+      const finish = (answer: boolean) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        this.message.replaceChildren();
+        this.message.hidden = true;
+        resolve(answer);
+      };
+      const timer = setTimeout(() => finish(false), 120_000);
+      approve.addEventListener('click', () => finish(true));
+      decline.addEventListener('click', () => finish(false));
+      this.message.append(text, list, approve, ' ', decline);
+    });
+  }
+
+  /** Restart the harness in the editor the open project needs. */
+  private async reboot(): Promise<void> {
+    this.rebooting = true;
+    try {
+      this.booted = false;
+      if (this.usageTimer) clearInterval(this.usageTimer);
+      this.usageTimer = null;
+      this.bridge.detach();
+      this.frame.src = 'about:blank';
+      await this.boot();
+    } catch (error) {
+      this.renderStatus({ phase: 'failed', message: error instanceof Error ? error.message : String(error) });
+    } finally {
+      this.rebooting = false;
+    }
   }
 
   /**
@@ -175,14 +256,19 @@ export class CrowdyStudioDshPane {
   dispose(): void {
     this.disposed = true;
     if (this.usageTimer) clearInterval(this.usageTimer);
+    this.unsubscribeMode?.();
+    this.unsubscribeMode = null;
     this.bridge.detach();
     this.root.remove();
   }
 
   private async boot(): Promise<void> {
     const base = this.options.webBase.endsWith('/') ? this.options.webBase : `${this.options.webBase}/`;
+    const attached = this.bridge.attach(this.frame);
     this.frame.src = `${base}index.html`;
-    await this.bridge.attach(this.frame);
+    await attached;
+    this.booted = true;
+    this.root.dataset.mode = this.bridge.studioMode;
     this.captureButton.disabled = !this.options.host?.captureFrame;
     await this.refreshUsage();
     this.usageTimer = setInterval(() => void this.refreshUsage(), USAGE_REFRESH_MS);
@@ -222,7 +308,8 @@ export class CrowdyStudioDshPane {
         this.status.textContent = 'Starting…';
         break;
       case 'ready':
-        this.status.textContent = status.store ? 'Ready · GitHub' : 'Ready';
+        this.status.textContent =
+          this.bridge.studioMode === 'game' ? 'Ready · game' : status.store ? 'Ready · GitHub' : 'Ready';
         this.status.title = status.store ?? '';
         break;
       case 'failed':
@@ -296,4 +383,5 @@ export const CROWDY_STUDIO_DSH_STYLES = `
 .ck-crowdy-studio-dsh-message{padding:4px 10px;font-size:11px;color:#fde68a;border-top:1px solid var(--ck-line)}
 .ck-crowdy-studio-dsh-message button{font-size:11px;padding:2px 8px;margin-left:4px}
 .ck-crowdy-studio-dsh-confirm{background:#b91c1c;color:#fff;border:0;border-radius:3px}
+.ck-crowdy-studio-dsh-commit-files{margin:4px 0;padding-left:16px;max-height:120px;overflow:auto;color:var(--ck-text)}
 `;
