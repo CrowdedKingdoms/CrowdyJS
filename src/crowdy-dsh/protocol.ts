@@ -39,7 +39,23 @@
  * `grid.programStatus`). The page answers them only when its host offers a
  * `grid` capability; otherwise they fail with a clear message.
  */
-export const CROWDY_DSH_PROTOCOL_VERSION = 4 as const;
+/**
+ * v5 (CrowdyJS 18.23 / crowdy-dsh 0.5): game mode. A boot with
+ * `studioMode: 'game'` edits the bound Construct game instead of the mod
+ * crates. The page owns a draft of the repository ({@link DraftStore} in
+ * `crowdy-studio/draft`); the worker reads it as a snapshot (`draft.tree`,
+ * batched `draft.read`), writes under the harness's write preconditions, and
+ * hears every other change through `page.draftChanged`. `draft.commit`
+ * publishes the draft as ONE commit with the agent's message once the player
+ * confirms here. Versions are git blob SHA-1 hashes, so an unchanged draft
+ * file hashes to its GitHub blob. `worker.ready` names the modes the worker
+ * can mount; game mode is refused against a worker without it. The v4 game
+ * requests (`studio.putGameFile`, `listRepo`, ...) were never published.
+ */
+export const CROWDY_DSH_PROTOCOL_VERSION = 5 as const;
+
+/** Which Studio editor a boot mounts. Fixed for the life of the worker. */
+export type DshStudioMode = 'mod' | 'game';
 
 export type DshBridgeSide = 'page' | 'worker';
 
@@ -123,6 +139,75 @@ export interface DshGridProgramStatus {
   log: string[];
 }
 
+// ── Game mode: the draft of the bound repository (v5) ─────────────────────────
+
+export interface DshDraftEntry {
+  path: string;
+  /** Git blob SHA-1 of the content (`blob <bytes>\0<content>`). */
+  hash: string;
+  size: number;
+  /** Not UTF-8 text, or larger than the page serves as text: listed, never readable. */
+  binary: boolean;
+  /** Differs from the base commit. */
+  dirty: boolean;
+}
+
+export interface DshDraftTree {
+  baseCommitSha: string | null;
+  revision: number;
+  entries: DshDraftEntry[];
+  /** Paths deleted in the draft that still exist at the base. */
+  deleted: string[];
+  truncated: boolean;
+}
+
+export type DshDraftPrecondition = { kind: 'createIfAbsent' } | { kind: 'ifHash'; hash: string };
+
+export interface DshDraftFileText {
+  path: string;
+  hash: string;
+  content: string;
+}
+
+export interface DshDraftWriteResult {
+  path: string;
+  hash: string;
+  previousHash: string | null;
+  revision: number;
+}
+
+export interface DshDraftCommitResult {
+  commitSha: string;
+  committed: string[];
+  baseCommitSha: string;
+}
+
+export interface DshPreviewStatus {
+  revision: number;
+  ok: boolean;
+  scene?: string;
+  errors: Array<{ path?: string; line?: number; column?: number; message: string }>;
+  note?: string;
+}
+
+export interface DshSkillSummary {
+  name: string;
+  description: string;
+  /** Playbook page that holds the body, e.g. `skills/<name>/SKILL.md`. */
+  page: string;
+}
+
+/** Stable `err` codes the page answers draft requests with. */
+export const DSH_DRAFT_ERROR_CODES = {
+  stale: 'DRAFT_STALE',
+  notFound: 'DRAFT_NOT_FOUND',
+  refused: 'DRAFT_PATH_REFUSED',
+  tooLarge: 'DRAFT_TOO_LARGE',
+  conflict: 'DRAFT_CONFLICT',
+  declined: 'DRAFT_DECLINED',
+  unavailable: 'DRAFT_UNAVAILABLE',
+} as const;
+
 export interface DshBridgeRequestMap {
   'studio.screenshot': { params: { label?: string }; result: DshScreenshotResult };
   'studio.draftTest': { params: Record<string, never>; result: DshBuildResult };
@@ -144,14 +229,21 @@ export interface DshBridgeRequestMap {
   };
   'grid.programStatus': { params: Record<string, never>; result: { programs: DshGridProgramStatus[] } };
   'studio.readPlaybook': { params: { page: string }; result: { text: string } };
-  'studio.putGameFile': { params: { path: string; content: string }; result: { path: string } };
-  'studio.commitGameFile': { params: { path: string }; result: { commitSha: string } };
-  'studio.listRepo': {
-    params: { path: string };
-    result: { entries: Array<{ name: string; type: 'file' | 'directory' }> };
+  'studio.listSkills': { params: Record<string, never>; result: { skills: DshSkillSummary[] } };
+  'draft.tree': { params: Record<string, never>; result: DshDraftTree };
+  /** `binary` lists requested paths that exist but are not text. */
+  'draft.read': { params: { paths: string[] }; result: { files: DshDraftFileText[]; missing: string[]; binary: string[] } };
+  'draft.write': {
+    params: { path: string; content: string; precondition?: DshDraftPrecondition };
+    result: DshDraftWriteResult;
   };
-  'studio.readRepoFile': { params: { path: string }; result: { content: string } };
-  'studio.listDirty': { params: Record<string, never>; result: { paths: string[] } };
+  /** No harness tool deletes yet (dsh-fs has no remove); this is the guarded channel when one does. */
+  'draft.delete': {
+    params: { path: string; precondition?: { kind: 'ifHash'; hash: string } };
+    result: { path: string; previousHash: string; revision: number };
+  };
+  'draft.commit': { params: { message: string; paths?: string[] }; result: DshDraftCommitResult };
+  'preview.status': { params: { afterRevision?: number; timeoutMs?: number }; result: DshPreviewStatus };
 }
 
 export type DshBridgeMethod = keyof DshBridgeRequestMap;
@@ -179,13 +271,22 @@ export interface DshPageEventMap {
   /** Text for the agent, queued into the latest live session (or a new one). */
   'page.prompt': { text: string; mode?: 'queue' | 'steer' };
   'page.bye': Record<string, never>;
+  /** The draft changed (v5); `hash: null` is a deletion. The agent's own writes are announced too. */
+  'page.draftChanged': {
+    revision: number;
+    baseCommitSha: string | null;
+    changes: Array<{ path: string; hash: string | null }>;
+    source: 'player' | 'agent' | 'commit' | 'rebase' | 'reload';
+  };
 }
 
 export interface DshWorkerEventMap {
-  'worker.ready': { root: string; store?: string };
-  'worker.fileChanged': { target: 'SERVER' | 'CLIENT' | 'REPO'; path: string };
+  /** `modes` lists what the worker can mount and `mode` what it mounted (v5). */
+  'worker.ready': { root: string; store?: string; modes?: DshStudioMode[]; mode?: DshStudioMode };
+  /** Mod mode: the worker changed a project file. Game-mode writes are announced by the page. */
+  'worker.fileChanged': { target: 'SERVER' | 'CLIENT'; path: string };
   'worker.warning': { message: string };
-  'worker.openFile': { target: 'SERVER' | 'CLIENT'; path: string; line?: number };
+  'worker.openFile': { target: 'SERVER' | 'CLIENT' | 'REPO'; path: string; line?: number };
 }
 
 /** Messages the harness iframe posts to its parent (`source: 'crowdy-dsh'`). */

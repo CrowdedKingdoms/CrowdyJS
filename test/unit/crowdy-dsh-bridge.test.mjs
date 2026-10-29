@@ -5,7 +5,7 @@ const { StudioDshBridge, renderSettingsYaml } = await import('../../dist/crowdy-
 const { isDshBridgeFrame, isDshFrameMessage } = await import('../../dist/crowdy-dsh/protocol.js');
 
 let nonce = 'unset';
-const frame = (t, extra) => ({ v: 4, n: nonce, from: 'worker', t, ...extra });
+const frame = (t, extra) => ({ v: 5, n: nonce, from: 'worker', t, ...extra });
 
 function fakeController(overrides = {}) {
   let state = {
@@ -66,6 +66,8 @@ function fakeController(overrides = {}) {
       this.calls.push('reload');
     },
     openFile() {},
+    async whenEditorKnown() {},
+    draftStore: null,
     ...overrides,
   };
 }
@@ -103,9 +105,9 @@ test('protocol guards accept page/worker frames and iframe messages only', () =>
   assert.equal(isDshBridgeFrame(frame('event', { event: 'worker.ready', payload: {} })), true);
   assert.equal(isDshBridgeFrame(frame('event', { event: 'worker.ready', payload: {} }), nonce), true);
   assert.equal(isDshBridgeFrame(frame('event', { event: 'worker.ready', payload: {} }), 'other'), false, 'wrong nonce');
-  assert.equal(isDshBridgeFrame({ v: 3, n: nonce, from: 'worker', t: 'event' }), false, 'old protocol version');
-  assert.equal(isDshBridgeFrame({ v: 4, from: 'worker', t: 'event' }), false, 'no nonce');
-  assert.equal(isDshBridgeFrame({ v: 4, n: nonce, from: 'stranger', t: 'req' }), false);
+  assert.equal(isDshBridgeFrame({ v: 4, n: nonce, from: 'worker', t: 'event' }), false, 'old protocol version');
+  assert.equal(isDshBridgeFrame({ v: 5, from: 'worker', t: 'event' }), false, 'no nonce');
+  assert.equal(isDshBridgeFrame({ v: 5, n: nonce, from: 'stranger', t: 'req' }), false);
   assert.equal(isDshFrameMessage({ source: 'crowdy-dsh', type: 'crowdy-dsh:ready' }), true);
   assert.equal(isDshFrameMessage({ type: 'crowdy-dsh:ready' }), false);
 });
@@ -139,7 +141,7 @@ test('bridge answers worker requests through the controller and mirrors state ch
   });
   try {
     // Every page frame carries the boot nonce; a frame without it is dropped unread.
-    worker.postMessage({ v: 4, n: 'guess', from: 'worker', t: 'req', id: 'x1', method: 'studio.projectList', params: {} });
+    worker.postMessage({ v: 5, n: 'guess', from: 'worker', t: 'req', id: 'x1', method: 'studio.projectList', params: {} });
     await new Promise((resolve) => setTimeout(resolve, 20));
     assert.equal(events.length, 0);
 
@@ -323,6 +325,8 @@ test('the boot seed files carry the channel name and nonce but never the app tok
     for (const listener of listeners) {
       listener({ source: contentWindow, origin: 'http://game.test', data: { source: 'crowdy-dsh', type: 'crowdy-dsh:ready' } });
     }
+    // The boot message follows once the controller knows the editor.
+    await new Promise((resolve) => setTimeout(resolve, 5));
     const boot = posted.find((message) => message?.type === 'crowdy-dsh:boot');
     assert.ok(boot, 'page answered ready with boot');
     assert.equal(boot.nonce, bridge.nonce);
@@ -330,6 +334,9 @@ test('the boot seed files carry the channel name and nonce but never the app tok
     assert.equal(crowdy.bridgeChannel, bridge.channelName);
     assert.equal(crowdy.bridgeNonce, bridge.nonce);
     assert.equal('appToken' in crowdy, false, 'no token in the seed file');
+    assert.equal(crowdy.studioMode, 'mod');
+    assert.equal(crowdy.persistScope, '42/7');
+    assert.doesNotMatch(boot.files['settings.yaml'], /agent-presets/);
     assert.ok(!JSON.stringify(boot).includes('tok-1'), 'no token anywhere in the boot message');
     for (const listener of listeners) {
       listener({ source: contentWindow, origin: 'http://game.test', data: { source: 'crowdy-dsh', type: 'crowdy-dsh:booted', mount: '/dsh/workspace' } });
@@ -383,4 +390,138 @@ test('v4 grid requests reach the host grid capability with the open project grid
     plain.detach();
     w2.close();
   }
+});
+
+test('game mode: the boot names the game editor, agent writes go through the draft, and a commit waits for the player', async () => {
+  const { GitHubDraftStore, MemoryDraftOverlayStorage, gitBlobShaOfText } = await import('../../dist/crowdy-studio/draft/index.js');
+  const files = new Map([['src/main.ts', 'export {}\n'], ['src/scenes/pool/PoolScene.ts', 'export class PoolScene {}\n']]);
+  const head = '1'.repeat(40);
+  const commits = [];
+  const store = new GitHubDraftStore({
+    appId: '42',
+    projectId: 'p1',
+    baseCommitSha: head,
+    storage: new MemoryDraftOverlayStorage(),
+    transport: {
+      async tree() {
+        const entries = [];
+        for (const [path, content] of files) entries.push({ path, type: 'blob', sha: await gitBlobShaOfText(content), size: content.length });
+        return { commitSha: head, entries };
+      },
+      async getFiles({ paths }) {
+        const out = [];
+        for (const path of paths) {
+          const content = files.get(path);
+          if (content !== undefined) out.push({ path, sha: await gitBlobShaOfText(content), size: content.length, binary: false, content });
+        }
+        return { commitSha: head, files: out, missing: paths.filter((p) => !files.has(p)) };
+      },
+      async commitFiles(input) {
+        commits.push(input);
+        return { commitSha: '2'.repeat(40), parentSha: head, written: input.changes.map((c) => c.path), deleted: [] };
+      },
+      async refresh() {
+        return { githubSha: head };
+      },
+    },
+  });
+  await store.load();
+  const committed = [];
+  const controller = fakeController({
+    draftStore: store,
+    async commitRepository(request) {
+      committed.push(request);
+      return store.commit(request);
+    },
+  });
+  controller.setState({ repositoryMode: true });
+  const asked = [];
+  let answer = false;
+  let duringConfirm = null;
+  const savedFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (String(url).endsWith('/game/mmo/skills/index.json')) {
+      return new Response(JSON.stringify({ skills: [
+        { name: 'dock-scene', description: 'Add or change a scene.', page: 'skills/dock-scene/SKILL.md' },
+        { name: 'escape', description: 'Leaves the tree.', page: '../secrets.md' },
+      ] }), { status: 200 });
+    }
+    return new Response('nope', { status: 404 });
+  };
+  const savedLocation = globalThis.location;
+  globalThis.location = { origin: 'http://game.test' };
+  const bridge = new StudioDshBridge({
+    controller,
+    transport: { modelBaseUrl: 'http://api.test/v1/model', models: async () => [{ id: 'm', name: 'M', contextWindow: null, inputModalities: ['text'] }] },
+    appId: '42',
+    persistScope: '42/7',
+    getToken: () => 'tok-1',
+    graphqlUrl: 'http://api.test/graphql',
+    host: { playbookBase: '/game/mmo/' },
+    confirmCommit: async (summary) => {
+      asked.push(summary);
+      if (duringConfirm) await duringConfirm();
+      return answer;
+    },
+  });
+  assert.equal(bridge.desiredStudioMode(), 'game');
+  bridge.connect();
+  nonce = bridge.nonce;
+  const worker = new BroadcastChannel(bridge.channelName);
+  const events = [];
+  worker.addEventListener('message', (event) => {
+    if (event.data?.from === 'page' && event.data.t === 'event') events.push(event.data);
+  });
+  try {
+    controller.setState({});
+    const tree = await ask(worker, 'draft.tree', {});
+    assert.deepEqual(tree.entries.map((e) => e.path), ['src/main.ts', 'src/scenes/pool/PoolScene.ts']);
+    const read = await ask(worker, 'draft.read', { paths: ['src/main.ts'] });
+    const hash = read.files[0].hash;
+    await assert.rejects(
+      ask(worker, 'draft.write', { path: 'src/main.ts', content: 'x', precondition: { kind: 'createIfAbsent' } }),
+      /^Error: DRAFT_STALE:/,
+    );
+    const written = await ask(worker, 'draft.write', { path: 'src/main.ts', content: 'export const a = 1;\n', precondition: { kind: 'ifHash', hash } });
+    assert.equal(written.previousHash, hash);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const changed = events.filter((e) => e.event === 'page.draftChanged');
+    assert.equal(changed.at(-1).payload.source, 'agent');
+    assert.deepEqual(changed.at(-1).payload.changes, [{ path: 'src/main.ts', hash: written.hash }]);
+
+    await assert.rejects(ask(worker, 'draft.commit', { message: '' }), /DRAFT_PATH_REFUSED/);
+    await assert.rejects(ask(worker, 'draft.commit', { message: 'Make a = 1' }), /DRAFT_DECLINED: The player declined/);
+    assert.equal(commits.length, 0);
+    answer = true;
+    const result = await ask(worker, 'draft.commit', { message: 'Make a = 1' });
+    assert.deepEqual(result.committed, ['src/main.ts']);
+    assert.deepEqual(asked.at(-1), { projectName: 'One', message: 'Make a = 1', files: ['src/main.ts'], deleted: [] });
+    assert.equal(commits[0].message, 'Make a = 1');
+    assert.deepEqual(committed[0], { message: 'Make a = 1', paths: ['src/main.ts'] });
+
+    // A write made while the player decides stays out of the commit they approved.
+    await ask(worker, 'draft.write', { path: 'src/main.ts', content: 'export const a = 2;\n' });
+    duringConfirm = () => store.write('src/scenes/pool/PoolScene.ts', 'export const pool = 2;\n', { source: 'agent' });
+    const second = await ask(worker, 'draft.commit', { message: 'Make a = 2' });
+    assert.deepEqual(committed.at(-1).paths, ['src/main.ts']);
+    assert.deepEqual(second.committed, ['src/main.ts']);
+    // An approved file that changes meanwhile is not committed unseen.
+    await ask(worker, 'draft.write', { path: 'src/main.ts', content: 'export const a = 3;\n' });
+    duringConfirm = () => store.write('src/main.ts', 'export const a = 4;\n', { source: 'agent' });
+    await assert.rejects(ask(worker, 'draft.commit', { message: 'Make a = 3' }), /DRAFT_STALE: src\/main\.ts changed while the player was deciding/);
+    duringConfirm = null;
+
+    const skills = await ask(worker, 'studio.listSkills', {});
+    assert.deepEqual(skills.skills, [{ name: 'dock-scene', description: 'Add or change a scene.', page: 'skills/dock-scene/SKILL.md' }]);
+    const preview = await ask(worker, 'preview.status', {});
+    assert.equal(preview.ok, true);
+    assert.match(preview.note, /does not report/);
+  } finally {
+    bridge.detach();
+    worker.close();
+    globalThis.fetch = savedFetch;
+    globalThis.location = savedLocation;
+  }
+  const yaml = renderSettingsYaml('http://api.test/v1/model', [{ id: 'm', name: 'M', contextWindow: null, inputModalities: ['text'] }], 'game');
+  assert.match(yaml, /agent-presets:\n  default: crowdy-game\n$/);
 });

@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.22.0** (18.0.0 was published only as
+**Current package:** `package.json` is **18.23.0** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -29,6 +29,29 @@ directly. So, before adding a wrapper:
 - 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
+
+**18.23.0: the game editor and bridge protocol v5 (2026-10-29).** A project the API reports
+as a Construct game (`crowdyStudioGitHubLayout.kind === 'CONSTRUCT_GAME'`, cks-game-api on the
+live-code branch) gets the game editor when the host passes `draftStore` (a factory) to the
+controller: `src/crowdy-studio/draft/` holds the `DraftStore` contract, `GitHubDraftStore` (the
+hosted backend: an overlay over the bound branch in IndexedDB on the game's own origin, blob text
+cached by blob id, one-commit publish through `crowdyStudioGitHub.commitFiles`, rebase and
+per-file conflicts on a moved branch) and the one repository path policy (`draft/paths.ts`;
+`crowdy-dsh/game-paths.ts` keeps only `assertPlaybookPage`). Versions are git blob SHA-1s. The
+controller asks `layout().kind` once per mirror commit (`refreshRepositoryMode`), and
+`whenEditorKnown()` lets the bridge boot the harness in the right editor. Bridge protocol **v5**
+(mirrored in crowdy-dsh `src/bridge/protocol.ts`): `draft.tree` / `read` / `write` / `delete`
+(with `createIfAbsent` / `ifHash` preconditions and stable `DRAFT_*` error codes) / `commit`
+(confirmed in the pane with the agent's message), `preview.status` (the host's
+`dshHost.previewStatus`), `studio.listSkills` (`<playbookBase>skills/index.json`), the
+`page.draftChanged` event and the `worker.ready` mode handshake; game boots write
+`agent-presets.default: crowdy-game` into `settings.yaml` and persist under `<scope>/game`. The
+v4 game requests from #284 (`studio.putGameFile`, `listRepo`, ... and the `gameFiles` option)
+were never published and are gone. `schema.gql` is ck-api's live-code branch. A game hosting the
+editor passes `draftStore` on the embed and `projectId` on an open (never `runtimeOverrides`,
+which is for browser regressions). An agent's `draft.commit` commits exactly the paths the
+player confirmed and is `DRAFT_STALE` when one changed while they decided (security review,
+2026-10-29). The game editor hides the mod build tools.
 
 **18.22.0: `ExecInstance.orphaned` (2026-10-26).** `ExecInstances` selects `orphaned`
 (cks-game-api #603, v2.58.0): true for an instance whose node type the app's active version no

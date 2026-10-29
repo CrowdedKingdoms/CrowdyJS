@@ -3177,9 +3177,39 @@ export type CrowdyStudioGitHubAtCommitInput = {
 export enum CrowdyStudioGitHubBindInitial {
   /** The Studio project files are committed to the branch (with a crowdy.json when the repository has none). Refused with GITHUB_REPO_HAS_FILES when the repository already carries rust under the layout roots. */
   PushProject = 'PUSH_PROJECT',
-  /** The repository is adopted as it is; the Studio project files are replaced by the rust under the layout roots at branch HEAD. Refused with GITHUB_REPO_EMPTY when there is nothing to take. */
+  /** The repository is adopted as it is. Rust under the layout roots replaces the Studio project files. A Construct game is adopted at branch HEAD when it has no such rust, and the Studio mirror is cleared. Refused with GITHUB_REPO_EMPTY when the branch has neither. */
   TakeRepository = 'TAKE_REPOSITORY'
 }
+
+/** The commit a multi-file write created. githubSha is now commitSha; every change in it landed, or none did. */
+export type CrowdyStudioGitHubCommit = {
+  __typename?: 'CrowdyStudioGitHubCommit';
+  commitSha: Scalars['String']['output'];
+  /** Paths deleted. */
+  deleted: Array<Scalars['String']['output']>;
+  /** The expectedCommitSha it builds on. */
+  parentSha: Scalars['String']['output'];
+  /** Paths created or updated. */
+  written: Array<Scalars['String']['output']>;
+};
+
+export type CrowdyStudioGitHubCommitChangeInput = {
+  /** New UTF-8 content. Required unless delete is true. */
+  content?: InputMaybe<Scalars['String']['input']>;
+  /** Remove the path instead of writing it. */
+  delete?: InputMaybe<Scalars['Boolean']['input']>;
+  path: Scalars['String']['input'];
+};
+
+export type CrowdyStudioGitHubCommitFilesInput = {
+  appId: Scalars['BigInt']['input'];
+  /** 1 to 100 changes, one per path. */
+  changes: Array<CrowdyStudioGitHubCommitChangeInput>;
+  /** The project githubSha the writer drafted against. Refused with GITHUB_STALE_SHA when the project or the branch has moved on, and nothing is written. */
+  expectedCommitSha: Scalars['String']['input'];
+  message: Scalars['String']['input'];
+  projectId: Scalars['String']['input'];
+};
 
 export type CrowdyStudioGitHubConnectStart = {
   __typename?: 'CrowdyStudioGitHubConnectStart';
@@ -3209,11 +3239,44 @@ export type CrowdyStudioGitHubFile = {
   sha: Scalars['String']['output'];
 };
 
+/** One file of a batched read. content is null when the blob is not UTF-8 text or is larger than this tier reads; size and sha are always set. */
+export type CrowdyStudioGitHubFileContent = {
+  __typename?: 'CrowdyStudioGitHubFileContent';
+  /** The blob is not valid UTF-8 text (or contains NUL). */
+  binary: Scalars['Boolean']['output'];
+  /** UTF-8 content, or null when binary or over the size cap. */
+  content: Maybe<Scalars['String']['output']>;
+  path: Scalars['String']['output'];
+  /** Blob SHA at the commit read. */
+  sha: Scalars['String']['output'];
+  /** Blob size in bytes. */
+  size: Scalars['Int']['output'];
+};
+
 export type CrowdyStudioGitHubFileInput = {
   appId: Scalars['BigInt']['input'];
   /** Full 40-hex commit to read at. Omitted reads the project githubSha (the mirror commit), never the branch head. */
   commitSha?: InputMaybe<Scalars['String']['input']>;
   path: Scalars['String']['input'];
+  projectId: Scalars['String']['input'];
+};
+
+/** Several files of the bound repository at one commit, read in one call (one operation against the per-user GitHub budget). */
+export type CrowdyStudioGitHubFiles = {
+  __typename?: 'CrowdyStudioGitHubFiles';
+  /** Commit the files were read at. */
+  commitSha: Scalars['String']['output'];
+  files: Array<CrowdyStudioGitHubFileContent>;
+  /** Requested paths that are not files at that commit. */
+  missing: Array<Scalars['String']['output']>;
+};
+
+export type CrowdyStudioGitHubFilesInput = {
+  appId: Scalars['BigInt']['input'];
+  /** Full 40-hex commit to read at. Omitted reads the project githubSha (the mirror commit), never the branch head. */
+  commitSha?: InputMaybe<Scalars['String']['input']>;
+  /** Repo-relative paths, 1 to 100. */
+  paths: Array<Scalars['String']['input']>;
   projectId: Scalars['String']['input'];
 };
 
@@ -3228,9 +3291,19 @@ export type CrowdyStudioGitHubLayout = {
   commitSha: Scalars['String']['output'];
   /** A crowdy.json exists at the repository root. False means the layout was inferred from the tree. */
   fromFile: Scalars['Boolean']['output'];
+  /** STUDIO_CRATES for a mod repository, CONSTRUCT_GAME for a Construct game with no Studio rust under the layout roots (the same test TAKE_REPOSITORY adopts by). */
+  kind: CrowdyStudioGitHubLayoutKind;
   /** Directory of the SERVER Cargo.toml; `.` is the repository root. */
   server: Scalars['String']['output'];
 };
+
+/** What the bound repository is, at one commit. The server decides it from the tree; a client picks its editor from it and does not inspect the tree itself. */
+export enum CrowdyStudioGitHubLayoutKind {
+  /** A game generated from the Construct template, with no Studio rust under the layout roots. The whole repository is the working tree, and the Studio mirror is empty. */
+  ConstructGame = 'CONSTRUCT_GAME',
+  /** A Studio mod: the SERVER and CLIENT crates sit under the layout roots (or the repository is empty and the project will push them). */
+  StudioCrates = 'STUDIO_CRATES'
+}
 
 export type CrowdyStudioGitHubProjectInput = {
   appId: Scalars['BigInt']['input'];
@@ -5025,8 +5098,10 @@ export type Mutation = {
   creditOrgWallet: WalletTransaction;
   /** Publish a new immutable version of an app-scoped Crowdy Studio-curated common file and make it the current player-readable version. Requires an app-scoped token plus the app manage_compute permission. Old versions remain immutable for provenance; an idempotency key is strongly recommended for transport retries. */
   crowdyStudioCommonPublish: CrowdyStudioCommonFile;
-  /** Bind a Crowdy Studio project you own to a repository granted to your installation, and make the two agree in one commit: PUSH_PROJECT commits the project files to the branch (refused with GITHUB_REPO_HAS_FILES when the branch already has rust under the layout roots); TAKE_REPOSITORY replaces the project files with the rust on the branch (refused with GITHUB_REPO_EMPTY when there is none). From then on the repository is the working tree and the project files are a mirror of it at githubSha. Identity session only. */
+  /** Bind a Crowdy Studio project you own to a repository granted to your installation, and make the two agree in one commit: PUSH_PROJECT commits the project files to the branch (refused with GITHUB_REPO_HAS_FILES when the branch already has rust under the layout roots); TAKE_REPOSITORY replaces the project files with the rust on the branch, or adopts a Construct game that has none (refused with GITHUB_REPO_EMPTY when the branch has neither). From then on the repository is the working tree and the project files are a mirror of it at githubSha. Identity session only. */
   crowdyStudioGitHubBind: CrowdyStudioGitHubStatus;
+  /** Write and delete up to 100 files of the bound repository as ONE commit on the bound branch, on top of expectedCommitSha. Refused with GITHUB_STALE_SHA, writing nothing, when the project or the branch has moved on. Project files under the layout roots move the mirror in the same transaction as githubSha. Workflow files and the deletion of crowdy.json are refused. */
+  crowdyStudioGitHubCommitFiles: CrowdyStudioGitHubCommit;
   /** Install URL for this tier's Crowdy Studio GitHub App with a signed state. Identity session only. No GitHub token ever reaches the browser. */
   crowdyStudioGitHubConnectUrl: CrowdyStudioGitHubConnectStart;
   /** Delete one file from the bound repository as a commit on the bound branch, under the same blob-sha and expectedCommitSha guards as crowdyStudioGitHubPutFile. A project file leaves the mirror with it. crowdy.json cannot be deleted this way. */
@@ -5677,6 +5752,11 @@ export type MutationCrowdyStudioCommonPublishArgs = {
 
 export type MutationCrowdyStudioGitHubBindArgs = {
   input: BindCrowdyStudioGitHubInput;
+};
+
+
+export type MutationCrowdyStudioGitHubCommitFilesArgs = {
+  input: CrowdyStudioGitHubCommitFilesInput;
 };
 
 
@@ -7817,6 +7897,8 @@ export type Query = {
   crowdyStudioCommonFiles: Array<CrowdyStudioCommonFile>;
   /** One UTF-8 file from the bound repository at one commit (default: githubSha), with its blob SHA. */
   crowdyStudioGitHubFile: CrowdyStudioGitHubFile;
+  /** Up to 100 files of the bound repository at one commit (default: githubSha), for one operation against the per-user GitHub budget. A path that is not a file there is listed in missing; a blob that is not UTF-8 text, or is larger than this tier reads, comes back with content null and its sha and size. */
+  crowdyStudioGitHubFiles: CrowdyStudioGitHubFiles;
   /** Where the SERVER and CLIENT crates live in the bound repository, resolved from crowdy.json (or inferred from the tree) at one commit. The only layout grammar: clients must not parse crowdy.json themselves. */
   crowdyStudioGitHubLayout: CrowdyStudioGitHubLayout;
   /** Repositories the caller granted to their Crowdy Studio installation. Identity session only. */
@@ -7827,6 +7909,8 @@ export type Query = {
   crowdyStudioGitHubTree: CrowdyStudioGitHubTree;
   /** List the authenticated player’s private reusable Crowdy Studio source files in one app. Requires an app-scoped token for appId; cross-user entries are never visible, including to grid owners or Crowdy Studio operators. The bounded result defaults to 50. */
   crowdyStudioLibraryFiles: Array<CrowdyStudioLibraryFile>;
+  /** Whether this player may draft_test or deploy_live. Requires use_studio_agent and an enabled agent policy. A missing policy row, a kill switch, or a missing permission refuses. The dock calls this before either action. The Studio Test button does not. */
+  crowdyStudioLiveModding: Scalars['Boolean']['output'];
   /** The caller's own model usage in this app: today's request count and rate-carded charge against the policy ceiling, the payer (PLAYER wallet by default, ORG when the app elected it, PLATFORM while platform-funded), and the most recent requests. Counts and charges only; no prompts or provider bodies exist to return. Requires 'use_studio_agent'. */
   crowdyStudioModelUsage: CrowdyStudioModelUsage;
   /** Load one private Crowdy Studio project with all bounded source files. Requires an app-scoped token for appId and exact caller ownership; missing, cross-app, and cross-user ids all return the same NOT_FOUND shape. Grid owners and Crowdy Studio operators receive no source override. */
@@ -8419,6 +8503,11 @@ export type QueryCrowdyStudioGitHubFileArgs = {
 };
 
 
+export type QueryCrowdyStudioGitHubFilesArgs = {
+  input: CrowdyStudioGitHubFilesInput;
+};
+
+
 export type QueryCrowdyStudioGitHubLayoutArgs = {
   input: CrowdyStudioGitHubAtCommitInput;
 };
@@ -8440,6 +8529,12 @@ export type QueryCrowdyStudioLibraryFilesArgs = {
   includeArchived?: InputMaybe<Scalars['Boolean']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   offset?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryCrowdyStudioLiveModdingArgs = {
+  action: Scalars['String']['input'];
+  appId: Scalars['BigInt']['input'];
 };
 
 
