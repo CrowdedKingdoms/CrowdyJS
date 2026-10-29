@@ -231,7 +231,8 @@ export interface DshBridgeRequestMap {
   'studio.readPlaybook': { params: { page: string }; result: { text: string } };
   'studio.listSkills': { params: Record<string, never>; result: { skills: DshSkillSummary[] } };
   'draft.tree': { params: Record<string, never>; result: DshDraftTree };
-  'draft.read': { params: { paths: string[] }; result: { files: DshDraftFileText[]; missing: string[] } };
+  /** `binary` lists requested paths that exist but are not text. */
+  'draft.read': { params: { paths: string[] }; result: { files: DshDraftFileText[]; missing: string[]; binary: string[] } };
   'draft.write': {
     params: { path: string; content: string; precondition?: DshDraftPrecondition };
     result: DshDraftWriteResult;

@@ -1250,11 +1250,11 @@ import { GitHubDraftStore, IndexedDbDraftOverlayStorage } from '@crowdedkingdoms
 const storage = new IndexedDbDraftOverlayStorage();
 const studio = createCrowdyStudioEmbed({
   // ...
-  runtimeOverrides: {
-    draftStore: ({ appId, projectId, githubSha }) =>
-      new GitHubDraftStore({ transport: game.crowdyStudioGitHub, appId, projectId, baseCommitSha: githubSha, storage }),
-  },
+  draftStore: ({ appId, projectId, githubSha }) =>
+    new GitHubDraftStore({ transport: game.crowdyStudioGitHub, appId, projectId, baseCommitSha: githubSha, storage }),
 });
+// A Live code link names the project; open it first.
+studio.toggle({ gridId, targetPermissions, projectId });
 ```
 
 The draft is the game's working copy until the player commits. Everything

@@ -488,6 +488,30 @@ test('routes host calls and mirrors untrusted HUD payloads as text-only preview'
   assert.equal(document.querySelector('.ck-crowdy-studio-hud-layer'), null);
 });
 
+test('opens the project the context names and hands the game editor its draft store', async () => {
+  const base = sampleProvider();
+  const opened = [];
+  const provider = {
+    ...base,
+    async listProjects(scope) {
+      const [first] = await base.listProjects.call(base, scope);
+      return [first, { ...first, projectId: 'p-live', name: 'Live code game' }];
+    },
+    async getProject(scope) {
+      opened.push(scope.projectId);
+      return { ...(await base.getProject()), projectId: scope.projectId };
+    },
+  };
+  const draftStore = () => null;
+  const { embed, agentMounted } = makeEmbed({ provider, options: { draftStore } });
+  embed.toggle(embedContext({ projectId: 'p-live' }));
+  await waitForMounted();
+  await waitFor(() => assert.deepEqual(opened, ['p-live']));
+  const [handle] = agentMounted.calls[0];
+  assert.equal(handle.controller.options.draftStore, draftStore);
+  embed.close();
+});
+
 test('refuses to mount without the client\'s exec domain', async () => {
   const { embed, agentUnavailable } = makeEmbed({ client: { exec: undefined } });
   embed.toggle(embedContext());
