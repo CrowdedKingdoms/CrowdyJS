@@ -24,10 +24,11 @@ export type CompleteGamePublishResult = CompleteGamePublishMutation['completeGam
 export type { PublishFileInput };
 
 /**
- * Third-party game hosting on Crowdy Games (ck-api v2.1, 2026-09-13).
+ * Third-party game hosting on Crowdy Games (ck-api v2.1, 2026-09-13), retired on
+ * 2026-10-29.
  *
- * A developer publishes a built static bundle to the platform; players reach it at
- * `https://<games host>/<slug>/` (a first-party shell page) while it executes on
+ * A developer published a built static bundle to the platform; players reached it at
+ * `https://<games host>/<slug>/` (a first-party shell page) while it executed on
  * `https://<slug>.<content host>`, an origin of its own. The API returns both URLs
  * (`launchUrl`, `contentOrigin`); nothing here spells a hostname.
  *
@@ -40,6 +41,10 @@ export type { PublishFileInput };
  * PUT every file to its presigned URL with exactly the returned headers ->
  * `completePublish`. `@crowdedkingdoms/crowdyjs/hosting`'s `publishDirectory` does
  * the last three steps for a `dist/` directory in Node.
+ *
+ * @deprecated Crowded Kingdoms no longer hosts games (retired 2026-10-29); the hosting
+ * API answers `CONTENT_HOSTING_DISABLED` on every tier, and its reads return null or an
+ * empty list. Host your build on your own origin.
  */
 export class HostingAPI {
   constructor(private readonly api: GraphQLClient) {}
@@ -109,6 +114,10 @@ export class HostingAPI {
  * Upload every file of a publish to its presigned URL, with bounded concurrency and
  * a retry per file. Works in Node 20+ and in a browser (`fetch`, `Blob`/`Uint8Array`
  * bodies). `read(path)` returns the bytes for a manifest path.
+ *
+ * @deprecated Crowded Kingdoms no longer hosts games (retired 2026-10-29); `beginPublish`,
+ * which issues the presigned URLs, answers `CONTENT_HOSTING_DISABLED` on every tier.
+ * Host your build on your own origin.
  */
 export async function uploadPublishFiles(
   uploads: HostedGameUpload[],
