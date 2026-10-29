@@ -120,6 +120,24 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## Unreleased: Crowded Kingdoms no longer hosts games
+
+No breaking change. On 2026-10-29 Crowded Kingdoms retired Crowdy Games: the games site, the
+shell that framed published games, the Overworld lobby and the content CDN are gone on every
+tier. Build your game and serve it from your own origin, on any static host that can set
+response headers. In Studio, open the app's **Settings > Sign-in & redirect URIs**, add a
+redirect URI on that origin, and set the origin as the app's **Launch URL**.
+[Host your game](https://docs.crowdedkingdoms.com/build-a-game/host-your-game) has the
+requirements and recipes.
+
+The 17.2.0 hosting surface is **deprecated**, and its code is unchanged: `client.hosting`,
+`uploadPublishFiles`, `publishDirectory` and `manifestForDirectory`
+(`@crowdedkingdoms/crowdyjs/hosting`), and `EmbeddedHost` (`client.embeddedHost`). The hosting
+API answers `CONTENT_HOSTING_DISABLED` on every tier and its reads return null or an empty list,
+so a publish step that calls it fails; remove it from your build. Sign-in needs no change: with
+no shell to answer it, `EmbeddedHost.hello()` resolves null and `portal.signIn` takes the hosted
+sign-in on your own origin, as a self-hosted game always did.
+
 ## 18.15.0: sending opcode 140
 
 No breaking change. `client.udp.sendGenericSpatial({ appId, chunk, uuid, payload })` sends an
@@ -991,6 +1009,12 @@ No removals.
 
 # CrowdyJS v17.2 — publish to Crowdy Games; sign-in under the shell
 
+**Retired on 2026-10-29.** Crowded Kingdoms no longer hosts games, so both additions below,
+`client.hosting` (with `@crowdedkingdoms/crowdyjs/hosting`) and `EmbeddedHost`, are deprecated
+and dormant: the hosting API answers `CONTENT_HOSTING_DISABLED` on every tier, and no shell
+frames a game. See
+[Unreleased: Crowded Kingdoms no longer hosts games](#unreleased-crowded-kingdoms-no-longer-hosts-games).
+
 **Additive.** `17.2.0` (2026-09-14). Tracks ck-api `v2.1.0` (third-party game
 hosting). Nothing existing changes shape; two things are new.
 
@@ -1304,7 +1328,8 @@ of the two sign-in paths your code may take.** ck-api `v1.88.0` (2026-09-08).
 `auth.socialLoginStart` / `socialLoginComplete`, `auth.checkAuthMethod`,
 `auth.requestPasswordReset` / `resetPassword` are now served only to:
 
-- **first-party browser origins** — Studio and the crowdy.games host; and
+- **first-party browser origins** — Studio, and the crowdy.games host until 2026-09-14
+  (that site was retired on 2026-10-29); and
 - **non-browser callers** — anything that sends no `Origin` header (Node, a
   CLI, CrowdyCPP, tests).
 
@@ -1342,8 +1367,9 @@ on the client. You never held a session token, and you never needed one.
 
 ## If you are first-party or not in a browser, nothing changes
 
-Studio, the Overworld lobby, CrowdyCPP, load tools and scripts keep calling
-`auth.login` / `register` and then `portal.mintAppToken(appId)`.
+Studio, CrowdyCPP, load tools and scripts keep calling
+`auth.login` / `register` and then `portal.mintAppToken(appId)`. The Overworld lobby did
+too, until it stopped signing players in on 2026-09-14.
 
 ## Also in this release (server side, no SDK change)
 

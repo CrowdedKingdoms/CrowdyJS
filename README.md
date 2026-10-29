@@ -81,10 +81,10 @@ const me = await client.users.me();
 console.log(me.email);
 ```
 
-Your game's origin must be registered under the app's **redirect URIs**
-(Studio > Apps > client settings); that one entry admits it to CORS and to the
-hosted sign-in return. Direct sign-in (`client.auth.login` / `register` / magic
-link / social) is served only to first-party pages (Studio; the games host left this list on 2026-09-14 when the Overworld lobby stopped signing players in) and to
+Your game's origin must be registered under the app's **redirect URIs** (in Studio,
+the app's **Settings > Sign-in & redirect URIs**); that one entry admits it to CORS
+and to the hosted sign-in return. Direct sign-in (`client.auth.login` / `register` /
+magic link / social) is served only to first-party pages (Studio) and to
 non-browser callers (Node, CLI, tests); from any other browser origin the API
 answers `HOSTED_SIGN_IN_REQUIRED` (`isHostedSignInRequiredError`). See
 [Authentication](#authentication-session-token-vs-app-scoped-tokens).
@@ -127,18 +127,9 @@ before minting; `client.auth.playerLegalAcceptance()` says whether that is still
 needed. `auth.register` takes the same two fields, and a browser page must send both.
 See [MIGRATION.md](MIGRATION.md#1840-the-terms-and-age-gate).
 
-**A game published to Crowdy Games takes the first row too, with one twist the SDK
-handles for you** (17.2.0). Such a game is reached at `https://<games host>/<slug>/`,
-which is a first-party *shell* page, and runs inside that page's iframe on its own
-origin, `https://<slug>.<content host>`. The iframe cannot navigate the tab and
-Studio refuses to be framed, so `portal.signIn` asks the shell to navigate
-(`crowdyjs:navigate`; the shell honours exactly the tier's Studio `/authorize`) and
-uses the shell's page as the `redirect_uri` -- the shell then hands the returned
-`?code=&state=` into the iframe, where `portal.handleSignInCallback` runs exactly as
-it does self-hosted. Nothing changes in your code: the bridge (`client.embeddedHost`,
-`EmbeddedHost`) detects the shell with a bounded hello and falls back to the
-top-level flow when nobody answers. Pass `embeddedHost: false` to `createCrowdyClient`
-to never consult a framing page.
+Crowded Kingdoms no longer hosts games (retired 2026-10-29), so a customer's game
+always runs on its own domain and takes the first row. See
+[Hosting your game](#hosting-your-game).
 
 **Hosted sign-in** (browser game, own domain) is OAuth2 Authorization Code +
 PKCE; the verifier never leaves your origin and your page never sees a
@@ -322,7 +313,7 @@ never told about, so a native refresh without it is a re-placement.
 | `client.users` | `me`, `updateGamertag`, profile reads; `playerProfile` / `playerProfiles` (up to 100) for other players' public `{ userId, gamertag, disambiguation }`. |
 | `client.session` | Token store, `restore()`, `getToken()`, manual `setToken()`. |
 | `client.portal` | App-scoped token minting (`mintAppToken`) and the cross-origin PKCE entry flow (`beginEntry` / `handleAuthorizeRequest` / `completeEntry` / `refresh`). For an org-managed player, `adoptAppToken` stores the token its organization minted and `exchangeManagedPlayerAssertion` trades the organization's signed assertion. |
-| `client.hosting` | Third-party hosting on Crowdy Games (17.2.0): `claim` a slug for an app, `beginPublish` / `completePublish` / `abandonPublish` a built bundle, `setEnabled`; public `game(slug)` / `listed()`. Mutations need an identity session with `manage_apps`. `@crowdedkingdoms/crowdyjs/hosting` exports `publishDirectory(client, { dir, slug })`, the Node helper that does the whole publish for a `dist/`. |
+| `client.hosting` | **Deprecated.** Crowded Kingdoms no longer hosts games (retired 2026-10-29): the hosting API answers `CONTENT_HOSTING_DISABLED` on every tier, and its reads return null or an empty list. The methods (`claim`, `beginPublish` / `completePublish` / `abandonPublish`, `setEnabled`, `game(slug)`, `listed()`) and the Node helper `publishDirectory` (`@crowdedkingdoms/crowdyjs/hosting`) remain in the package. See [Hosting your game](#hosting-your-game). |
 | `client.platform` | Public platform configuration (`config()`). |
 | `client.serverStatus` | `gameClientBootstrap(appId)` — per-app version info, UDP status, spatial limits. |
 | `client.chunks`, `client.voxels`, `client.actors`, `client.avatars`, `client.state` | World data reads + writes: terrain/LODs, voxel edit + history/rollback, durable actors, avatars, per-user app state blobs. |
@@ -1049,37 +1040,27 @@ grid's owner is asked about their own CLIENT halves like anyone; answer yes in `
 `prompt.authorId` is the player. See
 [CLIENT halves](https://docs.dev.crowdedkingdoms.com/exec/client-halves).
 
-## Hosting a game on Crowdy Games
+## Hosting your game
 
-Since 17.2.0 (ck-api v2.1) a developer can publish a built static bundle to the
-platform instead of hosting it: players reach it at
-`https://<games host>/<slug>/` and it executes on an origin of its own,
-`https://<slug>.<content host>`, behind the same security headers `the-construct`'s
-`docs/HOSTING.md` asks a self-hoster to serve. The API returns both URLs
-(`HostedGame.launchUrl`, `.contentOrigin`); nothing in your code names a host.
+Crowded Kingdoms no longer hosts games: on 2026-10-29 it retired Crowdy Games, with
+the shell that framed published games, the Overworld lobby and the content CDN. Build
+your game and serve the built files from your own origin, on any static host that can
+set response headers. Then, in Studio, open the app's
+**Settings > Sign-in & redirect URIs**: add your sign-in return URL on that origin
+(for example `https://play.example.com/auth/callback`) as a redirect URI, and set the
+origin as the app's **Launch URL**. The redirect URI is what admits the origin to CORS
+and to the hosted sign-in return, so `portal.signIn` works there as in the
+[Quick start](#quick-start).
+[Host your game](https://docs.dev.crowdedkingdoms.com/build-a-game/host-your-game)
+has the requirements and recipes.
 
-From Node, with an identity session (never from a browser page, by design):
-
-```ts
-import { createCrowdyClient } from '@crowdedkingdoms/crowdyjs';
-import { publishDirectory } from '@crowdedkingdoms/crowdyjs/hosting';
-
-const client = createCrowdyClient();
-await client.auth.login({ email, password });               // identity session, Node only
-const game = await client.hosting.claim({ appId, slug: 'my-game' }); // once; idempotent
-const result = await publishDirectory(client, { dir: 'dist', slug: game.slug });
-console.log(result.game.launchUrl);                          // https://.../my-game/
-```
-
-`claim` registers the shell page and the game origin as the app's redirect URIs
-and sets `launch_url`; `publishDirectory` hashes `dist/`, declares the manifest
-(`beginGamePublish` validates it as a whole and returns one presigned PUT per file),
-uploads with the exact signed headers, and `completeGamePublish` verifies every
-object, promotes it and invalidates the CDN. The slug is a DNS label, global on the
-tier, and first-party names are reserved (`HOSTED_SLUG_UNAVAILABLE`); a tier without
-a content CDN answers `CONTENT_HOSTING_DISABLED`. Being *listed* in the lobby is an
-operator decision, made outside the SDK; publishing is self-serve. `the-construct`'s
-`npm run publish` is this section as a command.
+`client.hosting`, `uploadPublishFiles`, `publishDirectory` and `manifestForDirectory`
+(the `@crowdedkingdoms/crowdyjs/hosting` entry point), and `EmbeddedHost`
+(`client.embeddedHost`) remain in the package but are deprecated. The hosting API
+answers `CONTENT_HOSTING_DISABLED` on every tier and its reads return null or an empty
+list, so a publish step that calls them fails; remove it from your build. With no
+shell to frame a game, `EmbeddedHost.hello()` resolves null and `portal.signIn` takes
+the normal path.
 
 ## Crowdy Studio
 
