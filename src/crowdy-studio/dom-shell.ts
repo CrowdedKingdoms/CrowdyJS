@@ -87,6 +87,7 @@ export class CrowdyStudioDomShell {
   private readonly saveMessageText: HTMLElement;
   private readonly saveAction: HTMLButtonElement;
   private readonly remoteAction: HTMLButtonElement;
+  private readonly runtimeTools: HTMLElement;
   private readonly testAction: HTMLButtonElement;
   private readonly runMenu: MenuHandle;
   private readonly deployAction: HTMLButtonElement;
@@ -175,6 +176,7 @@ export class CrowdyStudioDomShell {
     projectTools.append(this.projectMenu.wrap, this.saveMenu.wrap);
 
     const runtimeTools = element('div', 'ck-crowdy-studio-runtime-tools');
+    this.runtimeTools = runtimeTools;
     this.testAction = button('Test draft');
     this.testAction.className = 'ck-crowdy-studio-primary';
     this.runMenu = this.createMenu('Run ▾', {
@@ -493,6 +495,8 @@ export class CrowdyStudioDomShell {
       : false;
     this.testAction.disabled = !projectTargetsAvailable;
     this.deployAction.disabled = !projectTargetsAvailable;
+    // The game editor builds nothing: the game ships through its own build and publish.
+    this.runtimeTools.hidden = state.repositoryMode === true;
     this.renderProblems(state);
     this.renderBuild(state);
     this.renderLogLines(this.logsPanel, state.logs);
