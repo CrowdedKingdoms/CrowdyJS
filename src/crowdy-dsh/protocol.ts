@@ -237,6 +237,7 @@ export interface DshBridgeRequestMap {
     params: { path: string; content: string; precondition?: DshDraftPrecondition };
     result: DshDraftWriteResult;
   };
+  /** No harness tool deletes yet (dsh-fs has no remove); this is the guarded channel when one does. */
   'draft.delete': {
     params: { path: string; precondition?: { kind: 'ifHash'; hash: string } };
     result: { path: string; previousHash: string; revision: number };
