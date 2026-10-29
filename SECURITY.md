@@ -8,8 +8,8 @@ and steps to reproduce. Do not open a public issue for a vulnerability. You will
 get an acknowledgement within two business days and a status update at least
 every week until resolution.
 
-Please do not test against `prod` (`*.prod.crowdedkingdoms.com`, `crowdy.games`)
-without asking first. The `dev` tier is where we would rather you found things.
+Please do not test against `prod` (`*.prod.crowdedkingdoms.com`) without asking
+first. The `dev` tier is where we would rather you found things.
 
 ## Supported tiers
 
