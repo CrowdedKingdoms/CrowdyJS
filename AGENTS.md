@@ -47,7 +47,11 @@ controller asks `layout().kind` once per mirror commit (`refreshRepositoryMode`)
 `page.draftChanged` event and the `worker.ready` mode handshake; game boots write
 `agent-presets.default: crowdy-game` into `settings.yaml` and persist under `<scope>/game`. The
 v4 game requests from #284 (`studio.putGameFile`, `listRepo`, ... and the `gameFiles` option)
-were never published and are gone. `schema.gql` is ck-api's live-code branch.
+were never published and are gone. `schema.gql` is ck-api's live-code branch. A game hosting the
+editor passes `draftStore` on the embed and `projectId` on an open (never `runtimeOverrides`,
+which is for browser regressions). An agent's `draft.commit` commits exactly the paths the
+player confirmed and is `DRAFT_STALE` when one changed while they decided (security review,
+2026-10-29). The game editor hides the mod build tools.
 
 **18.22.0: `ExecInstance.orphaned` (2026-10-26).** `ExecInstances` selects `orphaned`
 (cks-game-api #603, v2.58.0): true for an instance whose node type the app's active version no
