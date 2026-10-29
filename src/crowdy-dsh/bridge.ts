@@ -673,7 +673,17 @@ export class StudioDshBridge {
       if (!(await confirm({ projectName, message, files, deleted }))) {
         throw new DraftError('DRAFT_DECLINED', 'The player declined the commit. The draft is unchanged; ask before committing again.');
       }
-      return await this.options.controller.commitRepository({ message, ...(paths ? { paths } : {}) });
+      // Exactly what the player approved: a write made while they decided stays in the draft,
+      // and an approved file that changed meanwhile is not committed unseen.
+      const approved = [...files, ...deleted];
+      const after = draft.snapshot();
+      const versionIn = (view: typeof snapshot, path: string) =>
+        view.deleted.includes(path) ? null : (view.entries.find((e) => e.path === path)?.hash ?? null);
+      const changed = approved.filter((path) => versionIn(snapshot, path) !== versionIn(after, path));
+      if (changed.length > 0) {
+        throw new DraftError('DRAFT_STALE', `${changed.join(', ')} changed while the player was deciding; ask to commit again.`);
+      }
+      return await this.options.controller.commitRepository({ message, paths: approved });
     } finally {
       this.commitPending = false;
     }

@@ -1264,7 +1264,9 @@ are git blob ids, so an untouched file carries its GitHub blob id. The hosted
 store keeps edits in IndexedDB on the game's own origin and reads the bound
 branch through `crowdyStudioGitHub.tree` and `getFiles` (100 paths a call);
 **Commit** (or the agent's `commit_game_files`, which the player confirms in
-the pane) publishes the draft as ONE commit through `commitFiles`. When the
+the pane) publishes the draft as ONE commit through `commitFiles`; an agent's
+commit carries exactly the files the player approved, and is refused as stale
+if one of them changed while they decided. When the
 branch moved meanwhile, the store rebases every edit that does not collide and
 lists the rest as conflicts the player settles (keep mine / take theirs). A
 game that runs a local dev server can implement `DraftStore` over its checkout

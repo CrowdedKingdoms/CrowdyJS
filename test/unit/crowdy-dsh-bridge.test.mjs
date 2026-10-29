@@ -437,6 +437,7 @@ test('game mode: the boot names the game editor, agent writes go through the dra
   controller.setState({ repositoryMode: true });
   const asked = [];
   let answer = false;
+  let duringConfirm = null;
   const savedFetch = globalThis.fetch;
   globalThis.fetch = async (url) => {
     if (String(url).endsWith('/game/mmo/skills/index.json')) {
@@ -459,6 +460,7 @@ test('game mode: the boot names the game editor, agent writes go through the dra
     host: { playbookBase: '/game/mmo/' },
     confirmCommit: async (summary) => {
       asked.push(summary);
+      if (duringConfirm) await duringConfirm();
       return answer;
     },
   });
@@ -495,7 +497,19 @@ test('game mode: the boot names the game editor, agent writes go through the dra
     assert.deepEqual(result.committed, ['src/main.ts']);
     assert.deepEqual(asked.at(-1), { projectName: 'One', message: 'Make a = 1', files: ['src/main.ts'], deleted: [] });
     assert.equal(commits[0].message, 'Make a = 1');
-    assert.deepEqual(committed[0], { message: 'Make a = 1' });
+    assert.deepEqual(committed[0], { message: 'Make a = 1', paths: ['src/main.ts'] });
+
+    // A write made while the player decides stays out of the commit they approved.
+    await ask(worker, 'draft.write', { path: 'src/main.ts', content: 'export const a = 2;\n' });
+    duringConfirm = () => store.write('src/scenes/pool/PoolScene.ts', 'export const pool = 2;\n', { source: 'agent' });
+    const second = await ask(worker, 'draft.commit', { message: 'Make a = 2' });
+    assert.deepEqual(committed.at(-1).paths, ['src/main.ts']);
+    assert.deepEqual(second.committed, ['src/main.ts']);
+    // An approved file that changes meanwhile is not committed unseen.
+    await ask(worker, 'draft.write', { path: 'src/main.ts', content: 'export const a = 3;\n' });
+    duringConfirm = () => store.write('src/main.ts', 'export const a = 4;\n', { source: 'agent' });
+    await assert.rejects(ask(worker, 'draft.commit', { message: 'Make a = 3' }), /DRAFT_STALE: src\/main\.ts changed while the player was deciding/);
+    duringConfirm = null;
 
     const skills = await ask(worker, 'studio.listSkills', {});
     assert.deepEqual(skills.skills, [{ name: 'dock-scene', description: 'Add or change a scene.', page: 'skills/dock-scene/SKILL.md' }]);
