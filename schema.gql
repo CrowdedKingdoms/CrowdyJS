@@ -7333,26 +7333,26 @@ type Query {
     includeReleased: Boolean = false
   ): [LegalHold!]! @requiresPermission(scope: "operator", permission: "is_operator")
   """
-  A hosted third-party game by slug, or null when the slug is unclaimed. PUBLIC: the first-party shell at https://<games host>/<slug>/ calls this before sign-in to learn the contentOrigin it frames. Returns DISABLED and TAKEN_DOWN games too (with their status) so the shell can say why. Null when the tier does not host third-party games.
+  RETIRED 2026-10-29: Crowded Kingdoms no longer hosts games and every tier runs with hosting off, so this answers null. Host your build on your own origin. A hosted third-party game by slug, or null when the slug is unclaimed. PUBLIC: the first-party shell at https://<games host>/<slug>/ calls this before sign-in to learn the contentOrigin it frames. Returns DISABLED and TAKEN_DOWN games too (with their status) so the shell can say why. Null when the tier does not host third-party games.
   """
   hostedGame(
     """The hosting slug (the first path segment on the games host)."""
     slug: String!
   ): HostedGame
   """
-  The LIVE and LISTED hosted third-party games, for the Overworld lobby and the marketplace. PUBLIC. Empty when the tier does not host third-party games. Operators see every game with allHostedGames.
+  RETIRED 2026-10-29: Crowded Kingdoms no longer hosts games and every tier runs with hosting off, so this answers []. Host your build on your own origin. The LIVE and LISTED hosted third-party games, for the Overworld lobby and the marketplace. PUBLIC. Empty when the tier does not host third-party games. Operators see every game with allHostedGames.
   """
   hostedGames: [HostedGame!]!
   """
-  OPERATOR: every hosted game on the tier, whatever its status or listing.
+  RETIRED 2026-10-29: Crowded Kingdoms no longer hosts games and every tier runs with hosting off, so this answers []. Host your build on your own origin. OPERATOR: every hosted game on the tier, whatever its status or listing.
   """
   allHostedGames: [HostedGame!]!
   """
-  The hosted games the caller can manage (manage_apps on the app). Requires a SESSION token.
+  RETIRED 2026-10-29: Crowded Kingdoms no longer hosts games and every tier runs with hosting off, so this answers []. Host your build on your own origin. The hosted games the caller can manage (manage_apps on the app). Requires a SESSION token.
   """
   myHostedGames: [HostedGame!]!
   """
-  Publish history for a hosted game, newest first. Requires manage_apps on the app and a SESSION token.
+  RETIRED 2026-10-29: Crowded Kingdoms no longer hosts games and every tier runs with hosting off, so this answers CONTENT_HOSTING_DISABLED. Host your build on your own origin. Publish history for a hosted game, newest first. Requires manage_apps on the app and a SESSION token.
   """
   hostedGamePublishes(
     """The hosting slug."""
@@ -9453,15 +9453,15 @@ type Mutation {
     holdId: BigInt!
   ): LegalHold! @requiresPermission(scope: "operator", permission: "is_operator")
   """
-  Claim the hosting slug for an app (idempotent; the same app re-claiming its slug is a no-op, a different slug MOVES the game). Registers https://<games host>/<slug>/ and https://<slug>.<content host> as the app's redirect URIs and sets launch_url to the former. Requires manage_apps on the app and a SESSION token. Refuses a slug that is not a DNS label, is reserved, or belongs to another app (HOSTED_SLUG_UNAVAILABLE), and answers CONTENT_HOSTING_DISABLED on a tier without a content CDN.
+  RETIRED 2026-10-29: Crowded Kingdoms no longer hosts games and every tier runs with hosting off, so this answers CONTENT_HOSTING_DISABLED. Host your build on your own origin. Claim the hosting slug for an app (idempotent; the same app re-claiming its slug is a no-op, a different slug MOVES the game). Registers https://<games host>/<slug>/ and https://<slug>.<content host> as the app's redirect URIs and sets launch_url to the former. Requires manage_apps on the app and a SESSION token. Refuses a slug that is not a DNS label, is reserved, or belongs to another app (HOSTED_SLUG_UNAVAILABLE), and answers CONTENT_HOSTING_DISABLED on a tier without a content CDN.
   """
   claimGameHosting(input: ClaimGameHostingInput!): HostedGame!
   """
-  Declare a publish: the full manifest of the built bundle (path, size, SHA-256 per file; index.html at the root). Validates it as a whole (HOSTED_MANIFEST_INVALID names every problem), records a STAGING publish, and returns one presigned PUT per file. Upload every file with exactly the returned headers, then call completeGamePublish. Rate-limited per app. Requires manage_apps and a SESSION token.
+  RETIRED 2026-10-29: Crowded Kingdoms no longer hosts games and every tier runs with hosting off, so this answers CONTENT_HOSTING_DISABLED. Host your build on your own origin. Declare a publish: the full manifest of the built bundle (path, size, SHA-256 per file; index.html at the root). Validates it as a whole (HOSTED_MANIFEST_INVALID names every problem), records a STAGING publish, and returns one presigned PUT per file. Upload every file with exactly the returned headers, then call completeGamePublish. Rate-limited per app. Requires manage_apps and a SESSION token.
   """
   beginGamePublish(input: BeginGamePublishInput!): BeginGamePublishResult!
   """
-  Finish a publish: verifies every staged object against the manifest (HOSTED_PUBLISH_INCOMPLETE names what is missing), promotes the staging area to the live prefix, removes objects the previous publish left, records the publish LIVE and invalidates the content CDN. Requires manage_apps and a SESSION token.
+  RETIRED 2026-10-29: Crowded Kingdoms no longer hosts games and every tier runs with hosting off, so this answers CONTENT_HOSTING_DISABLED. Host your build on your own origin. Finish a publish: verifies every staged object against the manifest (HOSTED_PUBLISH_INCOMPLETE names what is missing), promotes the staging area to the live prefix, removes objects the previous publish left, records the publish LIVE and invalidates the content CDN. Requires manage_apps and a SESSION token.
   """
   completeGamePublish(
     """The hosting slug the publish was begun for."""
@@ -9470,7 +9470,7 @@ type Mutation {
     publishId: BigInt!
   ): CompleteGamePublishResult!
   """
-  Give up a STAGING publish and clear its staged objects. Requires manage_apps and a SESSION token.
+  RETIRED 2026-10-29: Crowded Kingdoms no longer hosts games and every tier runs with hosting off, so this answers CONTENT_HOSTING_DISABLED. Host your build on your own origin. Give up a STAGING publish and clear its staged objects. Requires manage_apps and a SESSION token.
   """
   abandonGamePublish(
     """The hosting slug the publish was begun for."""
@@ -9479,15 +9479,15 @@ type Mutation {
     publishId: BigInt!
   ): HostedGamePublish!
   """
-  Developer switch: DISABLED (the shell says "disabled by its developer") or back to LIVE. A TAKEN_DOWN game is refused (HOSTED_GAME_TAKEN_DOWN). Requires manage_apps and a SESSION token.
+  RETIRED 2026-10-29: Crowded Kingdoms no longer hosts games and every tier runs with hosting off, so this answers CONTENT_HOSTING_DISABLED. Host your build on your own origin. Developer switch: DISABLED (the shell says "disabled by its developer") or back to LIVE. A TAKEN_DOWN game is refused (HOSTED_GAME_TAKEN_DOWN). Requires manage_apps and a SESSION token.
   """
   setHostedGameEnabled(input: SetHostedGameEnabledInput!): HostedGame!
   """
-  OPERATOR: list or unlist a hosted game in the lobby and the management UI.
+  RETIRED 2026-10-29: Crowded Kingdoms no longer hosts games and every tier runs with hosting off, so this answers CONTENT_HOSTING_DISABLED. Host your build on your own origin. OPERATOR: list or unlist a hosted game in the lobby and the management UI.
   """
   setHostedGameListing(input: SetHostedGameListingInput!): HostedGame!
   """
-  OPERATOR: take a hosted game down (status TAKEN_DOWN, unlisted; the shell refuses it and the developer can neither publish nor re-enable) or restore it to LIVE with takenDown=false.
+  RETIRED 2026-10-29: Crowded Kingdoms no longer hosts games and every tier runs with hosting off, so this answers CONTENT_HOSTING_DISABLED. Host your build on your own origin. OPERATOR: take a hosted game down (status TAKEN_DOWN, unlisted; the shell refuses it and the developer can neither publish nor re-enable) or restore it to LIVE with takenDown=false.
   """
   takeDownHostedGame(
     """The hosting slug."""
