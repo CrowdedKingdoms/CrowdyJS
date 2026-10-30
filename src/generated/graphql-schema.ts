@@ -3177,9 +3177,39 @@ export type CrowdyStudioGitHubAtCommitInput = {
 export enum CrowdyStudioGitHubBindInitial {
   /** The Studio project files are committed to the branch (with a crowdy.json when the repository has none). Refused with GITHUB_REPO_HAS_FILES when the repository already carries rust under the layout roots. */
   PushProject = 'PUSH_PROJECT',
-  /** The repository is adopted as it is; the Studio project files are replaced by the rust under the layout roots at branch HEAD. Refused with GITHUB_REPO_EMPTY when there is nothing to take. */
+  /** The repository is adopted as it is. Rust under the layout roots replaces the Studio project files. A Construct game is adopted at branch HEAD when it has no such rust, and the Studio mirror is cleared. Refused with GITHUB_REPO_EMPTY when the branch has neither. */
   TakeRepository = 'TAKE_REPOSITORY'
 }
+
+/** The commit a multi-file write created. githubSha is now commitSha; every change in it landed, or none did. */
+export type CrowdyStudioGitHubCommit = {
+  __typename?: 'CrowdyStudioGitHubCommit';
+  commitSha: Scalars['String']['output'];
+  /** Paths deleted. */
+  deleted: Array<Scalars['String']['output']>;
+  /** The expectedCommitSha it builds on. */
+  parentSha: Scalars['String']['output'];
+  /** Paths created or updated. */
+  written: Array<Scalars['String']['output']>;
+};
+
+export type CrowdyStudioGitHubCommitChangeInput = {
+  /** New UTF-8 content. Required unless delete is true. */
+  content?: InputMaybe<Scalars['String']['input']>;
+  /** Remove the path instead of writing it. */
+  delete?: InputMaybe<Scalars['Boolean']['input']>;
+  path: Scalars['String']['input'];
+};
+
+export type CrowdyStudioGitHubCommitFilesInput = {
+  appId: Scalars['BigInt']['input'];
+  /** 1 to 100 changes, one per path. */
+  changes: Array<CrowdyStudioGitHubCommitChangeInput>;
+  /** The project githubSha the writer drafted against. Refused with GITHUB_STALE_SHA when the project or the branch has moved on, and nothing is written. */
+  expectedCommitSha: Scalars['String']['input'];
+  message: Scalars['String']['input'];
+  projectId: Scalars['String']['input'];
+};
 
 export type CrowdyStudioGitHubConnectStart = {
   __typename?: 'CrowdyStudioGitHubConnectStart';
@@ -3209,11 +3239,44 @@ export type CrowdyStudioGitHubFile = {
   sha: Scalars['String']['output'];
 };
 
+/** One file of a batched read. content is null when the blob is not UTF-8 text or is larger than this tier reads; size and sha are always set. */
+export type CrowdyStudioGitHubFileContent = {
+  __typename?: 'CrowdyStudioGitHubFileContent';
+  /** The blob is not valid UTF-8 text (or contains NUL). */
+  binary: Scalars['Boolean']['output'];
+  /** UTF-8 content, or null when binary or over the size cap. */
+  content: Maybe<Scalars['String']['output']>;
+  path: Scalars['String']['output'];
+  /** Blob SHA at the commit read. */
+  sha: Scalars['String']['output'];
+  /** Blob size in bytes. */
+  size: Scalars['Int']['output'];
+};
+
 export type CrowdyStudioGitHubFileInput = {
   appId: Scalars['BigInt']['input'];
   /** Full 40-hex commit to read at. Omitted reads the project githubSha (the mirror commit), never the branch head. */
   commitSha?: InputMaybe<Scalars['String']['input']>;
   path: Scalars['String']['input'];
+  projectId: Scalars['String']['input'];
+};
+
+/** Several files of the bound repository at one commit, read in one call (one operation against the per-user GitHub budget). */
+export type CrowdyStudioGitHubFiles = {
+  __typename?: 'CrowdyStudioGitHubFiles';
+  /** Commit the files were read at. */
+  commitSha: Scalars['String']['output'];
+  files: Array<CrowdyStudioGitHubFileContent>;
+  /** Requested paths that are not files at that commit. */
+  missing: Array<Scalars['String']['output']>;
+};
+
+export type CrowdyStudioGitHubFilesInput = {
+  appId: Scalars['BigInt']['input'];
+  /** Full 40-hex commit to read at. Omitted reads the project githubSha (the mirror commit), never the branch head. */
+  commitSha?: InputMaybe<Scalars['String']['input']>;
+  /** Repo-relative paths, 1 to 100. */
+  paths: Array<Scalars['String']['input']>;
   projectId: Scalars['String']['input'];
 };
 
@@ -3228,9 +3291,19 @@ export type CrowdyStudioGitHubLayout = {
   commitSha: Scalars['String']['output'];
   /** A crowdy.json exists at the repository root. False means the layout was inferred from the tree. */
   fromFile: Scalars['Boolean']['output'];
+  /** STUDIO_CRATES for a mod repository, CONSTRUCT_GAME for a Construct game with no Studio rust under the layout roots (the same test TAKE_REPOSITORY adopts by). */
+  kind: CrowdyStudioGitHubLayoutKind;
   /** Directory of the SERVER Cargo.toml; `.` is the repository root. */
   server: Scalars['String']['output'];
 };
+
+/** What the bound repository is, at one commit. The server decides it from the tree; a client picks its editor from it and does not inspect the tree itself. */
+export enum CrowdyStudioGitHubLayoutKind {
+  /** A game generated from the Construct template, with no Studio rust under the layout roots. The whole repository is the working tree, and the Studio mirror is empty. */
+  ConstructGame = 'CONSTRUCT_GAME',
+  /** A Studio mod: the SERVER and CLIENT crates sit under the layout roots (or the repository is empty and the project will push them). */
+  StudioCrates = 'STUDIO_CRATES'
+}
 
 export type CrowdyStudioGitHubProjectInput = {
   appId: Scalars['BigInt']['input'];
@@ -4925,7 +4998,7 @@ export type MintManagedPlayerTokenInput = {
 
 export type Mutation = {
   __typename?: 'Mutation';
-  /** Give up a STAGING publish and clear its staged objects. Requires manage_apps and a SESSION token. */
+  /** RETIRED 2026-10-29: Crowded Kingdoms no longer hosts games and every tier runs with hosting off, so this answers CONTENT_HOSTING_DISABLED. Host your build on your own origin. Give up a STAGING publish and clear its staged objects. Requires manage_apps and a SESSION token. */
   abandonGamePublish: HostedGamePublish;
   /** SESSION ONLY, an admin of the organization (its own admin grant: a super admin's or an operator's access does not stand in). Accept the Org-Managed Players Addendum on the organization's behalf, the version orgManagedPlayerSettings names as termsVersion (read it at termsUrl). Until the organization has accepted the current version, its managed players are neither created nor signed in (ORG_LEGAL_ACCEPTANCE_REQUIRED). A version that is not the current one is refused with CONFLICT; accepting the current one again changes nothing. Studio asks for it on the organization's Players tab. */
   acceptManagedPlayerTerms: OrgManagedPlayerSettings;
@@ -4953,7 +5026,7 @@ export type Mutation = {
   banChannelMember: GroupMember;
   /** Ban a user from a team: their membership (or a new row, for someone not yet in it) becomes 'banned' and their roles go, and joining, requesting to join and being added are refused with GROUP_MEMBER_BANNED until unbanTeamMember. Leaving or removing does not lift a ban. Requires the 'manage_members' team permission (app admins bypass). Never the team's owner, never yourself. */
   banTeamMember: GroupMember;
-  /** Declare a publish: the full manifest of the built bundle (path, size, SHA-256 per file; index.html at the root). Validates it as a whole (HOSTED_MANIFEST_INVALID names every problem), records a STAGING publish, and returns one presigned PUT per file. Upload every file with exactly the returned headers, then call completeGamePublish. Rate-limited per app. Requires manage_apps and a SESSION token. */
+  /** RETIRED 2026-10-29: Crowded Kingdoms no longer hosts games and every tier runs with hosting off, so this answers CONTENT_HOSTING_DISABLED. Host your build on your own origin. Declare a publish: the full manifest of the built bundle (path, size, SHA-256 per file; index.html at the root). Validates it as a whole (HOSTED_MANIFEST_INVALID names every problem), records a STAGING publish, and returns one presigned PUT per file. Upload every file with exactly the returned headers, then call completeGamePublish. Rate-limited per app. Requires manage_apps and a SESSION token. */
   beginGamePublish: BeginGamePublishResult;
   /** Begin vaulting a card on the caller's player wallet (P4b): returns a Stripe SetupIntent client secret + publishable key for the browser to confirm. On success the card is saved for wallet auto-recharge and rent auto-renew. Closes the P2 gap where players had no card-setup path. */
   beginPlayerCardSetup: PlayerCardSetup;
@@ -4967,7 +5040,7 @@ export type Mutation = {
   changePassword: Scalars['Boolean']['output'];
   /** Self-service: the authenticated caller claims access to an app via its free, open-by-default tier. Requires authentication only (no org membership needed). ENTITLEMENT CHANGE: grants the free default tier as a 'system' grant and notifies the game API. Idempotent: returns the existing row if already granted, and never overrides a prior revoke. Errors if the app has no free default tier or is archived. */
   claimFreeAppAccess: AppUserAccess;
-  /** Claim the hosting slug for an app (idempotent; the same app re-claiming its slug is a no-op, a different slug MOVES the game). Registers https://<games host>/<slug>/ and https://<slug>.<content host> as the app's redirect URIs and sets launch_url to the former. Requires manage_apps on the app and a SESSION token. Refuses a slug that is not a DNS label, is reserved, or belongs to another app (HOSTED_SLUG_UNAVAILABLE), and answers CONTENT_HOSTING_DISABLED on a tier without a content CDN. */
+  /** RETIRED 2026-10-29: Crowded Kingdoms no longer hosts games and every tier runs with hosting off, so this answers CONTENT_HOSTING_DISABLED. Host your build on your own origin. Claim the hosting slug for an app (idempotent; the same app re-claiming its slug is a no-op, a different slug MOVES the game). Registers https://<games host>/<slug>/ and https://<slug>.<content host> as the app's redirect URIs and sets launch_url to the former. Requires manage_apps on the app and a SESSION token. Refuses a slug that is not a DNS label, is reserved, or belongs to another app (HOSTED_SLUG_UNAVAILABLE), and answers CONTENT_HOSTING_DISABLED on a tier without a content CDN. */
   claimGameHosting: HostedGame;
   /** Claim one wilderness chunk (a chunk no grid but the app's world grid covers) as a new player-owned grid. Requires an ordinary app-scoped player token and active app access, but never manage_apps. The app's policy must be SELF_CLAIM. A chunk inside another grid (a plot, a zone or another claim) is refused FORBIDDEN (GRID_NOT_CLAIMABLE): the claim would be the most specific grid there and take the chunk from whoever that grid grants. The server validates the app's grid assignment and peer-overlap rules, then atomically creates a one-chunk grid, assigns current-user ownership, grants access/update_voxel_data/use_voice_chat/teleport plus the player-code keys and use_video_chat where the caller's tier already carries them, and materializes the effective ACL. Conflicts and policy denials throw GraphQL errors; no partial grid, ownership, or grant rows remain. */
   claimGridChunk: ChunkClaimResult;
@@ -4975,7 +5048,7 @@ export type Mutation = {
   claimGridOwnership: GridClaimResult;
   /** Remove an app's compute allowance, so its ck-exec code is no longer paused for its budget. Returns true if an allowance was removed. Requires app-admin ('manage_apps'). */
   clearAppComputeBudget: Scalars['Boolean']['output'];
-  /** Finish a publish: verifies every staged object against the manifest (HOSTED_PUBLISH_INCOMPLETE names what is missing), promotes the staging area to the live prefix, removes objects the previous publish left, records the publish LIVE and invalidates the content CDN. Requires manage_apps and a SESSION token. */
+  /** RETIRED 2026-10-29: Crowded Kingdoms no longer hosts games and every tier runs with hosting off, so this answers CONTENT_HOSTING_DISABLED. Host your build on your own origin. Finish a publish: verifies every staged object against the manifest (HOSTED_PUBLISH_INCOMPLETE names what is missing), promotes the staging area to the live prefix, removes objects the previous publish left, records the publish LIVE and invalidates the content CDN. Requires manage_apps and a SESSION token. */
   completeGamePublish: CompleteGamePublishResult;
   /** Complete a magic-link sign-in with the emailed token; returns a session AuthResponse. Public (the token authorizes the call); throws if invalid/expired/used. First-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise). */
   completeLoginLink: AuthResponse;
@@ -5025,8 +5098,10 @@ export type Mutation = {
   creditOrgWallet: WalletTransaction;
   /** Publish a new immutable version of an app-scoped Crowdy Studio-curated common file and make it the current player-readable version. Requires an app-scoped token plus the app manage_compute permission. Old versions remain immutable for provenance; an idempotency key is strongly recommended for transport retries. */
   crowdyStudioCommonPublish: CrowdyStudioCommonFile;
-  /** Bind a Crowdy Studio project you own to a repository granted to your installation, and make the two agree in one commit: PUSH_PROJECT commits the project files to the branch (refused with GITHUB_REPO_HAS_FILES when the branch already has rust under the layout roots); TAKE_REPOSITORY replaces the project files with the rust on the branch (refused with GITHUB_REPO_EMPTY when there is none). From then on the repository is the working tree and the project files are a mirror of it at githubSha. Identity session only. */
+  /** Bind a Crowdy Studio project you own to a repository granted to your installation, and make the two agree in one commit: PUSH_PROJECT commits the project files to the branch (refused with GITHUB_REPO_HAS_FILES when the branch already has rust under the layout roots); TAKE_REPOSITORY replaces the project files with the rust on the branch, or adopts a Construct game that has none (refused with GITHUB_REPO_EMPTY when the branch has neither). From then on the repository is the working tree and the project files are a mirror of it at githubSha. Identity session only. */
   crowdyStudioGitHubBind: CrowdyStudioGitHubStatus;
+  /** Write and delete up to 100 files of the bound repository as ONE commit on the bound branch, on top of expectedCommitSha. Refused with GITHUB_STALE_SHA, writing nothing, when the project or the branch has moved on. Project files under the layout roots move the mirror in the same transaction as githubSha. Workflow files and the deletion of crowdy.json are refused. */
+  crowdyStudioGitHubCommitFiles: CrowdyStudioGitHubCommit;
   /** Install URL for this tier's Crowdy Studio GitHub App with a signed state. Identity session only. No GitHub token ever reaches the browser. */
   crowdyStudioGitHubConnectUrl: CrowdyStudioGitHubConnectStart;
   /** Delete one file from the bound repository as a commit on the bound branch, under the same blob-sha and expectedCommitSha guards as crowdyStudioGitHubPutFile. A project file leaves the mirror with it. crowdy.json cannot be deleted this way. */
@@ -5301,9 +5376,9 @@ export type Mutation = {
   setGridOpenPermissions: GridOpenPermissions;
   /** Replace the whitelist of permission keys allowed on a grid (writes the `grid_permission_limits` input table), then recompute the grid's materialized effective ACL so any keys no longer on the whitelist are dropped for all users. Pass an empty array to remove all limits. Requires app-admin ('manage_apps'). DESTRUCTIVE: narrowing the whitelist can strip effective permissions from existing users on the grid. */
   setGridPermissionLimits: GridPermissionLimits;
-  /** Developer switch: DISABLED (the shell says "disabled by its developer") or back to LIVE. A TAKEN_DOWN game is refused (HOSTED_GAME_TAKEN_DOWN). Requires manage_apps and a SESSION token. */
+  /** RETIRED 2026-10-29: Crowded Kingdoms no longer hosts games and every tier runs with hosting off, so this answers CONTENT_HOSTING_DISABLED. Host your build on your own origin. Developer switch: DISABLED (the shell says "disabled by its developer") or back to LIVE. A TAKEN_DOWN game is refused (HOSTED_GAME_TAKEN_DOWN). Requires manage_apps and a SESSION token. */
   setHostedGameEnabled: HostedGame;
-  /** OPERATOR: list or unlist a hosted game in the lobby and the management UI. */
+  /** RETIRED 2026-10-29: Crowded Kingdoms no longer hosts games and every tier runs with hosting off, so this answers CONTENT_HOSTING_DISABLED. Host your build on your own origin. OPERATOR: list or unlist a hosted game in the lobby and the management UI. */
   setHostedGameListing: HostedGame;
   /** Adds a password to the signed-in account when it does not have one yet — for an account created by magic link or a social provider, which previously had no in-product way to add password sign-in. Requires a valid session token; the session is the proof of account control, so the password is usable immediately and no email confirmation is needed. Refuses with extensions.code PASSWORD_ALREADY_SET (409) when a password is already set — use changePassword, which verifies the current one, or the reset flow if it is forgotten. (Before v1.60.0 that refusal reached clients as INTERNAL_SERVER_ERROR while this description said CONFLICT, so a client could only recognise it by the message text.) A security notification is emailed to the account address. Existing sessions are not revoked. */
   setInitialPassword: Scalars['Boolean']['output'];
@@ -5345,7 +5420,7 @@ export type Mutation = {
   socialLoginStart: SocialLoginStart;
   /** Suspend a user's access to an app until a time: a timed ban that lifts by itself. Until then their gameplay tokens are refused with ACCESS_SUSPENDED (carrying suspendedUntil), and the tokens they hold for the app are deleted and their realtime sessions ended at once. The time must be in the future and at most 365 days away. The user must have an access record. Requires the 'manage_access_tiers' permission on the app; super admins bypass. REVERSIBLE early via unsuspendAppAccess. */
   suspendAppAccess: AppUserAccess;
-  /** OPERATOR: take a hosted game down (status TAKEN_DOWN, unlisted; the shell refuses it and the developer can neither publish nor re-enable) or restore it to LIVE with takenDown=false. */
+  /** RETIRED 2026-10-29: Crowded Kingdoms no longer hosts games and every tier runs with hosting off, so this answers CONTENT_HOSTING_DISABLED. Host your build on your own origin. OPERATOR: take a hosted game down (status TAKEN_DOWN, unlisted; the shell refuses it and the developer can neither publish nor re-enable) or restore it to LIVE with takenDown=false. */
   takeDownHostedGame: HostedGame;
   /** Checks whether the authenticated user is allowed to teleport an actor to a destination within an app and returns the authorization result. This is an authorization check only — it does NOT itself move the actor; the UDP runtime performs the actual movement. Requires a valid bearer game token plus the app-level "teleport" runtime permission. Returns success=false with errorCode INVALID_APP_ID (non-positive appId), UNAUTHORIZED (reserved sentinel destination -6,-6,-6 or missing permission), or success=true / NO_ERROR when allowed. */
   teleportRequest: TeleportResponse;
@@ -5677,6 +5752,11 @@ export type MutationCrowdyStudioCommonPublishArgs = {
 
 export type MutationCrowdyStudioGitHubBindArgs = {
   input: BindCrowdyStudioGitHubInput;
+};
+
+
+export type MutationCrowdyStudioGitHubCommitFilesArgs = {
+  input: CrowdyStudioGitHubCommitFilesInput;
 };
 
 
@@ -7702,7 +7782,7 @@ export type Query = {
   actorsConnection: ActorsConnection;
   /** OPERATOR ONLY. The Crowdy Studio agent price list: every model card with its four per-million token prices and its lifecycle status. Separate from billingRateCard because agent pricing is per model rather than per metered dimension. Read-only. */
   agentRateCards: Array<AgentRateCardEntryType>;
-  /** OPERATOR: every hosted game on the tier, whatever its status or listing. */
+  /** RETIRED 2026-10-29: Crowded Kingdoms no longer hosts games and every tier runs with hosting off, so this answers []. Host your build on your own origin. OPERATOR: every hosted game on the tier, whatever its status or listing. */
   allHostedGames: Array<HostedGame>;
   /** Convenience for UI: returns true when the authenticated caller is the currently elected host for the given app (same election as gameHost), otherwise false (including when no host is elected). Not authoritative for server-side decisions. Requires a valid bearer game token (same auth as gameHost). */
   amIGameHost: Scalars['Boolean']['output'];
@@ -7817,6 +7897,8 @@ export type Query = {
   crowdyStudioCommonFiles: Array<CrowdyStudioCommonFile>;
   /** One UTF-8 file from the bound repository at one commit (default: githubSha), with its blob SHA. */
   crowdyStudioGitHubFile: CrowdyStudioGitHubFile;
+  /** Up to 100 files of the bound repository at one commit (default: githubSha), for one operation against the per-user GitHub budget. A path that is not a file there is listed in missing; a blob that is not UTF-8 text, or is larger than this tier reads, comes back with content null and its sha and size. */
+  crowdyStudioGitHubFiles: CrowdyStudioGitHubFiles;
   /** Where the SERVER and CLIENT crates live in the bound repository, resolved from crowdy.json (or inferred from the tree) at one commit. The only layout grammar: clients must not parse crowdy.json themselves. */
   crowdyStudioGitHubLayout: CrowdyStudioGitHubLayout;
   /** Repositories the caller granted to their Crowdy Studio installation. Identity session only. */
@@ -7827,6 +7909,8 @@ export type Query = {
   crowdyStudioGitHubTree: CrowdyStudioGitHubTree;
   /** List the authenticated player’s private reusable Crowdy Studio source files in one app. Requires an app-scoped token for appId; cross-user entries are never visible, including to grid owners or Crowdy Studio operators. The bounded result defaults to 50. */
   crowdyStudioLibraryFiles: Array<CrowdyStudioLibraryFile>;
+  /** Whether this player may draft_test or deploy_live. Requires use_studio_agent and an enabled agent policy. A missing policy row, a kill switch, or a missing permission refuses. The dock calls this before either action. The Studio Test button does not. */
+  crowdyStudioLiveModding: Scalars['Boolean']['output'];
   /** The caller's own model usage in this app: today's request count and rate-carded charge against the policy ceiling, the payer (PLAYER wallet by default, ORG when the app elected it, PLATFORM while platform-funded), and the most recent requests. Counts and charges only; no prompts or provider bodies exist to return. Requires 'use_studio_agent'. */
   crowdyStudioModelUsage: CrowdyStudioModelUsage;
   /** Load one private Crowdy Studio project with all bounded source files. Requires an app-scoped token for appId and exact caller ownership; missing, cross-app, and cross-user ids all return the same NOT_FOUND shape. Grid owners and Crowdy Studio operators receive no source override. */
@@ -7911,11 +7995,11 @@ export type Query = {
   gridPermissionLimits: GridPermissionLimits;
   /** Read one user's effective (materialized) runtime permission keys on a grid — the flattened union of direct and group-derived grants that Buddy enforces, with expired grants excluded. Use this to see what a user can actually do. To inspect the underlying inputs instead, use `gridGroupGrants` (group grants) and `gridPermissionLimits` (the whitelist). Requires app-admin ('manage_apps'). */
   gridUserPermissions: GridUserPermissions;
-  /** A hosted third-party game by slug, or null when the slug is unclaimed. PUBLIC: the first-party shell at https://<games host>/<slug>/ calls this before sign-in to learn the contentOrigin it frames. Returns DISABLED and TAKEN_DOWN games too (with their status) so the shell can say why. Null when the tier does not host third-party games. */
+  /** RETIRED 2026-10-29: Crowded Kingdoms no longer hosts games and every tier runs with hosting off, so this answers null. Host your build on your own origin. A hosted third-party game by slug, or null when the slug is unclaimed. PUBLIC: the first-party shell at https://<games host>/<slug>/ calls this before sign-in to learn the contentOrigin it frames. Returns DISABLED and TAKEN_DOWN games too (with their status) so the shell can say why. Null when the tier does not host third-party games. */
   hostedGame: Maybe<HostedGame>;
-  /** Publish history for a hosted game, newest first. Requires manage_apps on the app and a SESSION token. */
+  /** RETIRED 2026-10-29: Crowded Kingdoms no longer hosts games and every tier runs with hosting off, so this answers CONTENT_HOSTING_DISABLED. Host your build on your own origin. Publish history for a hosted game, newest first. Requires manage_apps on the app and a SESSION token. */
   hostedGamePublishes: Array<HostedGamePublish>;
-  /** The LIVE and LISTED hosted third-party games, for the Overworld lobby and the marketplace. PUBLIC. Empty when the tier does not host third-party games. Operators see every game with allHostedGames. */
+  /** RETIRED 2026-10-29: Crowded Kingdoms no longer hosts games and every tier runs with hosting off, so this answers []. Host your build on your own origin. The LIVE and LISTED hosted third-party games, for the Overworld lobby and the marketplace. PUBLIC. Empty when the tier does not host third-party games. Operators see every game with allHostedGames. */
   hostedGames: Array<HostedGame>;
   /** The recorded inputs of one session, oldest first, each exactly as the client sent it (without its authentication tail). Read from the input log by the offset ranges its index holds, so inputs past the published retention are gone even while the session is still listed. With 'manage_apps' on the app you may read any session; anyone else may read only their own, and any other session answers NOT_FOUND. Game plane: send the app-scoped token for this app to the app's datacenter. Page with `first` (default 50, max 200) and `after`, the previous page's endCursor for this same session (a cursor from another session is BAD_USER_INPUT); a page can hold fewer than `first` inputs, or none, when it stopped at its time or scan limit, so keep paging while hasNextPage is true. An operation may select this field only once. A server runs one read per user (two per app and per org) at a time; a read over that share waits for the earlier one within its own few-second deadline, and a read whose request is closed stops. Errors: INPUT_LOG_UNAVAILABLE when input logging is not configured on this deployment, or this server may not read its log (do not retry); INPUT_LOG_RATE_LIMITED (429) when the wait for an earlier read ran out or left too little time to read, and INPUT_LOG_TEMPORARILY_UNAVAILABLE (503) when the log cannot be read just now, both with extensions.retryable: retry shortly with the same cursor. A read whose request closed stops as INPUT_LOG_READ_ABORTED (499), which nobody receives. */
   inputLogMessages: InputLogMessageConnection;
@@ -7956,7 +8040,7 @@ export type Query = {
    * @deprecated Legacy donation/property-token data; these products are no longer purchasable. Retained for historical records.
    */
   myDonationData: UserDonationData;
-  /** The hosted games the caller can manage (manage_apps on the app). Requires a SESSION token. */
+  /** RETIRED 2026-10-29: Crowded Kingdoms no longer hosts games and every tier runs with hosting off, so this answers []. Host your build on your own origin. The hosted games the caller can manage (manage_apps on the app). Requires a SESSION token. */
   myHostedGames: Array<HostedGame>;
   /** The signed-in user's linked sign-in identities. */
   myIdentities: Array<UserIdentity>;
@@ -8419,6 +8503,11 @@ export type QueryCrowdyStudioGitHubFileArgs = {
 };
 
 
+export type QueryCrowdyStudioGitHubFilesArgs = {
+  input: CrowdyStudioGitHubFilesInput;
+};
+
+
 export type QueryCrowdyStudioGitHubLayoutArgs = {
   input: CrowdyStudioGitHubAtCommitInput;
 };
@@ -8440,6 +8529,12 @@ export type QueryCrowdyStudioLibraryFilesArgs = {
   includeArchived?: InputMaybe<Scalars['Boolean']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   offset?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryCrowdyStudioLiveModdingArgs = {
+  action: Scalars['String']['input'];
+  appId: Scalars['BigInt']['input'];
 };
 
 

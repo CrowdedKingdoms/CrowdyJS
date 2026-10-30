@@ -1,8 +1,13 @@
 export {
   CrowdyStudioGitHubTransport,
   type CrowdyStudioGitHubBindInitial,
+  type CrowdyStudioGitHubCommit,
+  type CrowdyStudioGitHubCommitChange,
   type CrowdyStudioGitHubFile,
+  type CrowdyStudioGitHubFileContent,
+  type CrowdyStudioGitHubFiles,
   type CrowdyStudioGitHubLayout,
+  type CrowdyStudioGitHubLayoutKind,
   type CrowdyStudioGitHubProjectScope,
   type CrowdyStudioGitHubRepo,
   type CrowdyStudioGitHubStatus,

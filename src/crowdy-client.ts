@@ -118,12 +118,13 @@ export interface CrowdyClientConfig {
    */
   pkceStore?: PkceStore;
   /**
-   * The Crowdy Games shell bridge (third-party hosting, 2026-09-13). When a game
-   * published to Crowdy Games runs inside the first-party shell's iframe,
-   * `portal.signIn` must ask the shell to navigate to Studio and must use the shell's
-   * page as the redirect URI; this bridge is how it learns both. Default: detect in a
-   * browser (`new EmbeddedHost()`), nothing in Node. Pass `false` to never consult a
-   * framing page, or your own instance to control timeouts.
+   * The Crowdy Games shell bridge (third-party hosting, 2026-09-13). The shell was
+   * retired on 2026-10-29: no first-party page answers the bridge any more, so
+   * `portal.signIn` takes the top-level flow. When a game published to Crowdy Games
+   * ran inside the shell's iframe, `portal.signIn` asked the shell to navigate to
+   * Studio and used the shell's page as the redirect URI; this bridge is how it learned
+   * both. Default: detect in a browser (`new EmbeddedHost()`), nothing in Node. Pass
+   * `false` to never consult a framing page, or your own instance to control timeouts.
    */
   embeddedHost?: EmbeddedHost | false;
   /**
@@ -249,9 +250,19 @@ export class CrowdyClient {
    * hosted games. Mutations need an identity session with manage_apps; the reads a
    * page needs are public. `@crowdedkingdoms/crowdyjs/hosting` has the Node helper
    * that publishes a directory.
+   *
+   * @deprecated Crowded Kingdoms no longer hosts games (retired 2026-10-29); the
+   * hosting API answers `CONTENT_HOSTING_DISABLED` on every tier, and its reads return
+   * null or an empty list. Host your build on your own origin.
    */
   readonly hosting: HostingAPI;
-  /** The Crowdy Games shell bridge (see `CrowdyClientConfig.embeddedHost`); null in Node or when opted out. */
+  /**
+   * The Crowdy Games shell bridge (see `CrowdyClientConfig.embeddedHost`); null in Node or when opted out.
+   *
+   * @deprecated The Crowdy Games shell was retired on 2026-10-29, so no first-party page
+   * answers the bridge and `portal.signIn` takes the top-level flow. Host your build on
+   * your own origin.
+   */
   readonly embeddedHost: EmbeddedHost | null;
   /**
    * Where each app lives. Unauthenticated, and meant to be called BEFORE login against

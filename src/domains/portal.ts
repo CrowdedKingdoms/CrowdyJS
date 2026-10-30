@@ -25,7 +25,7 @@
  * THIS IS THE ONLY WAY A BROWSER GAME ON ITS OWN DOMAIN SIGNS A PLAYER IN
  * (ck-api v1.88.0, 2026-09-08). The direct sign-in mutations behind
  * `client.auth.login` / `register` / magic link / social are served only to
- * first-party origins (Studio, the Crowdy Games host); from any other browser
+ * first-party origins (Studio); from any other browser
  * origin they are refused with `HOSTED_SIGN_IN_REQUIRED`
  * ({@link isHostedSignInRequiredError}). The reason is the player's password:
  * a form on a customer's domain that collects it is indistinguishable, to the
@@ -301,12 +301,14 @@ export interface SignInParams {
    * `false` to only compute and return the URL without navigating (tests,
    * SSR, a custom link). Default: navigate with `location.assign` when a
    * browser `location` exists -- or, when a Crowdy Games shell frames this page,
-   * ask the shell to navigate (see `embedded-host.ts`).
+   * ask the shell to navigate (see `embedded-host.ts`). The shell was retired on
+   * 2026-10-29, so no first-party page frames a game any more.
    */
   navigate?: boolean;
   /**
    * `false` to ignore a framing Crowdy Games shell and run the top-level flow with
-   * the given `redirectUri` even when embedded. Default: consult the shell.
+   * the given `redirectUri` even when embedded. Default: consult the shell. The
+   * shell was retired on 2026-10-29, so no first-party page answers any more.
    */
   embedded?: boolean;
 }
