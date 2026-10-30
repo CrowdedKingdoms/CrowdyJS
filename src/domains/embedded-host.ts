@@ -1,11 +1,16 @@
 /**
- * The embedded-host bridge: how a game framed by the Crowdy Games SHELL signs in.
+ * The embedded-host bridge: how a game framed by the Crowdy Games SHELL signed in.
  *
- * A game published to Crowdy Games (`client.hosting`, the-construct's `npm run
- * publish`) is reached at `https://<games host>/<slug>/`, which is a first-party
- * shell page, and executes inside that page's iframe on its own origin,
- * `https://<slug>.<content host>`. Two things about that arrangement change hosted
- * sign-in, and this module is the whole of the change:
+ * RETIRED. Crowded Kingdoms retired Crowdy Games, and the shell with it, on
+ * 2026-10-29. No first-party page frames a game any more, so `hello()` resolves null
+ * and `portal.signIn` takes the top-level flow. The bridge stays, deprecated and
+ * unchanged; the rest of this comment says how it works when a shell answers.
+ *
+ * A game published to Crowdy Games (`client.hosting`) was reached at
+ * `https://<games host>/<slug>/`, which was a first-party shell page, and executed
+ * inside that page's iframe on its own origin, `https://<slug>.<content host>`. Two
+ * things about that arrangement changed hosted sign-in, and this module is the whole
+ * of the change:
  *
  *   1. The game cannot navigate the tab. Its iframe has no `allow-top-navigation`
  *      (a game that could send the player to a lookalike sign-in page would have the
@@ -26,8 +31,8 @@
  * spend. The app token is exchanged and stored by the game as before.
  *
  * WHY TRUSTING THE PARENT IS SAFE. The bridge accepts `crowdyjs:host-hello` only from
- * `window.parent`. When the game is served by the Crowdy Games content edge, its
- * `frame-ancestors` names the tier's games host and nothing else, so the parent IS the
+ * `window.parent`. When a game was served by the Crowdy Games content edge, its
+ * `frame-ancestors` named the tier's games host and nothing else, so the parent WAS the
  * shell. A self-hosted game framed by a hostile page could be told a hostile
  * `returnUrl` -- and Studio would refuse it, because it is not one of the app's
  * registered redirect URIs; and even a code delivered to a registered-but-wrong page
@@ -35,7 +40,7 @@
  * `returnUrl` whose origin is not https (or the parent's own origin, for a local dev
  * shell), so the failure is loud rather than a silent detour.
  *
- * The message shapes mirror Crowdy-Games `shell/src/protocol.ts` (version 1).
+ * The message shapes are the shell's protocol, version 1.
  */
 
 export const EMBEDDED_HOST_PROTOCOL_VERSION = 1;
@@ -111,6 +116,11 @@ function isHostHello(data: unknown): data is HostHelloMessage {
  * Detects and talks to a Crowdy Games shell framing this page. Constructed once by
  * `createCrowdyClient` (see `CrowdyClientConfig.embeddedHost`); `portal.signIn`
  * consults it.
+ *
+ * @deprecated Crowded Kingdoms no longer hosts games (retired 2026-10-29), and the
+ * Crowdy Games shell went with it: no first-party page answers `hello()`, which
+ * resolves null, so `portal.signIn` takes the top-level flow. Host your build on your
+ * own origin.
  */
 export class EmbeddedHost {
   private info: EmbeddedHostInfo | null = null;

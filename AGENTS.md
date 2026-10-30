@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.22.0** (18.0.0 was published only as
+**Current package:** `package.json` is **18.23.1** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -29,6 +29,35 @@ directly. So, before adding a wrapper:
 - 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
+
+**18.23.1: Crowded Kingdoms no longer hosts games (2026-10-29).** Crowdy Games is retired
+on every tier, and the hosting API is switched off: writes answer `CONTENT_HOSTING_DISABLED`,
+reads return null or an empty list. The 17.2.0 surface stays in the package, `@deprecated`
+and unchanged (the 17.2.0 paragraph below says what it is and what to keep). The README's
+"Hosting your game" and MIGRATION.md's 18.23.1 entry send developers to their own origin.
+
+**18.23.0: the game editor and bridge protocol v5 (2026-10-29).** A project the API reports
+as a Construct game (`crowdyStudioGitHubLayout.kind === 'CONSTRUCT_GAME'`, cks-game-api on the
+live-code branch) gets the game editor when the host passes `draftStore` (a factory) to the
+controller: `src/crowdy-studio/draft/` holds the `DraftStore` contract, `GitHubDraftStore` (the
+hosted backend: an overlay over the bound branch in IndexedDB on the game's own origin, blob text
+cached by blob id, one-commit publish through `crowdyStudioGitHub.commitFiles`, rebase and
+per-file conflicts on a moved branch) and the one repository path policy (`draft/paths.ts`;
+`crowdy-dsh/game-paths.ts` keeps only `assertPlaybookPage`). Versions are git blob SHA-1s. The
+controller asks `layout().kind` once per mirror commit (`refreshRepositoryMode`), and
+`whenEditorKnown()` lets the bridge boot the harness in the right editor. Bridge protocol **v5**
+(mirrored in crowdy-dsh `src/bridge/protocol.ts`): `draft.tree` / `read` / `write` / `delete`
+(with `createIfAbsent` / `ifHash` preconditions and stable `DRAFT_*` error codes) / `commit`
+(confirmed in the pane with the agent's message), `preview.status` (the host's
+`dshHost.previewStatus`), `studio.listSkills` (`<playbookBase>skills/index.json`), the
+`page.draftChanged` event and the `worker.ready` mode handshake; game boots write
+`agent-presets.default: crowdy-game` into `settings.yaml` and persist under `<scope>/game`. The
+v4 game requests from #284 (`studio.putGameFile`, `listRepo`, ... and the `gameFiles` option)
+were never published and are gone. `schema.gql` is ck-api's live-code branch. A game hosting the
+editor passes `draftStore` on the embed and `projectId` on an open (never `runtimeOverrides`,
+which is for browser regressions). An agent's `draft.commit` commits exactly the paths the
+player confirmed and is `DRAFT_STALE` when one changed while they decided (security review,
+2026-10-29). The game editor hides the mod build tools.
 
 **18.22.0: `ExecInstance.orphaned` (2026-10-26).** `ExecInstances` selects `orphaned`
 (cks-game-api #603, v2.58.0): true for an instance whose node type the app's active version no
@@ -517,18 +546,23 @@ whose channel default is `open` (the tier sandboxes were set so). Fix in the
 kit (`membershipPolicy: 'open'` on the match channel), mirrored in CrowdyCPP.
 [MIGRATION.md](MIGRATION.md).
 
-**17.2.0 adds third-party hosting on Crowdy Games (ck-api `v2.1.0`, 2026-09-14):**
-`client.hosting` (claim a slug, publish a bundle, list) plus the Node subpath
-`@crowdedkingdoms/crowdyjs/hosting` (`publishDirectory`), and `EmbeddedHost` -- the
-bridge `portal.signIn` uses when a hosted game runs inside the Crowdy Games shell's
-iframe (`src/domains/embedded-host.ts`; the shell is Crowdy-Games `shell/`, protocol
-v1 mirrored in its `src/protocol.ts`). The bridge trusts only `window.parent`, only
-a `returnUrl` on the hello's own https origin, and posts `navigate` only to that
-origin; the shell in turn honours only Studio `/authorize`. **The verifier never
-leaves the game origin and the shell never holds a token** -- keep it that way.
-`test/unit/embedded-host.test.mjs` is the offline proof. Hosting mutations are
-identity-session only; `the-construct`'s `scripts/publish.mjs` is the reference
-caller. [MIGRATION.md](MIGRATION.md).
+**17.2.0 added third-party hosting on Crowdy Games (ck-api `v2.1.0`, 2026-09-14); it was
+retired on 2026-10-29 and is dormant.** Crowded Kingdoms no longer hosts games: the games
+site, its shell, the lobby and the content CDN are gone on every tier, and the hosting API
+answers every write with `CONTENT_HOSTING_DISABLED` and every read with null or an empty
+list. The surface stays in the package, marked `@deprecated` with its behaviour unchanged:
+`client.hosting` and `uploadPublishFiles`, the Node subpath `@crowdedkingdoms/crowdyjs/hosting`
+(`publishDirectory`, `manifestForDirectory`), and `EmbeddedHost` (`client.embeddedHost`,
+`src/domains/embedded-host.ts`), the bridge `portal.signIn` used when a game ran inside the
+shell's iframe (protocol v1). With no shell, `hello()` resolves null and `signIn` takes the
+top-level flow, the hosted sign-in on the game's own origin. Removing the surface is a
+breaking change and the operator's call; until then do not change its behaviour, and do not
+document it as a way to ship a game. If the bridge is ever used again, keep its rules: it
+trusts only `window.parent`, only a `returnUrl` on the hello's own https origin, and posts
+`navigate` only to that origin; the shell honours only Studio `/authorize`. **The verifier
+never leaves the game origin and the shell never holds a token.**
+`test/unit/embedded-host.test.mjs` is the offline proof and still runs. Hosting mutations
+were identity-session only. [MIGRATION.md](MIGRATION.md).
 
 **17.3.0 (ck-api v2.3.0) adds the guided "Create repository on GitHub" path:** `githubNewRepositoryUrl` / `githubRepositorySlug`, `controller.createGitHubRepository()` (prefilled `/new`, bind input prefilled, PUSH_PROJECT default), `status.repositorySelection`. The App still cannot create a repository itself. Additive.
 
@@ -838,8 +872,8 @@ not a running service and is not a schema source; gameplay data lives in
 4. `udp.subscribe(handlers, appId)` requires the appId and an app-scoped token.
 
 **A BROWSER GAME ON ITS OWN DOMAIN NEVER CALLS `auth.*` (ck-api v1.88.0,
-2026-09-08).** Step 1 is served only to first-party browser origins (Studio,
-the crowdy.games host) and to non-browser callers (no `Origin` header). From
+2026-09-08).** Step 1 is served only to first-party browser origins (Studio)
+and to non-browser callers (no `Origin` header). From
 any other browser origin the API answers `HOSTED_SIGN_IN_REQUIRED`
 (`isHostedSignInRequiredError`). A customer's game does steps 1 and 2 in one
 hop with **`portal.signIn({ appId, redirectUri })`** -> Studio `/authorize` ->
@@ -889,7 +923,8 @@ Write timers so they are **idempotent in elapsed time**: advance the world by
 timestamps rather than as remaining-tick counters. Code that assumes a cadence
 will silently stall while nobody is playing.
 
-Blocks with Friends (crowdy.games, source not public) is the complete
+Blocks with Friends (source not public; it was played on crowdy.games until that
+site was retired on 2026-10-29) is the complete
 consumer of these surfaces: World Stores + ck-exec hubs + a hand-authored
 remainder. **The public consumer is
 [`CrowdedKingdoms/the-construct`](https://github.com/CrowdedKingdoms/the-construct)**
