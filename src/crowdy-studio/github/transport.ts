@@ -84,6 +84,40 @@ export interface CrowdyStudioGitHubLayout {
   client: string | null;
   assets: string;
   fromFile: boolean;
+  /**
+   * What the bound tree is, decided server-side: a Studio mod, or a Construct
+   * game whose whole repository is the working tree (the game editor). The SDK
+   * picks its editor from this and never inspects the tree itself.
+   */
+  kind: CrowdyStudioGitHubLayoutKind;
+}
+
+export type CrowdyStudioGitHubLayoutKind = 'STUDIO_CRATES' | 'CONSTRUCT_GAME';
+
+/** One file of a batched read; `content` is null when binary or over the server's cap. */
+export interface CrowdyStudioGitHubFileContent {
+  path: string;
+  sha: string;
+  size: number;
+  binary: boolean;
+  content: string | null;
+}
+
+export interface CrowdyStudioGitHubFiles {
+  commitSha: string;
+  files: CrowdyStudioGitHubFileContent[];
+  /** Requested paths that are not files at that commit. */
+  missing: string[];
+}
+
+/** One change of a multi-file commit: new content, or a deletion. */
+export type CrowdyStudioGitHubCommitChange = { path: string; content: string } | { path: string; delete: true };
+
+export interface CrowdyStudioGitHubCommit {
+  commitSha: string;
+  parentSha: string;
+  written: string[];
+  deleted: string[];
 }
 
 /** Which side is the truth for a bind's first commit. */
@@ -126,7 +160,17 @@ const REFRESH = `
 `;
 const LAYOUT = `
   query CrowdyStudioGitHubLayout($input: CrowdyStudioGitHubAtCommitInput!) {
-    crowdyStudioGitHubLayout(input: $input) { commitSha server client assets fromFile }
+    crowdyStudioGitHubLayout(input: $input) { commitSha server client assets fromFile kind }
+  }
+`;
+const FILES = `
+  query CrowdyStudioGitHubFiles($input: CrowdyStudioGitHubFilesInput!) {
+    crowdyStudioGitHubFiles(input: $input) { commitSha missing files { path sha size binary content } }
+  }
+`;
+const COMMIT_FILES = `
+  mutation CrowdyStudioGitHubCommitFiles($input: CrowdyStudioGitHubCommitFilesInput!) {
+    crowdyStudioGitHubCommitFiles(input: $input) { commitSha parentSha written deleted }
   }
 `;
 const TREE = `
@@ -244,6 +288,38 @@ export class CrowdyStudioGitHubTransport {
       input,
     });
     return data.crowdyStudioGitHubPutFile;
+  }
+
+  /**
+   * Up to 100 files at one commit (default: the mirror commit) for one
+   * operation against the per-user GitHub budget. Paths that are not files
+   * there come back in `missing`; binary or oversize blobs with `content: null`.
+   */
+  async getFiles(
+    input: CrowdyStudioGitHubProjectScope & { paths: string[]; commitSha?: string },
+  ): Promise<CrowdyStudioGitHubFiles> {
+    const data = await this.graphql.query<{ crowdyStudioGitHubFiles: CrowdyStudioGitHubFiles }>(FILES, { input });
+    return data.crowdyStudioGitHubFiles;
+  }
+
+  /**
+   * Up to 100 writes and deletions as ONE commit on top of `expectedCommitSha`
+   * (the project's `github.sha`). A moved project or branch is refused with
+   * GITHUB_STALE_SHA and nothing is written; the returned `commitSha` is the new
+   * `github.sha`.
+   */
+  async commitFiles(
+    input: CrowdyStudioGitHubProjectScope & {
+      message: string;
+      expectedCommitSha: string;
+      changes: Array<{ path: string; content?: string; delete?: boolean }>;
+    },
+  ): Promise<CrowdyStudioGitHubCommit> {
+    const data = await this.graphql.query<{ crowdyStudioGitHubCommitFiles: CrowdyStudioGitHubCommit }>(
+      COMMIT_FILES,
+      { input },
+    );
+    return data.crowdyStudioGitHubCommitFiles;
   }
 
   /** Delete one file from the bound branch under the same guards as {@link putFile}. */

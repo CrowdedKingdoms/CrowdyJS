@@ -100,6 +100,12 @@ export interface CrowdyStudioEmbedOptions {
    */
   github?: CrowdyStudioGitHubTransport;
   /**
+   * The game editor's draft, for a page that hosts a Construct game: called
+   * when the open project's layout is CONSTRUCT_GAME (the controller's
+   * `draftStore` option). Omit it and every project opens in the mod editor.
+   */
+  draftStore?: MountCrowdyStudioOptions['draftStore'];
+  /**
    * Suppress gameplay input and return a restoration callback. Used only by
    * the narrow-screen modal; the desktop dock remains non-modal.
    */
@@ -120,6 +126,8 @@ export interface CrowdyStudioEmbedOptions {
 /** Per-open context: the grid the player is editing and its capabilities. */
 export interface CrowdyStudioEmbedContext {
   gridId: string;
+  /** Open this project first (a Live code link names one); otherwise the first project. */
+  projectId?: string;
   /** Chunk AABB; required to run CLIENT projects. */
   grid?: PlayerCodeGridBounds;
   targetPermissions: CrowdyStudioEmbedTargetPermissions;
@@ -506,6 +514,8 @@ export class CrowdyStudioEmbed {
       targetPermissions: context.targetPermissions,
       onHostCall: context.onHostCall,
       onPresentation,
+      ...(context.projectId ? { initialProjectId: context.projectId } : {}),
+      ...(this.options.draftStore ? { draftStore: this.options.draftStore } : {}),
       ...(this.options.dsh
         ? {
             dsh: {

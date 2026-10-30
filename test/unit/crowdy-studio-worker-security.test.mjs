@@ -166,6 +166,39 @@ test('diagnostic versions must match the current Monaco model', () => {
   assert.equal(isCurrentDiagnosticVersion('7', 7), false);
 });
 
+test('the game editor hides the mod build tools', async () => {
+  const previous = {
+    document: globalThis.document,
+    window: globalThis.window,
+    Worker: globalThis.Worker,
+  };
+  const fakeDocument = new FakeDocument();
+  globalThis.document = fakeDocument;
+  globalThis.window = { prompt: () => null, confirm: () => true };
+  delete globalThis.Worker;
+  const host = fakeDocument.createElement('host');
+  try {
+    const handle = await mountCrowdyStudio(host, {
+      projectProvider: sampleProvider(sampleProject()),
+      mods: sampleExec(),
+      appId: '1',
+      gridId: '2',
+    });
+    const tools = findByClass(host, 'ck-crowdy-studio-runtime-tools');
+    assert.ok(tools);
+    assert.notEqual(tools.hidden, true, 'the mod editor shows Test draft and Run');
+    handle.controller.update({ repositoryMode: true });
+    assert.equal(tools.hidden, true, 'the game editor builds nothing');
+    handle.controller.update({ repositoryMode: false });
+    assert.equal(tools.hidden, false);
+    handle.destroy();
+  } finally {
+    restoreGlobal('document', previous.document);
+    restoreGlobal('window', previous.window);
+    restoreGlobal('Worker', previous.Worker);
+  }
+});
+
 test('mount fallback edits one target file instead of a JSON blob', async () => {
   const previous = {
     document: globalThis.document,

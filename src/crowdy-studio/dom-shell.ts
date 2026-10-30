@@ -17,6 +17,7 @@ import {
   type CrowdyStudioReferenceFile,
   type CrowdyStudioTarget,
 } from './models.js';
+import { repositoryTree, type RepositoryNode } from './repository-tree.js';
 import { CROWDY_STUDIO_STYLES } from './styles.js';
 
 type PanelName = 'problems' | 'build' | 'logs' | 'invoke';
@@ -86,6 +87,7 @@ export class CrowdyStudioDomShell {
   private readonly saveMessageText: HTMLElement;
   private readonly saveAction: HTMLButtonElement;
   private readonly remoteAction: HTMLButtonElement;
+  private readonly runtimeTools: HTMLElement;
   private readonly testAction: HTMLButtonElement;
   private readonly runMenu: MenuHandle;
   private readonly deployAction: HTMLButtonElement;
@@ -131,6 +133,10 @@ export class CrowdyStudioDomShell {
   private readonly unsubscribeLayout: () => void;
   private activePanel: PanelName = 'problems';
   private explorerForm: ExplorerFormState | null = null;
+  /** Repository directories the Files pane is showing the children of. */
+  private readonly repositoryExpanded = new Set(['src', 'src/scenes', 'src/game']);
+  /** The open commit form: its message and the paths it includes. */
+  private repositoryCommit: { message: string; selected: Set<string> } | null = null;
   private lastState: CrowdyStudioState | null = null;
   private lastPhase = 'IDLE';
   private disposed = false;
@@ -170,6 +176,7 @@ export class CrowdyStudioDomShell {
     projectTools.append(this.projectMenu.wrap, this.saveMenu.wrap);
 
     const runtimeTools = element('div', 'ck-crowdy-studio-runtime-tools');
+    this.runtimeTools = runtimeTools;
     this.testAction = button('Test draft');
     this.testAction.className = 'ck-crowdy-studio-primary';
     this.runMenu = this.createMenu('Run ▾', {
@@ -488,6 +495,8 @@ export class CrowdyStudioDomShell {
       : false;
     this.testAction.disabled = !projectTargetsAvailable;
     this.deployAction.disabled = !projectTargetsAvailable;
+    // The game editor builds nothing: the game ships through its own build and publish.
+    this.runtimeTools.hidden = state.repositoryMode === true;
     this.renderProblems(state);
     this.renderBuild(state);
     this.renderLogLines(this.logsPanel, state.logs);
@@ -788,6 +797,11 @@ export class CrowdyStudioDomShell {
   private renderExplorer(state: CrowdyStudioState): void {
     const focused = focusedExplorerField(this.explorer);
     this.explorer.replaceChildren();
+    if (state.repositoryMode) {
+      this.renderRepository(state);
+      restoreExplorerFocus(this.explorer, focused);
+      return;
+    }
     if (!state.project) {
       this.explorer.append(empty('Create a project to start authoring.'));
       return;
@@ -810,6 +824,177 @@ export class CrowdyStudioDomShell {
       this.referenceSection('Common files', state.commonFiles),
     );
     restoreExplorerFocus(this.explorer, focused);
+  }
+
+  private renderRepository(state: CrowdyStudioState): void {
+    const header = element('div', 'ck-crowdy-studio-section-header');
+    const title = document.createElement('span');
+    title.textContent = 'Repository';
+    title.title = state.repositoryBaseCommitSha
+      ? `Draft on ${state.repositoryBaseCommitSha.slice(0, 7)} (${state.repositoryStore ?? 'draft'})`
+      : 'Draft';
+    const refresh = button('Refresh');
+    refresh.addEventListener('click', () => {
+      void this.run(() => this.controller.reloadRepository());
+    });
+    const changed = [...(state.repositoryDirty ?? []), ...(state.repositoryDeleted ?? [])];
+    const commit = button(changed.length > 0 ? `Commit (${changed.length})` : 'Commit');
+    commit.title = 'Commit the draft to the bound GitHub branch as one commit';
+    commit.disabled = changed.length === 0 || state.repositoryBusy === true;
+    commit.addEventListener('click', () => {
+      this.repositoryCommit = { message: this.repositoryCommit?.message ?? '', selected: new Set(changed) };
+      this.rerenderExplorer();
+    });
+    header.append(title, refresh, commit);
+    this.explorer.append(header);
+    if (state.repositoryMessage) this.explorer.append(empty(state.repositoryMessage));
+    for (const conflict of state.repositoryConflicts ?? []) {
+      this.explorer.append(this.conflictRow(conflict.path));
+    }
+    if (this.repositoryCommit && changed.length > 0) {
+      this.explorer.append(this.commitForm(changed, state.repositoryDeleted ?? []));
+    } else {
+      this.repositoryCommit = null;
+    }
+    if (!state.repositoryFiles) {
+      this.explorer.append(empty('Loading the repository…'));
+      return;
+    }
+    for (const path of state.repositoryDeleted ?? []) {
+      const row = element('div', 'ck-crowdy-studio-file');
+      const name = button(`✕ ${path}`);
+      name.title = `${path} is deleted in the draft`;
+      name.disabled = true;
+      const restore = button('↺');
+      restore.className = 'ck-crowdy-studio-file-action';
+      restore.title = `Restore ${path}`;
+      restore.addEventListener('click', () => {
+        void this.run(() => this.controller.discardRepositoryFiles([path]));
+      });
+      row.append(name, restore);
+      this.explorer.append(row);
+    }
+    const tree = repositoryTree(state.repositoryDirectories ?? [], state.repositoryFiles);
+    if (tree.children.length === 0) {
+      this.explorer.append(empty('The repository has no files.'));
+      return;
+    }
+    this.explorer.append(...this.repositoryNodes(state, tree.children, 0));
+  }
+
+  private repositoryNodes(
+    state: CrowdyStudioState,
+    nodes: readonly RepositoryNode[],
+    depth: number,
+  ): HTMLElement[] {
+    const rows: HTMLElement[] = [];
+    for (const node of nodes) {
+      const row = element('div', 'ck-crowdy-studio-file');
+      row.style.paddingLeft = `${depth * 12}px`;
+      if (node.type === 'directory') {
+        const open = this.repositoryExpanded.has(node.path);
+        const toggle = button(`${open ? '▾' : '▸'} ${node.name}`);
+        toggle.title = node.path;
+        toggle.addEventListener('click', () => {
+          if (open) this.repositoryExpanded.delete(node.path);
+          else this.repositoryExpanded.add(node.path);
+          this.rerenderExplorer();
+        });
+        row.append(toggle);
+        rows.push(row);
+        if (open) rows.push(...this.repositoryNodes(state, node.children, depth + 1));
+        continue;
+      }
+      const dirty = state.repositoryDirty?.includes(node.path) === true;
+      const open = button(dirty ? `● ${node.name}` : node.name);
+      open.title = dirty ? `${node.path} (changed in the draft)` : node.path;
+      open.dataset.active = String(
+        state.activeFile?.source === 'REPOSITORY' && state.activeFile.path === node.path,
+      );
+      open.addEventListener('click', () => {
+        void this.run(() => this.controller.openRepositoryFile(node.path));
+      });
+      row.append(open);
+      if (dirty) {
+        const discard = button('↺');
+        discard.className = 'ck-crowdy-studio-file-action';
+        discard.title = `Discard the draft change to ${node.path}`;
+        discard.addEventListener('click', () => {
+          void this.run(() => this.controller.discardRepositoryFiles([node.path]));
+        });
+        row.append(discard);
+      }
+      rows.push(row);
+    }
+    return rows;
+  }
+
+  /** The branch and the draft both changed `path`: the player keeps one. */
+  private conflictRow(path: string): HTMLElement {
+    const row = element('div', 'ck-crowdy-studio-inline-form');
+    const text = document.createElement('span');
+    text.textContent = `${path} changed on GitHub too.`;
+    const mine = button('Keep mine');
+    mine.title = 'Commit the draft over the branch change';
+    mine.addEventListener('click', () => {
+      void this.run(() => this.controller.resolveRepositoryConflict(path, 'mine'));
+    });
+    const theirs = button('Take theirs');
+    theirs.title = 'Drop the draft edit and use the branch version';
+    theirs.addEventListener('click', () => {
+      void this.run(() => this.controller.resolveRepositoryConflict(path, 'theirs'));
+    });
+    row.append(text, mine, theirs);
+    return row;
+  }
+
+  /** One commit: a message and the changed paths to include. */
+  private commitForm(changed: readonly string[], deleted: readonly string[]): HTMLElement {
+    const draft = this.repositoryCommit!;
+    const form = document.createElement('form');
+    form.className = 'ck-crowdy-studio-inline-form';
+    const message = document.createElement('input');
+    message.value = draft.message;
+    message.placeholder = 'Commit message';
+    message.setAttribute('aria-label', 'Commit message');
+    message.dataset.explorerField = 'true';
+    message.addEventListener('input', () => {
+      draft.message = message.value;
+    });
+    form.append(message);
+    for (const path of changed) {
+      const label = document.createElement('label');
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.checked = draft.selected.has(path);
+      box.addEventListener('change', () => {
+        if (box.checked) draft.selected.add(path);
+        else draft.selected.delete(path);
+      });
+      const text = document.createElement('span');
+      text.textContent = deleted.includes(path) ? `${path} (delete)` : path;
+      label.append(box, text);
+      form.append(label);
+    }
+    const submit = button('Commit', 'submit');
+    const cancel = button('Cancel');
+    cancel.addEventListener('click', () => {
+      this.repositoryCommit = null;
+      this.rerenderExplorer();
+    });
+    form.append(submit, cancel);
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const text = draft.message.trim();
+      const paths = [...draft.selected];
+      if (!text || paths.length === 0) return;
+      void this.run(async () => {
+        await this.controller.commitRepository({ message: text, paths });
+        this.repositoryCommit = null;
+        this.rerenderExplorer();
+      });
+    });
+    return form;
   }
 
   private projectSection(

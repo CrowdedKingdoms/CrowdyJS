@@ -41,12 +41,17 @@ import {
   type DshGridContext,
   type DshGridProgramStatus,
   type DshPageEventMap,
+  type DshPreviewStatus,
   type DshProjectSummary,
   type DshRuntimeStatus,
   type DshScreenshotResult,
+  type DshSkillSummary,
+  type DshStudioMode,
   type DshWorkerEventMap,
 } from './protocol.js';
 import type { CrowdyStudioDshTransport, CrowdyStudioModelCatalogEntry } from './transport.js';
+import { assertPlaybookPage } from './game-paths.js';
+import { DraftError, type DraftStore } from '../crowdy-studio/draft/index.js';
 
 /** What the game supplies so the model can see and act. */
 export interface CrowdyStudioDshHost {
@@ -67,6 +72,25 @@ export interface CrowdyStudioDshHost {
   playerHost?: Pick<PlayerHostAdapterV1, 'observe'>;
   /** Recent `crowdy::log` lines from the CLIENT module and browser runtime errors. */
   clientLogs?(): readonly string[];
+  /**
+   * Where the game serves its playbook: markdown pages the agent reads with
+   * `read_playbook`, and `skills/index.json` naming the skills the game offers
+   * in the game editor (`[{ name, description, page }]`). Relative values
+   * resolve against this page. Omit when the game ships none.
+   */
+  playbookBase?: string;
+  /**
+   * Game editor: whether the world took the draft. Resolves with the result of
+   * the remount for `afterRevision` (or the latest), waiting up to `timeoutMs`.
+   * Omit when the game cannot report it; `preview_status` then says so.
+   */
+  previewStatus?(input: { afterRevision?: number; timeoutMs: number }): Promise<DshPreviewStatus>;
+  /**
+   * Ask ck-api whether this player may draft or deploy live. The API refuses
+   * when Allow Live Modding is off. Omit and the dock's deploy is not gated
+   * here; the construct supplies it.
+   */
+  authorizeLiveModding?(action: 'draft_test' | 'deploy_live'): Promise<void>;
   /**
    * Grid capability (bridge v4, DN-10). With it the agent can read the grid
    * the open project is bound to and run a JS grid program from a project
@@ -101,6 +125,12 @@ export interface StudioDshBridgeOptions {
   getToken(): string | null;
   /** GraphQL endpoint the harness reads/writes project files through. */
   graphqlUrl: string;
+  /**
+   * Force the editor the harness boots. Omitted, the bridge follows the
+   * controller: `game` when the open project is a Construct game with a draft
+   * store (`repositoryMode`), `mod` otherwise.
+   */
+  studioMode?: DshStudioMode;
   host?: CrowdyStudioDshHost;
   /** Longest screenshot side, in pixels. */
   maxCaptureSide?: number;
@@ -112,8 +142,17 @@ export interface StudioDshBridgeOptions {
    * is not visible to the page and cannot stand in for this one.
    */
   confirmLiveDeploy?(summary: { projectName: string; mode: 'draft' | 'live' }): Promise<boolean>;
-  /** Called when the worker changed a project file, after the controller reloaded. */
+  /**
+   * Ask the player, on the page, whether the agent may commit the draft: the
+   * files and the agent's message. Resolves `true` to commit. Without it
+   * `draft.commit` is refused, for the same reason as a live deploy: the
+   * approval inside the harness UI is not visible to the page.
+   */
+  confirmCommit?(summary: { projectName: string; message: string; files: string[]; deleted: string[] }): Promise<boolean>;
+  /** Called when the worker changed a project file (mod editor), after the controller reloaded. */
   onFileChanged?(change: { target: 'SERVER' | 'CLIENT'; path: string }): void;
+  /** Called after the agent changed the game draft. */
+  onDraftChanged?(change: { paths: string[] }): void;
   onWarning?(message: string): void;
   onStatus?(status: StudioDshBridgeStatus): void;
 }
@@ -158,11 +197,29 @@ export class StudioDshBridge {
   private status: StudioDshBridgeStatus = { phase: 'idle' };
   /** One live-deploy question at a time: a second request must not replace the first prompt. */
   private liveDeployPending = false;
+  /** One commit question at a time, for the same reason. */
+  private commitPending = false;
+  /** The editor this boot mounted; fixed until the harness reboots. */
+  private mode: DshStudioMode = 'mod';
+  /** The draft store whose changes are forwarded as `page.draftChanged`. */
+  private watchedDraft: DraftStore | null = null;
+  private draftUnsubscribe: (() => void) | null = null;
+  private skills: DshSkillSummary[] | null = null;
 
   constructor(private readonly options: StudioDshBridgeOptions) {}
 
   get currentStatus(): StudioDshBridgeStatus {
     return this.status;
+  }
+
+  /** The editor the harness was booted with (`game` edits the bound Construct game). */
+  get studioMode(): DshStudioMode {
+    return this.mode;
+  }
+
+  /** The editor the controller wants now; differs from {@link studioMode} when the harness must reboot. */
+  desiredStudioMode(): DshStudioMode {
+    return this.options.studioMode ?? (this.options.controller.getState().repositoryMode ? 'game' : 'mod');
   }
 
   /** The models the harness was booted with. */
@@ -177,12 +234,20 @@ export class StudioDshBridge {
   async attach(frame: HTMLIFrameElement): Promise<void> {
     this.detach();
     this.setStatus({ phase: 'waiting-for-frame' });
-    this.models = await this.options.transport.models(this.options.appId);
-    if (this.models.length === 0) {
-      throw new Error('No model is allowed for this app; ask the app owner to enable the Studio agent.');
-    }
-    this.connect();
+    // The editor is a boot-time choice: the boot message waits until the
+    // controller knows it. The frame listener goes in first so a harness that
+    // says `ready` early is still answered.
+    const prepared = (async () => {
+      await this.options.controller.whenEditorKnown();
+      this.mode = this.desiredStudioMode();
+      this.models = await this.options.transport.models(this.options.appId);
+      if (this.models.length === 0) {
+        throw new Error('No model is allowed for this app; ask the app owner to enable the Studio agent.');
+      }
+      this.connect();
+    })();
     await new Promise<void>((resolve, reject) => {
+      let bootPosted = false;
       const timeout = setTimeout(() => {
         cleanup();
         reject(new Error('The agent did not start within 60s.'));
@@ -190,15 +255,23 @@ export class StudioDshBridge {
       const cleanup = () => {
         clearTimeout(timeout);
       };
+      prepared.catch((error: unknown) => {
+        cleanup();
+        reject(error instanceof Error ? error : new Error(String(error)));
+      });
       this.frameListener = (event: MessageEvent) => {
         if (event.source !== frame.contentWindow) return;
         if (event.origin !== location.origin) return;
         const data: unknown = event.data;
         if (!isDshFrameMessage(data)) return;
         if (data.type === 'crowdy-dsh:ready') {
-          if (this.booted) return;
+          if (this.booted || bootPosted) return;
+          bootPosted = true;
           this.setStatus({ phase: 'booting' });
-          frame.contentWindow?.postMessage(this.bootMessage(), location.origin);
+          void prepared.then(
+            () => frame.contentWindow?.postMessage(this.bootMessage(), location.origin),
+            () => undefined,
+          );
         } else if (data.type === 'crowdy-dsh:booted') {
           this.booted = true;
           cleanup();
@@ -231,6 +304,9 @@ export class StudioDshBridge {
     this.frameListener = null;
     this.unsubscribeState?.();
     this.unsubscribeState = null;
+    this.draftUnsubscribe?.();
+    this.draftUnsubscribe = null;
+    this.watchedDraft = null;
     if (this.tokenTimer) clearInterval(this.tokenTimer);
     this.tokenTimer = null;
     if (this.channel) {
@@ -274,6 +350,7 @@ export class StudioDshBridge {
     const projectId = this.options.controller.getState().project?.projectId ?? '';
     // No token here: `crowdy.json` lands in the worker's filesystem. The
     // token follows over the channel once the worker says it is ready.
+    const persistScope = this.persistScope();
     const crowdy = {
       graphqlUrl: this.options.graphqlUrl,
       appId: this.options.appId,
@@ -281,18 +358,27 @@ export class StudioDshBridge {
       bridgeChannel: this.channelName,
       bridgeNonce: this.nonce,
       root: '/dsh/workspace',
-      persistScope: this.options.persistScope,
+      persistScope,
+      studioMode: this.mode,
     };
     return {
       type: 'crowdy-dsh:boot',
       files: {
         'crowdy.json': JSON.stringify(crowdy, null, 2),
-        'settings.yaml': renderSettingsYaml(this.options.transport.modelBaseUrl, this.models),
+        'settings.yaml': renderSettingsYaml(this.options.transport.modelBaseUrl, this.models, this.mode),
       },
       nonce: this.nonce,
-      persistScope: this.options.persistScope,
+      persistScope,
       mount: '/dsh/workspace',
     };
+  }
+
+  /**
+   * Sessions of the two editors never share a store: a game session restored
+   * into a mod boot would talk about files and tools that are not there.
+   */
+  private persistScope(): string {
+    return this.mode === 'game' ? `${this.options.persistScope}/game` : this.options.persistScope;
   }
 
   // ── channel ─────────────────────────────────────────────────────────────────
@@ -331,7 +417,9 @@ export class StudioDshBridge {
 
   private fail(id: string, error: unknown): void {
     const message = error instanceof Error ? error.message : String(error);
-    const frame: DshBridgeFrame = { v: CROWDY_DSH_PROTOCOL_VERSION, n: this.nonce, from: 'page', t: 'err', id, code: 'PAGE_ERROR', message };
+    // A draft failure carries a stable code the worker maps onto its filesystem errors.
+    const code = error instanceof DraftError ? error.code : 'PAGE_ERROR';
+    const frame: DshBridgeFrame = { v: CROWDY_DSH_PROTOCOL_VERSION, n: this.nonce, from: 'page', t: 'err', id, code, message };
     this.channel?.postMessage(frame);
   }
 
@@ -361,6 +449,12 @@ export class StudioDshBridge {
       case 'worker.ready': {
         const ready = payload as DshWorkerEventMap['worker.ready'];
         this.setStatus({ phase: 'ready', ...(ready.store ? { store: ready.store } : {}) });
+        // A harness build that predates game mode mounts the mod crates whatever the boot said.
+        if (this.mode === 'game' && !(ready.modes ?? []).includes('game')) {
+          this.options.onWarning?.(
+            'This agent build cannot edit the game repository. Update @crowdedkingdoms/crowdy-dsh to a release with game mode.',
+          );
+        }
         this.hello();
         return;
       }
@@ -378,6 +472,12 @@ export class StudioDshBridge {
       }
       case 'worker.openFile': {
         const ref = payload as DshWorkerEventMap['worker.openFile'];
+        if (ref.target === 'REPO' || this.options.controller.getState().repositoryMode) {
+          void this.options.controller.openRepositoryFile(ref.path).catch(() => {
+            // The draft may not have the file yet; the tree shows what it listed.
+          });
+          return;
+        }
         try {
           this.options.controller.openFile({ source: 'PROJECT', target: ref.target, path: ref.path });
         } catch {
@@ -494,9 +594,144 @@ export class StudioDshBridge {
       }
       case 'grid.programStatus':
         return { programs: this.gridHost().programs() } as never;
+      case 'studio.readPlaybook':
+        return this.readPlaybook((params as { page?: string } | undefined)?.page ?? '') as never;
+      case 'studio.listSkills':
+        return { skills: await this.listSkills() } as never;
+      case 'draft.tree':
+        return this.requireDraft().snapshot() as never;
+      case 'draft.read': {
+        const { paths } = params as { paths?: unknown };
+        if (!Array.isArray(paths) || paths.length > 200 || !paths.every((p) => typeof p === 'string')) {
+          throw new DraftError('DRAFT_PATH_REFUSED', 'draft.read takes 1 to 200 paths.');
+        }
+        return (await this.requireDraft().read(paths)) as never;
+      }
+      case 'draft.write': {
+        const { path, content, precondition } = params as DshBridgeRequestMap['draft.write']['params'];
+        if (typeof path !== 'string' || typeof content !== 'string') {
+          throw new DraftError('DRAFT_PATH_REFUSED', 'draft.write takes a path and text content.');
+        }
+        const result = await this.requireDraft().write(path, content, { source: 'agent', precondition });
+        this.options.onDraftChanged?.({ paths: [result.path] });
+        return result as never;
+      }
+      case 'draft.delete': {
+        const { path, precondition } = params as DshBridgeRequestMap['draft.delete']['params'];
+        const result = await this.requireDraft().remove(path, { source: 'agent', precondition });
+        this.options.onDraftChanged?.({ paths: [result.path] });
+        return result as never;
+      }
+      case 'draft.commit':
+        return (await this.commitDraft(params as DshBridgeRequestMap['draft.commit']['params'])) as never;
+      case 'preview.status': {
+        const { afterRevision, timeoutMs } = (params ?? {}) as DshBridgeRequestMap['preview.status']['params'];
+        const wait = Math.min(Math.max(Number(timeoutMs) || 10_000, 1_000), 60_000);
+        const preview = this.options.host?.previewStatus;
+        if (!preview) {
+          return {
+            revision: this.requireDraft().snapshot().revision,
+            ok: true,
+            errors: [],
+            note: 'This game does not report whether the world took the draft; ask the player or take a screenshot.',
+          } satisfies DshPreviewStatus as never;
+        }
+        return (await preview({ ...(afterRevision !== undefined ? { afterRevision } : {}), timeoutMs: wait })) as never;
+      }
       default:
         throw new Error(`Unsupported bridge method ${String(method)}`);
     }
+  }
+
+  private requireDraft(): DraftStore {
+    const draft = this.options.controller.draftStore;
+    if (!draft) {
+      throw new DraftError('DRAFT_UNAVAILABLE', 'The open project has no game draft; this is the mod editor.');
+    }
+    return draft;
+  }
+
+  /** The commit gate: the player sees the files and the agent's message, and says yes on the page. */
+  private async commitDraft(params: { message?: unknown; paths?: unknown }): Promise<unknown> {
+    const message = typeof params.message === 'string' ? params.message.trim() : '';
+    if (!message) throw new DraftError('DRAFT_PATH_REFUSED', 'A commit needs a message describing the change.');
+    const paths = Array.isArray(params.paths) ? params.paths.filter((p): p is string => typeof p === 'string') : undefined;
+    const confirm = this.options.confirmCommit;
+    if (!confirm) {
+      throw new DraftError('DRAFT_DECLINED', 'Commits from the agent are not enabled on this page; use Commit in Crowdy Studio.');
+    }
+    if (this.commitPending) throw new DraftError('DRAFT_DECLINED', 'A commit is already waiting for the player. Wait for it before asking again.');
+    this.commitPending = true;
+    try {
+      const draft = this.requireDraft();
+      const snapshot = draft.snapshot();
+      const wanted = paths && paths.length > 0 ? new Set(paths) : null;
+      const files = snapshot.entries.filter((e) => e.dirty && (!wanted || wanted.has(e.path))).map((e) => e.path);
+      const deleted = snapshot.deleted.filter((p) => !wanted || wanted.has(p));
+      if (files.length + deleted.length === 0) throw new DraftError('DRAFT_NOT_FOUND', 'The draft has nothing to commit.');
+      const projectName = this.options.controller.getState().project?.metadata.name ?? 'this game';
+      if (!(await confirm({ projectName, message, files, deleted }))) {
+        throw new DraftError('DRAFT_DECLINED', 'The player declined the commit. The draft is unchanged; ask before committing again.');
+      }
+      // Exactly what the player approved: a write made while they decided stays in the draft,
+      // and an approved file that changed meanwhile is not committed unseen.
+      const approved = [...files, ...deleted];
+      const after = draft.snapshot();
+      const versionIn = (view: typeof snapshot, path: string) =>
+        view.deleted.includes(path) ? null : (view.entries.find((e) => e.path === path)?.hash ?? null);
+      const changed = approved.filter((path) => versionIn(snapshot, path) !== versionIn(after, path));
+      if (changed.length > 0) {
+        throw new DraftError('DRAFT_STALE', `${changed.join(', ')} changed while the player was deciding; ask to commit again.`);
+      }
+      return await this.options.controller.commitRepository({ message, paths: approved });
+    } finally {
+      this.commitPending = false;
+    }
+  }
+
+  /** The skills the game offers in the game editor, from `<playbookBase>skills/index.json`. */
+  private async listSkills(): Promise<DshSkillSummary[]> {
+    if (this.skills) return this.skills;
+    const configured = this.options.host?.playbookBase;
+    if (!configured) return [];
+    const root = playbookRoot(configured);
+    let body: unknown;
+    try {
+      const response = await fetch(new URL('skills/index.json', root));
+      if (!response.ok) return [];
+      body = await response.json();
+    } catch {
+      return [];
+    }
+    const listed = (body as { skills?: unknown })?.skills;
+    const skills: DshSkillSummary[] = [];
+    for (const raw of Array.isArray(listed) ? listed : []) {
+      const entry = raw as Partial<DshSkillSummary>;
+      if (typeof entry.name !== 'string' || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(entry.name)) continue;
+      if (typeof entry.description !== 'string' || !entry.description.trim()) continue;
+      if (typeof entry.page !== 'string') continue;
+      try {
+        skills.push({ name: entry.name, description: entry.description.trim().slice(0, 500), page: assertPlaybookPage(entry.page) });
+      } catch {
+        // A page outside the shipped tree is not offered.
+      }
+    }
+    this.skills = skills;
+    return skills;
+  }
+
+  private async readPlaybook(page: string): Promise<{ text: string }> {
+    const safe = assertPlaybookPage(page);
+    const configured = this.options.host?.playbookBase;
+    if (!configured) throw new Error('This game does not ship a playbook.');
+    const root = playbookRoot(configured);
+    const url = new URL(safe, root);
+    if (url.origin !== root.origin || !url.pathname.startsWith(root.pathname)) {
+      throw new Error('Playbook pages stay inside the game.');
+    }
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`No playbook page ${safe}.`);
+    return { text: await response.text() };
   }
 
   private gridHost(): CrowdyStudioDshGridHost {
@@ -508,6 +743,8 @@ export class StudioDshBridge {
   private async build(mode: 'draft' | 'live'): Promise<DshBuildResult> {
     const controller = this.options.controller;
     if (!controller.getState().project) throw new Error('No project is open in Crowdy Studio.');
+    const authorize = this.options.host?.authorizeLiveModding;
+    if (authorize) await authorize(mode === 'draft' ? 'draft_test' : 'deploy_live');
     const result: CrowdyStudioDeployResult = mode === 'draft' ? await controller.testDraft() : await controller.deployLive();
     const state = controller.getState();
     const diagnostics = [...state.authoritativeDiagnostics, ...state.localDiagnostics].map(toDshDiagnostic);
@@ -585,8 +822,27 @@ export class StudioDshBridge {
         this.emit('page.saved', { revision: state.project?.revision.id, githubSha });
       }
       this.lastSaveState = state.saveState;
+      this.watchDraft();
     });
     this.tokenTimer = setInterval(() => this.tokenChanged(), 20_000);
+  }
+
+  /** Forward every change of the open game draft, the agent's own writes included. */
+  private watchDraft(): void {
+    const draft = this.options.controller.draftStore;
+    if (draft === this.watchedDraft) return;
+    this.draftUnsubscribe?.();
+    this.draftUnsubscribe = null;
+    this.watchedDraft = draft;
+    if (!draft) return;
+    this.draftUnsubscribe = draft.subscribe((event) => {
+      this.emit('page.draftChanged', {
+        revision: event.revision,
+        baseCommitSha: event.baseCommitSha,
+        changes: event.changes,
+        source: event.source,
+      });
+    });
   }
 
   private setStatus(status: StudioDshBridgeStatus): void {
@@ -658,7 +914,11 @@ function summarizeProject(project: CrowdyStudioProject): DshProjectSummary {
 }
 
 /** Render the harness settings that point its native adapter at the metered endpoint. */
-export function renderSettingsYaml(modelBaseUrl: string, models: readonly CrowdyStudioModelCatalogEntry[]): string {
+export function renderSettingsYaml(
+  modelBaseUrl: string,
+  models: readonly CrowdyStudioModelCatalogEntry[],
+  mode: DshStudioMode = 'mod',
+): string {
   const quote = (value: string) => JSON.stringify(value);
   const lines = [
     '# Written by Crowdy Studio at boot; the metered model endpoint fronts the platform key.',
@@ -679,7 +939,15 @@ export function renderSettingsYaml(modelBaseUrl: string, models: readonly Crowdy
   if (first) {
     lines.push('agent-default-model:', '  provider: deepseek-official', `  model: ${quote(first.id)}`);
   }
+  // The game editor is its own agent preset; the mod editor keeps the image's default.
+  if (mode === 'game') lines.push('agent-presets:', '  default: crowdy-game');
   return `${lines.join('\n')}\n`;
+}
+
+function playbookRoot(base: string): URL {
+  const withSlash = base.endsWith('/') ? base : `${base}/`;
+  if (/^https?:\/\//.test(withSlash)) return new URL(withSlash);
+  return new URL(withSlash, location.origin);
 }
 
 /** Downscale and PNG-encode a frame in the page. */

@@ -17,6 +17,8 @@ export interface CrowdyStudioEditorCallbacks {
     path: string,
     content: string,
   ): void;
+  /** A keystroke in a bound-repository file. Writes the draft, not the Studio project. */
+  onRepositoryFileChange?(path: string, content: string): void;
   onLocalDiagnostics(
     diagnostics: CrowdyStudioState['localDiagnostics'],
   ): void;
