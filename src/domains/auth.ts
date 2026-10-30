@@ -26,9 +26,9 @@ import { LogoutAllDevicesDocument, LogoutDocument } from '../generated/graphql.j
  * Part of the management surface.
  *
  * **FIRST-PARTY AND NON-BROWSER ONLY (ck-api v1.88.0, 2026-09-08).** Every
- * public method here is served only to first-party browser origins (Studio,
- * the Crowdy Games host) and to callers that send no `Origin` header at all
- * (Node, CLI, tests, CrowdyCPP). From a browser game on its OWN domain they are
+ * public method here is served only to first-party browser origins (Studio)
+ * and to callers that send no `Origin` header at all (Node, CLI, tests,
+ * CrowdyCPP). From a browser game on its OWN domain they are
  * refused with `HOSTED_SIGN_IN_REQUIRED` (`isHostedSignInRequiredError`), and
  * that game signs its players in with `client.portal.signIn()` instead: the
  * player types their password into Studio, never into the game, and the game

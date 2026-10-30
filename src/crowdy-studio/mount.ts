@@ -47,6 +47,8 @@ export interface MountCrowdyStudioDshOptions {
   studioOrigin?: string;
   /** Open the pane on mount (default true). */
   openOnMount?: boolean;
+  /** Exclusive harness pair. Omitted boots the mod editor. */
+  studioMode?: 'mod' | 'game';
 }
 
 export interface CrowdyStudioHandle {
@@ -119,6 +121,7 @@ export async function mountCrowdyStudio(
             persistScope: dshOptions.persistScope,
             getToken: dshOptions.getToken,
             graphqlUrl: dshOptions.graphqlUrl,
+            ...(dshOptions.studioMode ? { studioMode: dshOptions.studioMode } : {}),
             host: dshOptions.host,
             studioOrigin: dshOptions.studioOrigin,
           });
@@ -151,6 +154,8 @@ export async function mountCrowdyStudio(
       path: string,
       content: string,
     ) => controller.updateFile(target, path, content),
+    onRepositoryFileChange: (path: string, content: string) =>
+      controller.updateRepositoryFile(path, content),
     onLocalDiagnostics: (
       diagnostics: Parameters<CrowdyStudioController['setLocalDiagnostics']>[0],
     ) => controller.setLocalDiagnostics(diagnostics),

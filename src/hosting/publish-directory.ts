@@ -25,7 +25,13 @@ export interface PublishDirectoryResult {
   invalidationId: string | null;
 }
 
-/** Walk `dir` and hash every regular file: the manifest `beginGamePublish` wants. */
+/**
+ * Walk `dir` and hash every regular file: the manifest `beginGamePublish` wants.
+ *
+ * @deprecated Crowded Kingdoms no longer hosts games (retired 2026-10-29); the hosting
+ * API, `beginGamePublish` included, answers `CONTENT_HOSTING_DISABLED` on every tier.
+ * Host your build on your own origin.
+ */
 export async function manifestForDirectory(dir: string): Promise<{ files: PublishFileInput[]; totalBytes: number }> {
   const files: PublishFileInput[] = [];
   let totalBytes = 0;
@@ -57,6 +63,10 @@ export async function manifestForDirectory(dir: string): Promise<{ files: Publis
  * every file to its presigned URL -> completeGamePublish. Requires the client to hold
  * an IDENTITY SESSION with `manage_apps` on the app (sign in with `client.auth.login`
  * from Node; a browser page cannot do this, by design).
+ *
+ * @deprecated Crowded Kingdoms no longer hosts games (retired 2026-10-29); the hosting
+ * API answers `CONTENT_HOSTING_DISABLED` on every tier, so this fails at
+ * `beginGamePublish`. Host your build on your own origin.
  */
 export async function publishDirectory(
   client: Pick<CrowdyClient, 'hosting'>,
