@@ -120,6 +120,68 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.24.0: the teen safety program
+
+No breaking change: every existing call takes what it took. **What it needs.** ck-api `v2.60.0`
+(cks-game-api #613 to #616) for the new calls and for three existing reads that select new
+fields: `users.me()` (`ageBracket`, `country`), `apps.app()` and `apps.update()` (the safety log
+and age fields). Against an older API those fail as GraphQL validation errors, so deploy the API
+first. `auth.recordPlayerConsents({ acceptLegal, attestAgeOfMajority })` and
+`auth.playerLegalAcceptance()` send their 18.23 documents and work against any API since
+v2.35.0; only the new arguments need v2.60.0.
+
+Crowded Kingdoms admits players from 13 once the platform's safety baseline is live on every
+tier (the "flip"). Until then the platform stays 18+, the new inputs are optional, and the
+age-of-majority attestation still applies. Build the flows now:
+
+- **The age.** `auth.register` takes `birthDate` (`YYYY-MM-DD`; only the year and month are
+  kept), `country` (ISO 3166-1 alpha-2) and `parentalConfirmation` (a player under 18 confirmed
+  that a parent or guardian agreed). `auth.recordPlayerAge({ birthDate, country,
+  parentalConfirmation })` gives an existing account its age, once (`CONFLICT` after).
+  `users.me()` reports `ageBracket` (`unknown`, `under_13`, `13_15`, `16_17`, `18_plus`) and
+  `country`. Ask on a neutral screen: the date of birth and the country, no age shown, and the
+  parental line only for a player under 18. After the flip a browser sign-up without an age is
+  refused `AGE_REQUIRED`.
+- **The player gate** at every mint and refresh: `TERRITORY_NOT_SUPPORTED`
+  (`territoryNotSupportedOf`, with `country`), `AGE_REQUIRED` (`ageRequiredOf`),
+  `AGE_REQUIREMENT_NOT_MET` (`ageRequirementNotMetOf`), then `LEGAL_ACCEPTANCE_REQUIRED`
+  (`legalAcceptanceRequiredOf`, with `missingDocuments`), and `SAFETY_LOG_REQUIRED`
+  (`safetyLogRequiredOf`) for a player under 18 in an app without its safety log. No refusal
+  names an age, and `ageRequirementNotMetOf` is a boolean on purpose: tell the player they
+  cannot play this, without a number. `platform.territoryPolicies()` lists the countries (public).
+- **Documents.** The platform's player documents are `auth.playerLegalDocuments()`, an app's own
+  `auth.appRequiredDocuments(appId)` (its admins set them with `apps.setRequiredDocuments`).
+  `auth.recordPlayerConsents` takes `appId` (record the app's documents too) and `method`
+  (`CLICKWRAP`, the default, or `IN_GAME`), and the attestation may be left out once the
+  platform asks for a birth date. `auth.playerLegalAcceptance({ appId })` counts the app's.
+  A developer's documents: `auth.developerLegalDocuments()`, `recordDeveloperConsents`,
+  `developerLegalAcceptance`; after the flip creating or administering an organization needs
+  them, and an adult.
+- **A player's own controls** (`client.safety`, app token): voice and video scopes
+  (`commSettings`, `setCommSettings`; under 18 each medium is off until a parent consents
+  through `requestParentalConsent`, then at most `CONTACTS`), contacts (`contacts`,
+  `contactRequests`, `requestContact`, `acceptContact`, `removeContact`), blocks (`blocks`,
+  `block`, `unblock`) and reports (`fileReport`).
+- **The safety log's notice.** `apps.recording(appId)` (`{ enabled, voice, video }`, readable
+  with an app token): while voice or video is recorded, show a notice before the player first
+  speaks or appears on camera, and an indicator while it is. `apps.update` takes
+  `replayLoggingRecordsVoice`, `replayLoggingRecordsVideo` and `minPlayerAge`; turning the log
+  off in an app that admits players under 18 is refused `SAFETY_LOG_REQUIRED`.
+- **Moderators** (`client.moderation`, also `client.admin.moderation`; `moderate_safety`):
+  `reports`, `resolveReport`, `escalateReport`, and `inputLog.messages` for the sessions a report
+  covers.
+- **Org-managed players.** The organization sends `ageYears` and `country` with each sign-in:
+  on the mint's input (the type `MintManagedPlayerTokenInput`) or as the assertion's claims
+  (`ManagedPlayerAssertionClaims`). Optional until the flip; left out, the player counts as an
+  adult. The SDK still has no wrapper for the org-token mint.
+- **Crowded Kingdoms' own apps** only: `portal.minecraftChallenge(appId)` and
+  `portal.signInWithMinecraft(...)` (refusals `minecraftVerificationFailedOf`,
+  `minecraftVerificationUnavailableOf`).
+
+The operator's `setTerritoryPolicy` and `exportPlayerData` are not wrapped. The schema is
+cks-game-api's at `dev/v2.60.0` (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
+`npm run codegen`).
+
 ## 18.23.1: Crowded Kingdoms no longer hosts games
 
 No breaking change. On 2026-10-29 Crowded Kingdoms retired Crowdy Games: the games site, the

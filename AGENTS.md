@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.23.1** (18.0.0 was published only as
+**Current package:** `package.json` is **18.24.0** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -29,6 +29,38 @@ directly. So, before adding a wrapper:
 - 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
+
+**18.24.0: the teen safety program (2026-10-30).** `schema.gql` is cks-game-api's at `dev/v2.60.0`
+(#613 to #616; the program's contracts are the workspace's `teen-safety-program/DESIGN.md` and
+`DECISIONS-2026-10-30.md`).
+New: `client.safety` (`src/domains/safety.ts`, app token: `commSettings`, `setCommSettings`,
+`requestParentalConsent`, `contacts`, `contactRequests`, `requestContact`, `acceptContact`,
+`removeContact`, `blocks`, `block`, `unblock`, `fileReport`), `client.moderation` (also
+`client.admin.moderation`; `moderate_safety`, an org role, identity session: `reports`,
+`resolveReport`, `escalateReport`), `auth.recordPlayerAge`, `playerLegalDocuments`,
+`appRequiredDocuments`, `developerLegalDocuments`, `developerLegalAcceptance`,
+`recordDeveloperConsents`, `apps.recording` (the notice and the indicator, readable with an app
+token), `apps.setRequiredDocuments`, `platform.territoryPolicies`, `portal.minecraftChallenge` /
+`signInWithMinecraft` (public, but FORBIDDEN for any app outside CK's first-party organizations),
+and readers with `*_CODE` constants for `LEGAL_ACCEPTANCE_REQUIRED` (`missingDocuments`),
+`AGE_REQUIRED`, `AGE_REQUIREMENT_NOT_MET`, `TERRITORY_NOT_SUPPORTED`, `SAFETY_LOG_REQUIRED`,
+`PARENTAL_CONSENT_UNAVAILABLE`, `SOCIAL_LIMIT_REACHED` and the two `MINECRAFT_VERIFICATION_*`.
+`register` takes `birthDate` / `country` / `parentalConfirmation`; `me`, `App.graphql` and
+`UpdateApp.graphql` select the new fields, so **18.24 needs ck-api v2.60.0** for them.
+**Decision 35 (no refusal names an age) is a rule here:** `ageRequirementNotMetOf` returns a
+boolean and never reads `minimumAge` / `ageBracket` (v2.60.0 still sends them; the identity
+follow-up removes them); do not add a reader that surfaces them, and no SDK string shows an age.
+**Kept on purpose:** `recordPlayerConsents` and `playerLegalAcceptance` send their 18.23 documents
+(`Boolean!` attestation, no app) when called as before and a second document only with `appId`,
+`method` or no attestation, so old calls still work against v2.59 (the `RefreshAppTokenOnServer`
+pattern). **Still no org-token mint:** `ageYears` / `country` reach the org's server as the
+re-exported `MintManagedPlayerTokenInput` and `ManagedPlayerAssertionClaims` (the claims ck-api's
+`managed-assertion.ts` reads). No age-screen helpers: the SDK has no sign-up UI. `setTerritoryPolicy`
+and `exportPlayerData` are operator fields, on `sdk-audience.test.mjs`'s list. **Inline documents**
+(`auth.ts`, `portal.ts`) are not seen by codegen: `teen-safety.test.mjs` validates every one the new
+calls send against `schema.gql`; do the same for a new inline document.
+`test/e2e/teen-safety.test.mjs` (env in the README's maintainers section) passed 2/2 on dev on
+2026-10-30. CrowdyCPP and CrowdyPy mirror the names.
 
 **18.23.1: Crowded Kingdoms no longer hosts games (2026-10-29).** Crowdy Games is retired
 on every tier, and the hosting API is switched off: writes answer `CONTENT_HOSTING_DISABLED`,
@@ -905,6 +937,8 @@ reference consumer of the hosted flow.
 | Land claims | `gameApps.createGrid` / `grantPermissions` |
 | Players' code on their grids | ck-exec mods (`exec.modBuild` / `modDeploy`) and their CLIENT halves (`exec.modClientBuild` / `modClientDeploy`); visitors run a grid's with `ExecClientHalves` (`PlayerCodeBroker`, `createGridHostCalls`) |
 | Direct player-to-player | `udp.sendSingleActorMessage` |
+| Age, documents, the player gate | `auth.register` (`birthDate`, `country`, `parentalConfirmation`), `auth.recordPlayerAge`, `auth.playerLegalDocuments` / `appRequiredDocuments` / `recordPlayerConsents`; refusals `territoryNotSupportedOf`, `ageRequiredOf`, `ageRequirementNotMetOf`, `legalAcceptanceRequiredOf`, `safetyLogRequiredOf` |
+| A player's voice/video scopes, contacts, blocks, reports | `safety.*` (app token); the recording notice from `apps.recording`; moderators `moderation.*`; a hub checks ck-exec's `players.blocked` before relaying one player's words |
 | Save / characters / teleport | `state.*`; `avatars.*`; `teleport.request` |
 | Version / capability | `serverStatus.gameClientBootstrap(appId)` |
 
