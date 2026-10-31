@@ -1,0 +1,7 @@
+query ContactRequests($appId: BigInt!) {
+  contactRequests(appId: $appId) {
+    userId
+    direction
+    createdAt
+  }
+}

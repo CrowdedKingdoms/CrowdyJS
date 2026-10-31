@@ -1,0 +1,5 @@
+mutation AcceptContact($appId: BigInt!, $userId: BigInt!) {
+  acceptContact(appId: $appId, userId: $userId) {
+    ...PlayerContactFields
+  }
+}

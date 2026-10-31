@@ -2,7 +2,11 @@ import { parse } from 'graphql';
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
 import type { GraphQLClient } from '../client.js';
 import type { AuthState } from '../auth-state.js';
-import { LogoutAllDevicesDocument, LogoutDocument } from '../generated/graphql.js';
+import {
+  LogoutAllDevicesDocument,
+  LogoutDocument,
+  type LegalDocument,
+} from '../generated/graphql.js';
 
 /**
  * Authentication and account lifecycle — exposed as `client.auth`.
@@ -38,10 +42,15 @@ import { LogoutAllDevicesDocument, LogoutDocument } from '../generated/graphql.j
  * **Public (no session):** {@link register}, {@link login},
  * {@link requestLoginLink}, {@link completeLoginLink}, {@link socialLoginStart},
  * {@link socialLoginComplete}, {@link availableLoginProviders},
- * {@link checkAuthMethod}, {@link requestPasswordReset}, {@link resetPassword}.
+ * {@link checkAuthMethod}, {@link requestPasswordReset}, {@link resetPassword},
+ * and the documents to show: {@link playerLegalDocuments},
+ * {@link appRequiredDocuments}, {@link developerLegalDocuments}.
  * **Require a session:** {@link logout}, {@link logoutAllDevices},
  * {@link myIdentities}, {@link linkIdentity}, {@link unlinkIdentity},
- * {@link changePassword}, {@link setInitialPassword}.
+ * {@link changePassword}, {@link setInitialPassword}, and what a player or
+ * developer agrees to or answers: {@link recordPlayerConsents},
+ * {@link playerLegalAcceptance}, {@link recordPlayerAge},
+ * {@link recordDeveloperConsents}, {@link developerLegalAcceptance}.
  *
  * **Which password method:** the four are distinguished by what the caller has
  * already proven, not by what they want to do. Signed in with a password →
@@ -71,6 +80,46 @@ export interface UserIdentity {
   emailVerified: boolean;
   createdAt: string;
   lastLoginAt: string | null;
+}
+
+/**
+ * A player's age bracket as the API reports it (`me.ageBracket`): `unknown` until an age is
+ * given, then `under_13`, `13_15`, `16_17` or `18_plus`. Open union: the server may add one.
+ * A bracket is for your logic; never show it to a player as an age.
+ */
+export type AgeBracket =
+  | 'unknown'
+  | 'under_13'
+  | '13_15'
+  | '16_17'
+  | '18_plus'
+  | (string & {});
+
+/** How a player accepted documents: on a Crowded Kingdoms or SDK form, or on the app's own screen. */
+export type LegalAcceptanceMethodValue = 'CLICKWRAP' | 'IN_GAME';
+
+/** The account after {@link AuthAPI.recordPlayerAge}. */
+export interface PlayerAge {
+  userId: string;
+  ageBracket: AgeBracket | null;
+  /** The declared country (ISO 3166-1 alpha-2). */
+  country: string | null;
+}
+
+/** A birth date, country and parental agreement, as {@link AuthAPI.recordPlayerAge} and `register` take them. */
+export interface PlayerAgeInput {
+  /**
+   * `YYYY-MM-DD` (`YYYY-MM` is accepted too). Only the year and month are kept, and the age
+   * is counted from the last day of that month.
+   */
+  birthDate: string;
+  /** The country the player lives in, ISO 3166-1 alpha-2 (such as `US`). */
+  country: string;
+  /**
+   * True when a player under 18 confirmed that a parent or guardian agreed. Required true
+   * under 18; ignored at 18 or over.
+   */
+  parentalConfirmation?: boolean;
 }
 
 /**
@@ -261,11 +310,17 @@ const RegisterDocument = parse(
       gamertag?: string;
       acceptLegal?: boolean;
       attestAgeOfMajority?: boolean;
+      birthDate?: string;
+      country?: string;
+      parentalConfirmation?: boolean;
     };
   }
 >;
 
 // THE CLICKWRAP (ck-api v2.35.0). A gameplay token is refused until both are stored.
+// This document is the 18.23 one, kept byte for byte: an API before v2.60.0 declares the
+// attestation `Boolean!`, so a nullable variable would fail validation there. It is sent
+// whenever the call is the old one (both flags, no app, no method).
 const RecordPlayerConsentsDocument = parse(
   `mutation RecordPlayerConsents($acceptLegal: Boolean!, $attestAgeOfMajority: Boolean!) { recordPlayerConsents(acceptLegal: $acceptLegal, attestAgeOfMajority: $attestAgeOfMajority) }`,
 ) as TypedDocumentNode<
@@ -273,9 +328,57 @@ const RecordPlayerConsentsDocument = parse(
   { acceptLegal: boolean; attestAgeOfMajority: boolean }
 >;
 
+// ck-api v2.60.0: an app's own documents, how they were accepted, and an attestation the
+// platform ignores once it asks for a birth date instead.
+const RecordPlayerConsentsForAppDocument = parse(
+  `mutation RecordPlayerConsentsForApp($acceptLegal: Boolean!, $attestAgeOfMajority: Boolean, $appId: BigInt, $method: LegalAcceptanceMethod) { recordPlayerConsents(acceptLegal: $acceptLegal, attestAgeOfMajority: $attestAgeOfMajority, appId: $appId, method: $method) }`,
+) as TypedDocumentNode<
+  { recordPlayerConsents: boolean },
+  {
+    acceptLegal: boolean;
+    attestAgeOfMajority?: boolean;
+    appId?: string;
+    method?: LegalAcceptanceMethodValue;
+  }
+>;
+
 const PlayerLegalAcceptanceDocument = parse(
   `query PlayerLegalAcceptance { playerLegalAcceptance }`,
 ) as TypedDocumentNode<{ playerLegalAcceptance: boolean }, Record<string, never>>;
+
+const PlayerLegalAcceptanceForAppDocument = parse(
+  `query PlayerLegalAcceptanceForApp($appId: BigInt!) { playerLegalAcceptance(appId: $appId) }`,
+) as TypedDocumentNode<{ playerLegalAcceptance: boolean }, { appId: string }>;
+
+// THE AGE (ck-api v2.60.0). Only the year and month are kept.
+const RecordPlayerAgeDocument = parse(
+  `mutation RecordPlayerAge($input: RecordPlayerAgeInput!) { recordPlayerAge(input: $input) { userId ageBracket country } }`,
+) as TypedDocumentNode<{ recordPlayerAge: PlayerAge }, { input: PlayerAgeInput }>;
+
+const LEGAL_DOCUMENT_FIELDS = 'documentId version title url appId';
+
+const PlayerLegalDocumentsDocument = parse(
+  `query PlayerLegalDocuments { playerLegalDocuments { ${LEGAL_DOCUMENT_FIELDS} } }`,
+) as TypedDocumentNode<{ playerLegalDocuments: LegalDocument[] }, Record<string, never>>;
+
+const AppRequiredDocumentsDocument = parse(
+  `query AppRequiredDocuments($appId: BigInt!) { appRequiredDocuments(appId: $appId) { ${LEGAL_DOCUMENT_FIELDS} } }`,
+) as TypedDocumentNode<{ appRequiredDocuments: LegalDocument[] }, { appId: string }>;
+
+const DeveloperLegalDocumentsDocument = parse(
+  `query DeveloperLegalDocuments { developerLegalDocuments { ${LEGAL_DOCUMENT_FIELDS} } }`,
+) as TypedDocumentNode<{ developerLegalDocuments: LegalDocument[] }, Record<string, never>>;
+
+const DeveloperLegalAcceptanceDocument = parse(
+  `query DeveloperLegalAcceptance { developerLegalAcceptance }`,
+) as TypedDocumentNode<{ developerLegalAcceptance: boolean }, Record<string, never>>;
+
+const RecordDeveloperConsentsDocument = parse(
+  `mutation RecordDeveloperConsents($acceptDeveloperTerms: Boolean!) { recordDeveloperConsents(acceptDeveloperTerms: $acceptDeveloperTerms) }`,
+) as TypedDocumentNode<
+  { recordDeveloperConsents: boolean },
+  { acceptDeveloperTerms: boolean }
+>;
 
 // PASSWORD MANAGEMENT. Four mutations, and they are four rather than one or two
 // on purpose: each is defined by what the CALLER has already proven, and
@@ -450,6 +553,17 @@ export class AuthAPI {
    * exists; the account then starts accepted. A client with no browser origin may
    * omit them and call {@link recordPlayerConsents} before its first gameplay
    * token.
+   *
+   * **The age (ck-api v2.60.0).** `birthDate`, `country` and, for a player under 18,
+   * `parentalConfirmation` are the answers of a neutral age screen: it asks the date
+   * of birth and the country and shows no age, and only a player under 18 sees the
+   * line that a parent or guardian agreed. They are optional until the platform
+   * admits players under 18; after that a browser sign-up without them is refused
+   * `AGE_REQUIRED`, and a request with no browser origin may give them later with
+   * {@link recordPlayerAge}. A country Crowded Kingdoms does not serve, declared or
+   * detected, is refused `TERRITORY_NOT_SUPPORTED` (`territoryNotSupportedOf`), and an
+   * age the platform does not admit `AGE_REQUIREMENT_NOT_MET`
+   * (`ageRequirementNotMetOf`); either way no account is made.
    */
   async register(input: {
     email: string;
@@ -459,6 +573,12 @@ export class AuthAPI {
     acceptLegal?: boolean;
     /** The player is at least 18, or the age of majority where they live if higher. */
     attestAgeOfMajority?: boolean;
+    /** Birth date, `YYYY-MM-DD` (or `YYYY-MM`); only the year and month are kept. Sent with `country`. */
+    birthDate?: string;
+    /** The country the player lives in, ISO 3166-1 alpha-2; required with `birthDate`. */
+    country?: string;
+    /** A player under 18 confirmed a parent or guardian agreed; required true under 18. */
+    parentalConfirmation?: boolean;
   }): Promise<AuthResponse> {
     const data = await this.graphql.request(RegisterDocument, {
       registerUserInput: input,
@@ -468,35 +588,160 @@ export class AuthAPI {
   }
 
   /**
-   * Store the signed-in player's agreement to the current required legal
-   * documents (Game Terms, API Terms, SDK Developer Terms, Free Tier and Billing
-   * Basis, Overworld Privacy Policy) and their attestation that they are at least
-   * 18, or the age of majority where they live if that is higher. Requires the
-   * identity session token; both must be `true`, and repeating it is harmless.
+   * Store the signed-in player's agreement to the platform's current player
+   * documents ({@link playerLegalDocuments}) and, with `appId`, to that app's own
+   * ({@link appRequiredDocuments}). Requires the identity session token;
+   * `acceptLegal` must be `true`, and repeating it is harmless.
+   *
+   * `attestAgeOfMajority` (the player is at least 18, or the age of majority where
+   * they live if higher) must be `true` while the platform still uses the
+   * attestation; once players give a birth date instead ({@link recordPlayerAge})
+   * the server ignores it, and it may be left out. `method` records how the player
+   * accepted: `CLICKWRAP` (the default; a Crowded Kingdoms or SDK form) or `IN_GAME`
+   * (the app's own screen).
    *
    * Since ck-api v2.35.0 a gameplay token (`portal.mintAppToken`,
    * `portal.createAuthorizationCode`, `portal.refresh`) is refused with
-   * `LEGAL_ACCEPTANCE_REQUIRED` ({@link isLegalAcceptanceRequiredError}) until
-   * this is stored. It records the PLAYER's agreement: call it only after they
-   * have ticked both boxes in your own UI, linking each document. A browser game
-   * never needs it, because Studio's hosted `/authorize` asks for both.
+   * `LEGAL_ACCEPTANCE_REQUIRED` ({@link isLegalAcceptanceRequiredError};
+   * `legalAcceptanceRequiredOf` lists the missing documents) until this is stored.
+   * It records the PLAYER's agreement: call it only after they ticked the box in
+   * your own UI, which links each document. A browser game never needs it, because
+   * Studio's hosted `/authorize` asks.
+   *
+   * `appId`, `method` and leaving the attestation out need ck-api v2.60.0; the call
+   * with both flags and neither of those works against any API since v2.35.0.
    */
   async recordPlayerConsents(input: {
     acceptLegal: boolean;
-    attestAgeOfMajority: boolean;
+    attestAgeOfMajority?: boolean;
+    /** The app whose own documents the player also accepted (BigInt as a decimal string). */
+    appId?: string;
+    method?: LegalAcceptanceMethodValue;
   }): Promise<boolean> {
-    const data = await this.graphql.request(RecordPlayerConsentsDocument, input);
+    const { acceptLegal, attestAgeOfMajority, appId, method } = input;
+    if (
+      typeof attestAgeOfMajority === 'boolean' &&
+      appId === undefined &&
+      method === undefined
+    ) {
+      const data = await this.graphql.request(RecordPlayerConsentsDocument, {
+        acceptLegal,
+        attestAgeOfMajority,
+      });
+      return data.recordPlayerConsents;
+    }
+    const data = await this.graphql.request(RecordPlayerConsentsForAppDocument, {
+      acceptLegal,
+      ...(attestAgeOfMajority !== undefined ? { attestAgeOfMajority } : {}),
+      ...(appId !== undefined ? { appId } : {}),
+      ...(method !== undefined ? { method } : {}),
+    });
     return data.recordPlayerConsents;
   }
 
   /**
-   * Whether the signed-in player has the current required documents and the age
-   * attestation stored, i.e. whether a gameplay token would be issued. Requires
-   * the identity session token. ck-api v2.35.0.
+   * Whether the signed-in player has stored the platform's current player
+   * documents and, while the platform asks for one, the age attestation or a birth
+   * date: whether a gameplay token would be issued. With `appId` the app's own
+   * documents count too (ck-api v2.60.0). Requires the identity session token.
+   * ck-api v2.35.0.
    */
-  async playerLegalAcceptance(): Promise<boolean> {
-    const data = await this.graphql.request(PlayerLegalAcceptanceDocument, {});
+  async playerLegalAcceptance(options: { appId?: string } = {}): Promise<boolean> {
+    const data =
+      options.appId !== undefined
+        ? await this.graphql.request(PlayerLegalAcceptanceForAppDocument, {
+            appId: options.appId,
+          })
+        : await this.graphql.request(PlayerLegalAcceptanceDocument, {});
     return data.playerLegalAcceptance;
+  }
+
+  /**
+   * The platform's documents every player accepts before playing, at the versions
+   * required now: show them (with the app's own, {@link appRequiredDocuments})
+   * before {@link recordPlayerConsents}. Each has `documentId`, `version`, `title`
+   * and `url`. Public. ck-api v2.60.0.
+   */
+  async playerLegalDocuments(): Promise<LegalDocument[]> {
+    const data = await this.graphql.request(PlayerLegalDocumentsDocument, {});
+    return data.playerLegalDocuments;
+  }
+
+  /**
+   * An app's own documents (its rules, an addendum), which its players accept on top
+   * of the platform's: record them with {@link recordPlayerConsents} and the
+   * `appId` before the player's next mint. Empty when the app requires none. Its
+   * admins set them with `apps.setRequiredDocuments`. Public. ck-api v2.60.0.
+   */
+  async appRequiredDocuments(appId: string): Promise<LegalDocument[]> {
+    const data = await this.graphql.request(AppRequiredDocumentsDocument, { appId });
+    return data.appRequiredDocuments;
+  }
+
+  /**
+   * Record the signed-in player's birth date and country, and under 18 that a parent
+   * or guardian agreed, for an account whose age is not known yet (`users.me()`'s
+   * `ageBracket` is `unknown`, and a mint answers `AGE_REQUIRED`). Only the year and
+   * month are kept. Requires the identity session token. ck-api v2.60.0.
+   *
+   * Ask on a neutral screen: the date of birth and the country, with no age shown,
+   * and the parental line only for a player under 18. Refused with `CONFLICT` once
+   * the account has an age, `TERRITORY_NOT_SUPPORTED` for a country Crowded Kingdoms
+   * does not serve (declared or detected), and `AGE_REQUIREMENT_NOT_MET` under the
+   * platform's youngest age, in which case the account keeps that answer and asking
+   * again changes nothing. Whether the player may play a given app is decided at
+   * the mint. Returns the account's `ageBracket` and `country`.
+   */
+  async recordPlayerAge(input: PlayerAgeInput): Promise<PlayerAge> {
+    const data = await this.graphql.request(RecordPlayerAgeDocument, {
+      input: {
+        birthDate: input.birthDate,
+        country: input.country,
+        ...(input.parentalConfirmation !== undefined
+          ? { parentalConfirmation: input.parentalConfirmation }
+          : {}),
+      },
+    });
+    return data.recordPlayerAge;
+  }
+
+  /**
+   * The documents a developer accepts before creating or administering an
+   * organization, at the versions required now. Empty while the platform asks
+   * developers for nothing beyond the player documents. Public. ck-api v2.60.0.
+   */
+  async developerLegalDocuments(): Promise<LegalDocument[]> {
+    const data = await this.graphql.request(DeveloperLegalDocumentsDocument, {});
+    return data.developerLegalDocuments;
+  }
+
+  /**
+   * Whether the signed-in account has accepted the current developer documents.
+   * False means creating or administering an organization is refused with
+   * `LEGAL_ACCEPTANCE_REQUIRED` until {@link recordDeveloperConsents}. Requires the
+   * identity session token. ck-api v2.60.0.
+   */
+  async developerLegalAcceptance(): Promise<boolean> {
+    const data = await this.graphql.request(DeveloperLegalAcceptanceDocument, {});
+    return data.developerLegalAcceptance;
+  }
+
+  /**
+   * Store the signed-in account's agreement to the current developer documents
+   * ({@link developerLegalDocuments}); `acceptDeveloperTerms` must be `true`, and
+   * repeating it is harmless. It records a person's agreement: call it only after
+   * they ticked the box in your own UI, linking each document. The developer
+   * documents are for adults: an account with no age is refused `AGE_REQUIRED`
+   * ({@link recordPlayerAge} first) and one under 18 `AGE_REQUIREMENT_NOT_MET`.
+   * Requires the identity session token. ck-api v2.60.0.
+   */
+  async recordDeveloperConsents(input: {
+    acceptDeveloperTerms: boolean;
+  }): Promise<boolean> {
+    const data = await this.graphql.request(RecordDeveloperConsentsDocument, {
+      acceptDeveloperTerms: input.acceptDeveloperTerms,
+    });
+    return data.recordDeveloperConsents;
   }
 
   /**

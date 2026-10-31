@@ -1,0 +1,6 @@
+mutation BlockPlayer($appId: BigInt!, $userId: BigInt!) {
+  blockPlayer(appId: $appId, userId: $userId) {
+    userId
+    createdAt
+  }
+}

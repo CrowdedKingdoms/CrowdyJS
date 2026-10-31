@@ -45,6 +45,12 @@ export class UsersAPI {
    * Validate the current bearer token and return the authenticated user record.
    * Handy for restoring a session on SDK init.
    *
+   * `ageBracket` is `unknown` until the player gives an age (`auth.recordPlayerAge`; a
+   * managed player's comes from its organization), then `under_13`, `13_15`, `16_17` or
+   * `18_plus`; `country` is the declared or asserted country (ck-api v2.60.0, which this
+   * selection needs). Use them for your logic, never as text: no screen shows a player an
+   * age.
+   *
    * @returns The {@link User}, or `null` if the token is missing, expired, or
    *   revoked (an invalid token resolves to `null` rather than throwing).
    * @throws {CrowdyGraphQLError} on transport/validation failures.
@@ -79,7 +85,9 @@ export class UsersAPI {
    * **Destructive, self-service** soft-delete of the caller's **own** account:
    * anonymizes PII and revokes all sessions. Wallet, voxel, and donation history
    * stay intact via foreign keys. Acts only on the caller (no target argument).
-   * Requires a valid session.
+   * Requires a valid session. Since ck-api v2.60.0 an open or escalated safety
+   * report about the account puts it under a legal hold first: the account still
+   * closes, but its content and identity are kept until the report is resolved.
    *
    * @returns `true` on success.
    * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` without a session, or
