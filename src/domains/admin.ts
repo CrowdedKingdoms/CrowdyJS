@@ -8,6 +8,7 @@ import type { QuotasAPI } from './quotas.js';
 import type { UsageAPI } from './usage.js';
 import type { SharedEnvironmentAPI } from './sharedEnvironment.js';
 import type { GameAppsAPI } from './gameApps.js';
+import type { ModerationAPI } from './moderation.js';
 
 /**
  * Studio-admin facade — exposed as `client.admin`.
@@ -50,6 +51,8 @@ export class AdminAPI {
   readonly sharedEnvironment: SharedEnvironmentAPI;
   /** App grids + grid runtime-permission administration. */
   readonly grids: GameAppsAPI;
+  /** An app's safety reports, for its moderators (`moderate_safety`). */
+  readonly moderation: ModerationAPI;
 
   constructor(deps: {
     organizations: OrganizationsAPI;
@@ -62,6 +65,7 @@ export class AdminAPI {
     usage: UsageAPI;
     sharedEnvironment: SharedEnvironmentAPI;
     grids: GameAppsAPI;
+    moderation: ModerationAPI;
   }) {
     this.organizations = deps.organizations;
     this.managedPlayers = deps.managedPlayers;
@@ -73,5 +77,6 @@ export class AdminAPI {
     this.usage = deps.usage;
     this.sharedEnvironment = deps.sharedEnvironment;
     this.grids = deps.grids;
+    this.moderation = deps.moderation;
   }
 }

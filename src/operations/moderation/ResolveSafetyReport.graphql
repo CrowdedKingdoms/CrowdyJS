@@ -1,0 +1,5 @@
+mutation ResolveSafetyReport($appId: BigInt!, $reportId: BigInt!, $outcome: String!) {
+  resolveSafetyReport(appId: $appId, reportId: $reportId, outcome: $outcome) {
+    ...SafetyReportFields
+  }
+}

@@ -415,6 +415,74 @@ export const ASSERTION_REJECTED_CODE = 'ASSERTION_REJECTED';
  * provisioning; see {@link orgLegalAcceptanceRequiredOf}.
  */
 export const ORG_LEGAL_ACCEPTANCE_REQUIRED_CODE = 'ORG_LEGAL_ACCEPTANCE_REQUIRED';
+/**
+ * `extensions.code` for "the player has not accepted the current required documents" (HTTP
+ * 403): the platform's player documents or the app's own, listed in
+ * `extensions.missingDocuments`; see {@link legalAcceptanceRequiredOf}.
+ */
+export const LEGAL_ACCEPTANCE_REQUIRED_CODE = 'LEGAL_ACCEPTANCE_REQUIRED';
+/**
+ * `extensions.code` for "the player's age is not known" (HTTP 403), at a token's mint or
+ * refresh, or the developer documents for an account with no age; see {@link ageRequiredOf}.
+ */
+export const AGE_REQUIRED_CODE = 'AGE_REQUIRED';
+/**
+ * `extensions.code` for "the player may not play this" by age (HTTP 403); see
+ * {@link ageRequirementNotMetOf}.
+ */
+export const AGE_REQUIREMENT_NOT_MET_CODE = 'AGE_REQUIREMENT_NOT_MET';
+/**
+ * `extensions.code` for "Crowded Kingdoms does not serve the player's country" (HTTP 403); see
+ * {@link territoryNotSupportedOf}.
+ */
+export const TERRITORY_NOT_SUPPORTED_CODE = 'TERRITORY_NOT_SUPPORTED';
+/**
+ * `extensions.code` for "the app does not keep the safety log where it must" (HTTP 403); see
+ * {@link safetyLogRequiredOf}.
+ */
+export const SAFETY_LOG_REQUIRED_CODE = 'SAFETY_LOG_REQUIRED';
+/**
+ * `extensions.code` for "parental consent cannot be requested on this deployment" (HTTP 503);
+ * see {@link parentalConsentUnavailableOf}.
+ */
+export const PARENTAL_CONSENT_UNAVAILABLE_CODE = 'PARENTAL_CONSENT_UNAVAILABLE';
+/**
+ * `extensions.code` for "the player has as many contacts, waiting requests or blocks in the app
+ * as the platform allows" (HTTP 409); see {@link socialLimitReachedOf}.
+ */
+export const SOCIAL_LIMIT_REACHED_CODE = 'SOCIAL_LIMIT_REACHED';
+/**
+ * `extensions.code` for "the Minecraft account could not be confirmed" (HTTP 401), with the
+ * failed check in `extensions.reason`; see {@link minecraftVerificationFailedOf}.
+ */
+export const MINECRAFT_VERIFICATION_FAILED_CODE = 'MINECRAFT_VERIFICATION_FAILED';
+/**
+ * `extensions.code` for "Mojang's session service did not answer" (HTTP 503, retryable); see
+ * {@link minecraftVerificationUnavailableOf}.
+ */
+export const MINECRAFT_VERIFICATION_UNAVAILABLE_CODE = 'MINECRAFT_VERIFICATION_UNAVAILABLE';
+
+/**
+ * Why a Minecraft sign-in was not confirmed, as `extensions.reason` carries it. Open union:
+ * the server may add one.
+ */
+export type MinecraftVerificationFailure =
+  | 'malformed'
+  | 'forged'
+  | 'expired'
+  | 'not_joined'
+  | 'replayed'
+  | (string & {});
+
+/** One document a refused player still has to accept, from `extensions.missingDocuments`. */
+export interface MissingLegalDocument {
+  /** The document's stable id, such as `player-terms` or an app's own `rules`. */
+  documentId: string;
+  /** The version the player has to accept. */
+  version: string;
+  /** The app whose own document it is; null for a platform document. */
+  appId: string | null;
+}
 
 /**
  * Why an app is paused, as `extensions.reason` on `APP_PAUSED` and
@@ -532,6 +600,133 @@ export function assertionRejectedOf(value: unknown): { reason: string | null } |
  */
 export function orgLegalAcceptanceRequiredOf(value: unknown): boolean {
   return errorWithCode(value, ORG_LEGAL_ACCEPTANCE_REQUIRED_CODE) !== null;
+}
+
+/**
+ * A `LEGAL_ACCEPTANCE_REQUIRED` refusal (HTTP 403), or `null`. `missingDocuments` is what the
+ * player still has to accept: the platform's player documents (`appId` null) and the app's own
+ * (`appId` set). Show those documents, then record the player's agreement
+ * (`auth.recordPlayerConsents`, with the app's `appId` for its own); a browser game sends the
+ * player back through `portal.signIn`, where Studio asks. Empty when the server did not list
+ * them (an older API, or a refused `register` or `recordPlayerConsents`). Not fixed by retrying.
+ * Distinct from the organization's `ORG_LEGAL_ACCEPTANCE_REQUIRED`
+ * ({@link orgLegalAcceptanceRequiredOf}).
+ */
+export function legalAcceptanceRequiredOf(
+  value: unknown,
+): { missingDocuments: MissingLegalDocument[] } | null {
+  const entry = errorWithCode(value, LEGAL_ACCEPTANCE_REQUIRED_CODE);
+  if (!entry) return null;
+  const listed = entry.extensions?.missingDocuments;
+  const missingDocuments: MissingLegalDocument[] = [];
+  if (Array.isArray(listed)) {
+    for (const item of listed) {
+      const doc = item as { documentId?: unknown; version?: unknown; appId?: unknown } | null;
+      if (typeof doc?.documentId !== 'string' || typeof doc.version !== 'string') continue;
+      const appId = doc.appId;
+      missingDocuments.push({
+        documentId: doc.documentId,
+        version: doc.version,
+        appId:
+          typeof appId === 'string' && appId.length > 0
+            ? appId
+            : typeof appId === 'number'
+              ? String(appId)
+              : null,
+      });
+    }
+  }
+  return { missingDocuments };
+}
+
+/**
+ * Whether an error is an `AGE_REQUIRED` refusal (HTTP 403): the player's age is not known.
+ * For an account, ask the player's birth date and country on your own neutral screen and call
+ * `auth.recordPlayerAge`, then mint again; a browser game sends the player back through
+ * `portal.signIn`, where Studio asks. For an org-managed player, the organization sends
+ * `ageYears` and `country` when it signs the player in. Not fixed by retrying as is.
+ */
+export function ageRequiredOf(value: unknown): boolean {
+  return errorWithCode(value, AGE_REQUIRED_CODE) !== null;
+}
+
+/**
+ * Whether an error is an `AGE_REQUIREMENT_NOT_MET` refusal (HTTP 403): by age, the player may
+ * not play this app, or create or administer an organization. Not retryable, and asking for
+ * the age again changes nothing: an account keeps the answer it gave.
+ *
+ * Deliberately a boolean. No refusal names an age (the platform's neutral age screen): tell the
+ * player they cannot play this, without naming an age or a minimum, and do not offer to enter
+ * the date again. Older APIs put `minimumAge` and `ageBracket` in the extensions; this reader
+ * does not surface them, and a game must not show them.
+ */
+export function ageRequirementNotMetOf(value: unknown): boolean {
+  return errorWithCode(value, AGE_REQUIREMENT_NOT_MET_CODE) !== null;
+}
+
+/**
+ * A `TERRITORY_NOT_SUPPORTED` refusal (HTTP 403), or `null`: Crowded Kingdoms does not serve
+ * the player's country (the one they connect from, the one they declared, or the one their
+ * organization asserted). `country` is `extensions.country` (ISO 3166-1 alpha-2), null when the
+ * server did not say. Not retryable; tell the player it is not available where they are.
+ */
+export function territoryNotSupportedOf(value: unknown): { country: string | null } | null {
+  const entry = errorWithCode(value, TERRITORY_NOT_SUPPORTED_CODE);
+  if (!entry) return null;
+  const country = entry.extensions?.country;
+  return { country: typeof country === 'string' && country.length > 0 ? country : null };
+}
+
+/**
+ * Whether an error is a `SAFETY_LOG_REQUIRED` refusal (HTTP 403): the app does not keep the
+ * safety log (replay logging) where it must. A player under 18 gets it at the mint of an app
+ * without one, and an app admitting players under 18 cannot turn its log off. The player
+ * cannot fix it: the app's admins turn the log on (`apps.update`) or raise its minimum age.
+ */
+export function safetyLogRequiredOf(value: unknown): boolean {
+  return errorWithCode(value, SAFETY_LOG_REQUIRED_CODE) !== null;
+}
+
+/**
+ * Whether an error is a `PARENTAL_CONSENT_UNAVAILABLE` refusal (HTTP 503) from
+ * `safety.requestParentalConsent`: the deployment's consent service is not configured. Not
+ * fixed by retrying soon; voice and video stay off for the player meanwhile.
+ */
+export function parentalConsentUnavailableOf(value: unknown): boolean {
+  return errorWithCode(value, PARENTAL_CONSENT_UNAVAILABLE_CODE) !== null;
+}
+
+/**
+ * Whether an error is a `SOCIAL_LIMIT_REACHED` refusal (HTTP 409): the player already has as
+ * many contacts, waiting contact requests or blocks in the app as the platform allows (the
+ * message says which). Remove some first; not fixed by retrying.
+ */
+export function socialLimitReachedOf(value: unknown): boolean {
+  return errorWithCode(value, SOCIAL_LIMIT_REACHED_CODE) !== null;
+}
+
+/**
+ * A `MINECRAFT_VERIFICATION_FAILED` refusal (HTTP 401) from `portal.signInWithMinecraft`, or
+ * `null`. `reason` is `extensions.reason`: `malformed`, `forged`, `expired`, `not_joined` or
+ * `replayed`. Never resend the same server id: ask for a new challenge
+ * (`portal.minecraftChallenge`) and join it again.
+ */
+export function minecraftVerificationFailedOf(
+  value: unknown,
+): { reason: MinecraftVerificationFailure | null } | null {
+  const entry = errorWithCode(value, MINECRAFT_VERIFICATION_FAILED_CODE);
+  if (!entry) return null;
+  const reason = entry.extensions?.reason;
+  return { reason: typeof reason === 'string' && reason.length > 0 ? reason : null };
+}
+
+/**
+ * Whether an error is a `MINECRAFT_VERIFICATION_UNAVAILABLE` refusal (HTTP 503): Mojang's
+ * session service did not answer, so the account was not confirmed. Retryable shortly, with a
+ * new challenge.
+ */
+export function minecraftVerificationUnavailableOf(value: unknown): boolean {
+  return errorWithCode(value, MINECRAFT_VERIFICATION_UNAVAILABLE_CODE) !== null;
 }
 
 /**

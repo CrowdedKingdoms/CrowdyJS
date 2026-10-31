@@ -1,0 +1,5 @@
+query MyCommSettings($appId: BigInt!) {
+  myCommSettings(appId: $appId) {
+    ...CommSettingsFields
+  }
+}

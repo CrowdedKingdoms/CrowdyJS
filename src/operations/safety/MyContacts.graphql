@@ -1,0 +1,5 @@
+query MyContacts($appId: BigInt!) {
+  myContacts(appId: $appId) {
+    ...PlayerContactFields
+  }
+}

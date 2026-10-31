@@ -44,6 +44,47 @@ export type OrgSigningKeyRegistration = Omit<RegisterOrgSigningKeyInput, 'public
 };
 
 /**
+ * The claims of a player assertion, as the organization's sign-in service signs them (a
+ * compact JWS whose header names `alg`, `EdDSA`, `ES256` or `RS256`, and the registered key's
+ * `kid`). The device trades the assertion with `portal.exchangeManagedPlayerAssertion`. This
+ * SDK does not sign assertions: the private key stays with the sign-in service.
+ */
+export interface ManagedPlayerAssertionClaims {
+  /** The issuer registered with the key. */
+  iss: string;
+  /** The key's audience, or `ck:app:<appId>` when it has none. */
+  aud: string | string[];
+  /** The organization's own id for the player: 1-256 characters, no control characters. */
+  sub: string;
+  /** Issued at, in seconds since the epoch. */
+  iat: number;
+  /** Expiry, in seconds since the epoch: at most 300 seconds after `iat`. */
+  exp: number;
+  /** Not before, in seconds since the epoch. */
+  nbf?: number;
+  /** A fresh id (1-128 characters), accepted once per app. */
+  jti: string;
+  /** Display name, at most 64 characters. */
+  gamertag?: string;
+  /**
+   * The player's age in whole years, as the organization knows it (ck-api v2.60.0). Stored as
+   * an age bracket that sets a minor's defaults; a player under the app's, the country's or
+   * the platform's youngest age is refused `AGE_REQUIREMENT_NOT_MET`. Optional while every
+   * managed player is 18 or older under the Org-Managed Players Addendum (left out, the
+   * player counts as an adult); required once the platform admits players under 18
+   * (`AGE_REQUIRED` without it).
+   */
+  ageYears?: number;
+  /**
+   * The country the player lives in, ISO 3166-1 alpha-2 (ck-api v2.60.0). A country Crowded
+   * Kingdoms does not serve is refused `TERRITORY_NOT_SUPPORTED`, and the country's own
+   * youngest age applies. Optional until the platform admits players under 18, required
+   * after.
+   */
+  country?: string;
+}
+
+/**
  * Org-managed players: an organization's own players, signed in by the organization
  * instead of with a Crowded Kingdoms email and password. Exposed as
  * `client.managedPlayers` (and `client.admin.managedPlayers`).
@@ -58,8 +99,19 @@ export type OrgSigningKeyRegistration = Omit<RegisterOrgSigningKeyInput, 'public
  *     it never belongs in a browser or a game client, and the API refuses one sent with an
  *     `Origin` header.
  *   - **With a signed assertion**: the organization registers a public key here
- *     ({@link registerSigningKey}), its sign-in service signs a short JWS for the player, and
- *     the device trades it with `client.portal.exchangeManagedPlayerAssertion`.
+ *     ({@link registerSigningKey}), its sign-in service signs a short JWS for the player
+ *     ({@link ManagedPlayerAssertionClaims}), and the device trades it with
+ *     `client.portal.exchangeManagedPlayerAssertion`.
+ *
+ * **Age and country (ck-api v2.60.0).** Either way the organization says how old the player
+ * is and where it lives: `ageYears` and `country` on the mint's input
+ * (`MintManagedPlayerTokenInput`) or as the assertion's claims. Crowded Kingdoms stores an age
+ * bracket and the country on the player, applies a minor's defaults itself, and refuses the
+ * sign-in with `TERRITORY_NOT_SUPPORTED` in a country it does not serve and
+ * `AGE_REQUIREMENT_NOT_MET` under the app's, the country's or the platform's youngest age,
+ * before the player is created. Both are optional while every managed player is 18 or older
+ * under the Org-Managed Players Addendum (left out, the player counts as an adult), and
+ * required once the platform admits players under 18 (`AGE_REQUIRED` without an age).
  *
  * The methods below are the organization's administration. They take an org admin's
  * session with the `manage_players` permission (or, from the organization's server, an org
@@ -139,7 +191,9 @@ export class ManagedPlayersAPI {
    * again, so a later sign-in with it creates a new player. Since Game API v2.54.0 its
    * player-side content is erased within minutes (usage and billing records and world edits
    * stay), and a legal hold on the player or its organization refuses the delete with
-   * `LEGAL_HOLD`; the player stays as it was.
+   * `LEGAL_HOLD`; the player stays as it was. Since v2.60.0 an open or escalated safety
+   * report about the player sets such a hold first: disable the player instead
+   * ({@link update}), which keeps everything.
    */
   async delete(orgId: string, externalId: string): Promise<boolean> {
     const data = await this.api.request(DeleteManagedPlayerDocument, { orgId, externalId });

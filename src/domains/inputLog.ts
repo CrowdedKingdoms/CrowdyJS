@@ -44,7 +44,10 @@ export interface InputLogPageOptions<Filter> {
  * the app to its datacenter like any gameplay call.
  *
  * **Who sees what.** A player reads only the sessions and inputs they sent. A holder of
- * `manage_apps` on the app reads every session and may filter by `userId`.
+ * `manage_apps` on the app reads every session and may filter by `userId`. A moderator
+ * (`moderate_safety`, ck-api v2.60.0) reads with {@link messages} only the sessions an open or
+ * escalated safety report covers (`client.moderation.reports(appId)`, each report's
+ * `sessions`), and every read of another player's session is audited.
  *
  * Inputs are kept for the input log's published retention (crowdedkingdoms.com/pricing,
  * up to about an hour longer) and then deleted, so an old session can still be listed

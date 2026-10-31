@@ -15,6 +15,11 @@ import {
   AdmitAppCodeDocument,
   RevokeAppCodeAdmissionDocument,
   PlaceableDatacentersDocument,
+  AppRecordingDocument,
+  SetAppRequiredDocumentsDocument,
+  type AppRecordingQuery,
+  type AppRequiredDocumentInput,
+  type SetAppRequiredDocumentsMutation,
   type AppQuery,
   type AppQueryVariables,
   type AppBySlugQuery,
@@ -68,6 +73,13 @@ export interface AppRoute {
    */
   gameApiUrl: string | null;
 }
+
+/**
+ * What an app's safety log records right now ({@link AppsAPI.recording}): `enabled` (the log
+ * is on, so text chat and direct messages are recorded), `voice` (voice and channel audio)
+ * and `video` (webcam video).
+ */
+export type AppRecordingState = NonNullable<AppRecordingQuery['app']>['recording'];
 
 function appRouteFromAppRow(row: unknown): AppRoute | null {
   if (!row || typeof row !== 'object') return null;
@@ -209,6 +221,43 @@ export class AppsAPI {
       { appId },
     );
     return data.app;
+  }
+
+  /**
+   * What the app's safety log (replay logging) records right now, for the notice and the
+   * recording indicator a game shows its players: `enabled` (the log is on: text chat and
+   * direct messages are recorded), `voice` (voice and channel audio) and `video` (webcam
+   * video). Readable with the app's own app token, so a game reads it on its gameplay client.
+   * ck-api v2.60.0.
+   *
+   * While `voice` or `video` is true, show the player a notice before they first speak or
+   * appear on camera, and an indicator while it stays true. Read it when the player enters
+   * the app; an admin's change applies within about 15 seconds. Null for an unknown app.
+   */
+  async recording(appId: string): Promise<AppRecordingState | null> {
+    const data = await this.api.request(AppRecordingDocument, { appId });
+    return data.app?.recording ?? null;
+  }
+
+  /**
+   * Set the documents the app's players accept before playing, replacing the list:
+   * documents left out stop being required, and a new `version` of one asks every player of
+   * the app again at their next mint or refresh (`LEGAL_ACCEPTANCE_REQUIRED` until they accept
+   * it). At most 10; `documentId` is 1-64 lower-case letters, digits and hyphens and may not
+   * reuse a platform document's id; `url` is https. An empty list requires none. Players
+   * read the list with `auth.appRequiredDocuments(appId)` and accept it with
+   * `auth.recordPlayerConsents({ acceptLegal: true, appId })`. Requires `manage_apps` on the
+   * app. ck-api v2.60.0.
+   */
+  async setRequiredDocuments(
+    appId: string,
+    documents: AppRequiredDocumentInput[],
+  ): Promise<SetAppRequiredDocumentsMutation['setAppRequiredDocuments']> {
+    const data = await this.api.request(SetAppRequiredDocumentsDocument, {
+      appId,
+      documents,
+    });
+    return data.setAppRequiredDocuments;
   }
 
   /**
@@ -389,13 +438,24 @@ export class AppsAPI {
    * every client input they accept for the app, readable with `client.inputLog` and
    * billed as stored input logs (crowdedkingdoms.com/pricing). Apps start with it off
    * ("No replication logging"), and recording stops shortly after it is turned off.
+   * It is the app's safety log: an app that admits players under 18 must keep it on, so
+   * turning it off there is refused `SAFETY_LOG_REQUIRED` (ck-api v2.60.0).
+   *
+   * `replayLoggingRecordsVoice` / `replayLoggingRecordsVideo` (both true by default) keep
+   * voice and channel audio, or webcam video, in or out of the log while it is on;
+   * {@link recording} is what players are told. `minPlayerAge` (13 to 18) raises the
+   * youngest age the app admits above the platform's, never below it; `null` returns
+   * it to the platform's, and `effectiveMinPlayerAge` reads the result. Younger players
+   * are refused `AGE_REQUIREMENT_NOT_MET` at their next mint or refresh.
    *
    * @param appId - Numeric app id.
    * @param input - {@link UpdateAppInput} fields to change.
    * @returns The updated {@link App}.
    * @throws {CrowdyGraphQLError} `FORBIDDEN`/`SCOPE_MISSING` without
-   *   `manage_apps`, or `INPUT_LOG_FUNDS_NEEDED` when turning replay logging on for
-   *   an org whose wallet has no spendable balance (a billing-exempt org needs none).
+   *   `manage_apps`, `INPUT_LOG_FUNDS_NEEDED` when turning replay logging on for
+   *   an org whose wallet has no spendable balance (a billing-exempt org needs none),
+   *   or `SAFETY_LOG_REQUIRED` when turning it off in an app that admits players
+   *   under 18.
    */
   async update(
     appId: string,

@@ -47,7 +47,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '18.23.1';
+export const VERSION = '18.24.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -198,6 +198,24 @@ export {
   managedPlayerNotAllowedOf,
   assertionRejectedOf,
   orgLegalAcceptanceRequiredOf,
+  LEGAL_ACCEPTANCE_REQUIRED_CODE,
+  AGE_REQUIRED_CODE,
+  AGE_REQUIREMENT_NOT_MET_CODE,
+  TERRITORY_NOT_SUPPORTED_CODE,
+  SAFETY_LOG_REQUIRED_CODE,
+  PARENTAL_CONSENT_UNAVAILABLE_CODE,
+  SOCIAL_LIMIT_REACHED_CODE,
+  MINECRAFT_VERIFICATION_FAILED_CODE,
+  MINECRAFT_VERIFICATION_UNAVAILABLE_CODE,
+  legalAcceptanceRequiredOf,
+  ageRequiredOf,
+  ageRequirementNotMetOf,
+  territoryNotSupportedOf,
+  safetyLogRequiredOf,
+  parentalConsentUnavailableOf,
+  socialLimitReachedOf,
+  minecraftVerificationFailedOf,
+  minecraftVerificationUnavailableOf,
   ACTOR_EXISTS_CODE,
   APP_PAUSED_CODE,
   accessRefusalOf,
@@ -223,6 +241,8 @@ export type {
   CrowdyFaultBlame,
   CrowdyFaultCode,
   CrowdyPlayerFault,
+  MinecraftVerificationFailure,
+  MissingLegalDocument,
 } from './errors.js';
 export { moveFromError, moveFromErrors } from './datacenter-redirect.js';
 export type { DatacenterMove } from './datacenter-redirect.js';
@@ -290,9 +310,32 @@ export {
   type AuthResponse,
   type AuthUser,
   type UserIdentity,
+  type AgeBracket,
+  type LegalAcceptanceMethodValue,
+  type PlayerAge,
+  type PlayerAgeInput,
 } from './domains/auth.js';
 export { PLAYER_PROFILES_MAX, UsersAPI } from './domains/users.js';
-export { AppsAPI, type AppRoute } from './domains/apps.js';
+export { AppsAPI, type AppRoute, type AppRecordingState } from './domains/apps.js';
+export {
+  SafetyAPI,
+  type CommScopeValue,
+  type CommChoicesInput,
+  type ParentalConsentFeatureValue,
+  type SafetyReportReasonValue,
+  type SafetyReportFiling,
+  type PlayerCommSettings,
+  type PlayerContactRecord,
+  type ContactRequestRecord,
+  type PlayerBlockRecord,
+  type ParentalConsentRequestResult,
+  type SafetyReportReceiptRecord,
+} from './domains/safety.js';
+export {
+  ModerationAPI,
+  type SafetyReportRecord,
+  type SafetyReportStatusValue,
+} from './domains/moderation.js';
 export {
   PortalAPI,
   BrowserSessionPkceStore,
@@ -309,6 +352,9 @@ export {
   type PkceStore,
   type BeginEntryParams,
   type SignInParams,
+  type MinecraftChallenge,
+  type MinecraftSignInParams,
+  type AcceptedLegalDocument,
 } from './domains/portal.js';
 export {
   EmbeddedHost,
@@ -330,11 +376,16 @@ export {
   type PublishFileInput,
 } from './domains/hosting.js';
 export { generatePkcePair, generateState, type PkcePair } from './pkce.js';
-export { PlatformAPI, type PlatformConfig } from './domains/platform.js';
+export {
+  PlatformAPI,
+  type PlatformConfig,
+  type TerritoryPolicyRecord,
+} from './domains/platform.js';
 export { OrganizationsAPI } from './domains/organizations.js';
 export {
   ManagedPlayersAPI,
   type OrgSigningKeyRegistration,
+  type ManagedPlayerAssertionClaims,
 } from './domains/managedPlayers.js';
 export { AppAccessAPI } from './domains/appAccess.js';
 export { BillingAPI } from './domains/billing.js';
@@ -589,6 +640,32 @@ export type {
   AdmitAppCodeInput,
 } from './generated/graphql.js';
 
+// -----------------------------------------------------------------------------
+// The teen safety program (ck-api v2.60.0): documents, age, communication,
+// reports, and the inputs an organization's server sends.
+// -----------------------------------------------------------------------------
+export type {
+  LegalDocument,
+  AppRecording,
+  AppRequiredDocumentInput,
+  CommSettings,
+  CommChoices,
+  PlayerContact,
+  ContactRequest,
+  PlayerBlock,
+  ParentalConsentRequest,
+  SafetyReport,
+  SafetyReportCapture,
+  SafetyReportReceipt,
+  TerritoryPolicy,
+  RecordPlayerAgeInput,
+  SetCommSettingsInput,
+  FileSafetyReportInput,
+  SignInWithMinecraftInput,
+  AcceptedDocumentInput,
+  MintManagedPlayerTokenInput,
+} from './generated/graphql.js';
+
 export {
   ServerState,
   AppVisibility,
@@ -596,6 +673,15 @@ export {
   GridTenure,
   CodeAdmissionMode,
   CodeAdmissionSubjectKind,
+  CommScope,
+  ContactState,
+  ContactRequestDirection,
+  ParentalConsentFeature,
+  ParentalConsentRequestStatus,
+  SafetyReportReason,
+  SafetyReportStatus,
+  SafetyCaptureStatus,
+  LegalAcceptanceMethod,
 } from './generated/graphql.js';
 
 export { DiscoveryDomain, type AppEndpoint } from './domains/discovery.js';

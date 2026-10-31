@@ -1,0 +1,6 @@
+fragment PlayerContactFields on PlayerContact {
+  userId
+  state
+  createdAt
+  acceptedAt
+}

@@ -193,6 +193,52 @@ const ExchangeManagedPlayerAssertionDocument = parse(
   { input: { appId: string; assertion: string } }
 >;
 
+/** {@link PortalAPI.minecraftChallenge}'s answer: a one-time server id for Mojang's session join. */
+export interface MinecraftChallenge {
+  /** 40 hex characters: pass it unchanged as the server id of Mojang's session join, then to `signInWithMinecraft`. */
+  serverId: string;
+  /** ISO-8601 UTC; the server id is refused after it (two minutes). */
+  expiresAt: string;
+}
+
+/** A document the player accepted in game, at the version they saw. */
+export interface AcceptedLegalDocument {
+  documentId: string;
+  version: string;
+}
+
+/** {@link PortalAPI.signInWithMinecraft}'s input. */
+export interface MinecraftSignInParams {
+  /** The app {@link PortalAPI.minecraftChallenge} was asked for. */
+  appId: string;
+  /** The Minecraft account name the client is signed in with. */
+  username: string;
+  /** The challenge's server id, after the client joined it through Mojang's session service. */
+  serverId: string;
+  /** From the age screen: `YYYY-MM-DD` (or `YYYY-MM`); only the age bracket is kept. */
+  birthDate: string;
+  /** ISO 3166-1 alpha-2. */
+  country: string;
+  /** A player under 18 confirmed a parent or guardian agreed; required true under 18. */
+  parentalConfirmation?: boolean;
+  /**
+   * Every document `auth.playerLegalDocuments()` and `auth.appRequiredDocuments(appId)` name,
+   * at those versions, which the player accepted in game (recorded with method `IN_GAME`).
+   */
+  acceptedDocuments: AcceptedLegalDocument[];
+}
+
+const MinecraftChallengeDocument = parse(
+  `mutation MinecraftChallenge($appId: BigInt!) { minecraftChallenge(appId: $appId) { serverId expiresAt } }`,
+) as TypedDocumentNode<{ minecraftChallenge: MinecraftChallenge }, { appId: string }>;
+
+const SignInWithMinecraftDocument = parse(
+  `mutation SignInWithMinecraft($input: SignInWithMinecraftInput!) { signInWithMinecraft(input: $input) { ${APP_TOKEN_FIELDS} } }`,
+) as TypedDocumentNode<
+  { signInWithMinecraft: AppTokenResponse },
+  { input: MinecraftSignInParams }
+>;
+
 /** What every org token starts with: an organization's server credential, never a device's. */
 const ORG_TOKEN_PREFIX = 'cko_';
 
@@ -362,12 +408,14 @@ export function isHostedSignInRequiredError(error: unknown): boolean {
 
 /**
  * `LEGAL_ACCEPTANCE_REQUIRED`: the player has not stored the current required
- * legal documents and the age-of-majority attestation, so no gameplay token is
- * issued ({@link PortalAPI.mintAppToken}, {@link PortalAPI.createAuthorizationCode},
- * {@link PortalAPI.refresh}), and a browser `auth.register` without both boxes is
- * refused. A browser game sends the player back through {@link PortalAPI.signIn},
- * where Studio's `/authorize` asks; a native client shows its own clickwrap and
- * calls `auth.recordPlayerConsents`. ck-api v2.35.0.
+ * documents (the platform's player documents, the app's own since ck-api v2.60.0,
+ * and the age-of-majority attestation while the platform asks for it), so no
+ * gameplay token is issued ({@link PortalAPI.mintAppToken},
+ * {@link PortalAPI.createAuthorizationCode}, {@link PortalAPI.refresh}), and a
+ * browser `auth.register` without the boxes is refused. A browser game sends the
+ * player back through {@link PortalAPI.signIn}, where Studio's `/authorize` asks; a
+ * native client shows its own clickwrap and calls `auth.recordPlayerConsents`.
+ * `legalAcceptanceRequiredOf` reads which documents are missing. ck-api v2.35.0.
  */
 export function isLegalAcceptanceRequiredError(error: unknown): boolean {
   const e = error as {
@@ -415,6 +463,15 @@ export class PortalAPI {
    * paid apps require an existing entitlement. Refused with
    * `LEGAL_ACCEPTANCE_REQUIRED` ({@link isLegalAcceptanceRequiredError}) until the
    * player's consents are stored (`auth.recordPlayerConsents`, ck-api v2.35.0).
+   *
+   * **The player gate (ck-api v2.60.0)** runs at every mint and refresh, in this
+   * order: `TERRITORY_NOT_SUPPORTED` (`territoryNotSupportedOf`) for a country
+   * Crowded Kingdoms does not serve; `AGE_REQUIRED` (`ageRequiredOf`) while the
+   * player's age is unknown (`auth.recordPlayerAge`); `AGE_REQUIREMENT_NOT_MET`
+   * (`ageRequirementNotMetOf`) under the app's, the country's or the platform's
+   * youngest age; then the documents. A player under 18 is also refused
+   * `SAFETY_LOG_REQUIRED` (`safetyLogRequiredOf`) in an app without the safety log.
+   * None of them is fixed by retrying.
    */
   async mintAppToken(appId: string): Promise<AppTokenResponse> {
     const data = await this.api.request(MintAppTokenDocument, {
@@ -466,7 +523,9 @@ export class PortalAPI {
    * Refused with `LEGAL_ACCEPTANCE_REQUIRED` ({@link isLegalAcceptanceRequiredError})
    * when the player's stored consents are missing or a required document has a
    * new version (ck-api v2.35.0). Retrying cannot succeed: send a browser player
-   * back through {@link signIn}, where `/authorize` asks for them.
+   * back through {@link signIn}, where `/authorize` asks for them. The player gate's
+   * other refusals ({@link mintAppToken}) apply at a refresh too: a country the
+   * platform stopped serving, or an app that raised its minimum age.
    */
   async refresh(currentServer?: CurrentServer): Promise<AppTokenResponse> {
     // NATIVE CLIENTS NAME THEIR SERVER. A Buddy drops datagrams for a token it was
@@ -496,6 +555,10 @@ export class PortalAPI {
    * A refresh is also refused with `ORG_LEGAL_ACCEPTANCE_REQUIRED`
    * ({@link orgLegalAcceptanceRequiredOf}) while the organization has not accepted the
    * current Org-Managed Players Addendum; only an admin of the organization can fix that.
+   * Since ck-api v2.60.0 the organization's server passes the player's `ageYears` and
+   * `country` to the mint, and the mint and every refresh answer the player gate's refusals
+   * ({@link mintAppToken}); a refresh only has the stored age bracket, so it is refused once
+   * that bracket is wholly below the app's youngest age.
    *
    * Refuses an org token (`cko_…`). That is the organization's server credential: it signs
    * in any of the organization's players, so a device must never hold one.
@@ -524,7 +587,10 @@ export class PortalAPI {
    * `extensions.reason` ({@link assertionRejectedOf}); resending the same assertion cannot
    * succeed, so ask the sign-in service for a new one. A valid assertion is refused with
    * `ORG_LEGAL_ACCEPTANCE_REQUIRED` ({@link orgLegalAcceptanceRequiredOf}) while the
-   * organization has not accepted the current Org-Managed Players Addendum.
+   * organization has not accepted the current Org-Managed Players Addendum, and with the
+   * player gate's refusals ({@link mintAppToken}) for the age and country it asserts: the
+   * claims `ageYears` and `country` (`ManagedPlayerAssertionClaims`, ck-api v2.60.0), which
+   * become required once the platform admits players under 18.
    */
   async exchangeManagedPlayerAssertion(params: {
     appId: string;
@@ -535,6 +601,57 @@ export class PortalAPI {
     });
     this.session.setToken(data.exchangeManagedPlayerAssertion.token);
     return data.exchangeManagedPlayerAssertion;
+  }
+
+  // ----- Minecraft sign-in (Crowded Kingdoms' own apps) ------------------------
+
+  /**
+   * Start a Minecraft sign-in: a one-time server id for the app, good for two minutes. The
+   * Minecraft client joins it through Mojang's session service as the account signed in to
+   * the game (the request a client makes to join any online-mode server), then calls
+   * {@link signInWithMinecraft}. Ask for it yourself, and never join a server id something
+   * else hands you: whoever holds a joined server id can sign in as that account.
+   *
+   * Open only to Crowded Kingdoms' own apps: any other app is refused `FORBIDDEN`, and a
+   * tier without Minecraft sign-in `FEATURE_DISABLED`. Public; rate-limited per address.
+   * ck-api v2.60.0.
+   */
+  async minecraftChallenge(appId: string): Promise<MinecraftChallenge> {
+    const data = await this.api.request(MinecraftChallengeDocument, { appId });
+    return data.minecraftChallenge;
+  }
+
+  /**
+   * Sign a Minecraft player in to one of Crowded Kingdoms' own apps, and store the app token
+   * (as {@link adoptAppToken} does). The API asks Mojang whether `username` joined with the
+   * challenge's `serverId` and admits the player only on a yes; the player is an org-managed
+   * player of the app's organization, identified by its Minecraft account, and refreshes
+   * with {@link refresh}. Public. ck-api v2.60.0.
+   *
+   * Refusals: `MINECRAFT_VERIFICATION_FAILED` (`minecraftVerificationFailedOf`, with the
+   * reason: start again from {@link minecraftChallenge}), `MINECRAFT_VERIFICATION_UNAVAILABLE`
+   * (`minecraftVerificationUnavailableOf`: Mojang did not answer; retry shortly), the player
+   * gate's ({@link mintAppToken}), `LEGAL_ACCEPTANCE_REQUIRED` when `acceptedDocuments` misses
+   * one (`legalAcceptanceRequiredOf` lists them), and `ORG_LEGAL_ACCEPTANCE_REQUIRED`.
+   */
+  async signInWithMinecraft(params: MinecraftSignInParams): Promise<AppTokenResponse> {
+    const input: MinecraftSignInParams = {
+      appId: params.appId,
+      username: params.username,
+      serverId: params.serverId,
+      birthDate: params.birthDate,
+      country: params.country,
+      acceptedDocuments: params.acceptedDocuments.map((doc) => ({
+        documentId: doc.documentId,
+        version: doc.version,
+      })),
+      ...(params.parentalConfirmation !== undefined
+        ? { parentalConfirmation: params.parentalConfirmation }
+        : {}),
+    };
+    const data = await this.api.request(SignInWithMinecraftDocument, { input });
+    this.session.setToken(data.signInWithMinecraft.token);
+    return data.signInWithMinecraft;
   }
 
   // ----- Consent + connected apps ------------------------------------------

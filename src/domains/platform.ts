@@ -1,6 +1,13 @@
 import { parse } from 'graphql';
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
 import type { GraphQLClient } from '../client.js';
+import {
+  TerritoryPoliciesDocument,
+  type TerritoryPoliciesQuery,
+} from '../generated/graphql.js';
+
+/** One country Crowded Kingdoms lists ({@link PlatformAPI.territoryPolicies}). */
+export type TerritoryPolicyRecord = TerritoryPoliciesQuery['territoryPolicies'][number];
 
 /**
  * Public platform discovery returned by {@link PlatformAPI.config}: how SDKs
@@ -65,5 +72,19 @@ export class PlatformAPI {
   async config(): Promise<PlatformConfig> {
     const data = await this.api.request(PlatformConfigDocument, {});
     return data.platformConfig;
+  }
+
+  /**
+   * The countries Crowded Kingdoms lists, by ISO 3166-1 alpha-2 `countryCode`: `status`
+   * `blocked` for one it does not serve (sign-up and play are refused there with
+   * `TERRITORY_NOT_SUPPORTED`, by the country a player gives or connects from), and `open`
+   * with a `minAge` above the platform's for the others it lists. A country not listed is
+   * open at the platform's youngest age. **Public**, so a sign-up form can tell a player
+   * before an account exists that the service is not available in their country. Do not show
+   * the ages: a sign-up screen names none. ck-api v2.60.0.
+   */
+  async territoryPolicies(): Promise<TerritoryPolicyRecord[]> {
+    const data = await this.api.request(TerritoryPoliciesDocument, {});
+    return data.territoryPolicies;
   }
 }

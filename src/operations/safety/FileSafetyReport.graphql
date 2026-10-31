@@ -1,0 +1,6 @@
+mutation FileSafetyReport($input: FileSafetyReportInput!) {
+  fileSafetyReport(input: $input) {
+    reportId
+    filedAt
+  }
+}

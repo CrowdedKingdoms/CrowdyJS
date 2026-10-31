@@ -13,6 +13,14 @@ export type Scalars = {
   DateTime: { input: string; output: string; }
 };
 
+/** A document the player accepted: its id and the version they saw. */
+export type AcceptedDocumentInput = {
+  /** The document id, as playerLegalDocuments or appRequiredDocuments name it. */
+  documentId: Scalars['String']['input'];
+  /** The version the player accepted. */
+  version: Scalars['String']['input'];
+};
+
 /** A platform-wide block on an account, set by a super-admin. While it holds, every sign-in and every authenticated request is refused with ACCOUNT_BLOCKED, on CK and on Crowd Altar, and every session, realtime connection and ck-exec socket the account had was ended when it was set. The last block stays readable after it is lifted or lapses. */
 export type AccountBlock = {
   __typename?: 'AccountBlock';
@@ -922,6 +930,8 @@ export type App = {
   deploymentTarget: Scalars['String']['output'];
   /** Short plain-text description shown in listings; also matched by the marketplace free-text filter. */
   description: Maybe<Scalars['String']['output']>;
+  /** The youngest age the app admits now: the higher of minPlayerAge and the platform's minimum (18 until players 13 and over are admitted, then 13). A player's country can require more (territoryPolicies); younger players are refused AGE_REQUIREMENT_NOT_MET at mint. */
+  effectiveMinPlayerAge: Scalars['Int']['output'];
   /** Resolved game-api base URL for SDK/runtime calls: the per-tenant URL for dedicated apps, or the shared platform URL for shared apps. Null for legacy or not-yet-deployed apps. */
   gameApiUrl: Maybe<Scalars['String']['output']>;
   /** Player user ids allowed to approve grid claim requests in "approval" mode. When empty, approval falls back to org staff holding manage_compute. */
@@ -936,18 +946,26 @@ export type App = {
   managedPlayerModsEnabled: Scalars['Boolean']['output'];
   /** Opaque JSON-encoded string of marketplace media (cover image URL, screenshots, long description, etc.). Stored internally as JSONB; clients must JSON.parse on read and JSON.stringify on write. Null/"{}" when unset. */
   metadata: Maybe<Scalars['String']['output']>;
+  /** The youngest age the app admits, 13 to 18, when it asks more than the platform's minimum; null for the platform's minimum. Set with updateApp (manage_apps). */
+  minPlayerAge: Maybe<Scalars['Int']['output']>;
   /** Human-readable display name of the app. */
   name: Scalars['String']['output'];
   /** The organization that owns this app. Null if the owning org cannot be found. */
   org: Maybe<Organization>;
   /** Numeric id of the organization that owns this app. */
   orgId: Scalars['BigInt']['output'];
+  /** What the safety log records for this app right now, for the notice and the recording indicator a client shows players. Readable with the app's own app token (app(appId)). */
+  recording: AppRecording;
   /** OAuth-style redirect-URI allow-list for the portal handoff. A portal authorization code’s redirect_uri must match one of these by origin; empty disallows browser portal entry to this app. */
   redirectUris: Array<Scalars['String']['output']>;
   /** Whether replay logging is on: the realtime servers record every client message they accept for this app, searchable with inputLogSessions and readable with inputLogMessages, and billed as stored input logs. False (the default) records nothing ("No replication logging"). Set with updateApp (manage_apps); turning it on needs a wallet that covers the projected cost of one retention period, or a billing-exempt org. */
   replayLoggingEnabled: Scalars['Boolean']['output'];
-  /** Whether replay logging records the app's voice, webcam video and channel audio messages too. True (the default) records them with every other message; false leaves them out of the input log while everything else is still recorded. Applies only while replayLoggingEnabled is on. Set with updateApp (manage_apps). */
+  /** Whether replay logging records the app's voice, webcam video and channel audio messages too: true when either replayLoggingRecordsVoice or replayLoggingRecordsVideo is (the realtime servers record both media while this is true, until they read the two separately). Setting it sets both. Applies only while replayLoggingEnabled is on. Set with updateApp (manage_apps). */
   replayLoggingRecordsMedia: Scalars['Boolean']['output'];
+  /** Whether replay logging records the app's webcam video. True by default. Set with updateApp (manage_apps). */
+  replayLoggingRecordsVideo: Scalars['Boolean']['output'];
+  /** Whether replay logging records the app's voice and channel audio. True by default. Set with updateApp (manage_apps). */
+  replayLoggingRecordsVoice: Scalars['Boolean']['output'];
   /**
    * Reserved realtime (UDP) capacity in bytes/s for shared apps. Superseded by reservedUdpBytesPerSec.
    * @deprecated Renamed 2026-09-01 when reservations split by traffic type. Use reservedUdpBytesPerSec; this returns the same value for one release.
@@ -1181,6 +1199,29 @@ export type AppPlayerUsageRow = {
   computeUnits: Scalars['BigInt']['output'];
   /** The player (grid owner). */
   userId: Scalars['BigInt']['output'];
+};
+
+/** What an app's safety log (replay logging) records now. A client shows players a notice before they speak or appear on camera while voice or video is recorded, and an indicator while it is. */
+export type AppRecording = {
+  __typename?: 'AppRecording';
+  /** Whether the safety log is on (App.replayLoggingEnabled): the app's client messages are recorded, text chat and direct messages included. */
+  enabled: Scalars['Boolean']['output'];
+  /** Whether webcam video is recorded, by the same rule as voice. */
+  video: Scalars['Boolean']['output'];
+  /** Whether voice and channel audio are recorded. Until every realtime server records voice and video separately (the release that reads replayLoggingRecordsVoice and replayLoggingRecordsVideo), either switch records both media, so this reads true whenever either is on. */
+  voice: Scalars['Boolean']['output'];
+};
+
+/** One document an app requires its players to accept. */
+export type AppRequiredDocumentInput = {
+  /** 1-64 lower-case letters, digits and hyphens, unique in the app and not one of the platform's own ids (player-terms, game-terms, ...). */
+  documentId: Scalars['String']['input'];
+  /** Title shown to players, 1-200 characters. */
+  title: Scalars['String']['input'];
+  /** https URL where players read the document. */
+  url: Scalars['String']['input'];
+  /** The version players must accept, 1-128 of letters, digits and . _ : + - (a date is usual: rules-2026-11-01). Changing it asks every player of the app again. */
+  version: Scalars['String']['input'];
 };
 
 /** The app's runtime gate as a player's client may read it. When status is not ACTIVE the app's realtime traffic and hubs are paused: replication delivers nothing and refuses sends with APP_PAUSED, and hub calls are refused. Clients should tell the player the world is paused rather than show an empty one. Readable with the player's own app token; carries no billing figures. */
@@ -2125,6 +2166,55 @@ export enum CodeAdmissionSubjectKind {
   Org = 'ORG'
 }
 
+/** What the player picked for each setting, before policy caps it; null is the default, EVERYONE. */
+export type CommChoices = {
+  __typename?: 'CommChoices';
+  /** The choice for whose video the player sees. */
+  videoReceive: Maybe<CommScope>;
+  /** The choice for whom the player’s video reaches. */
+  videoSend: Maybe<CommScope>;
+  /** The choice for whose voice the player hears. */
+  voiceReceive: Maybe<CommScope>;
+  /** The choice for whom the player’s voice reaches. */
+  voiceSend: Maybe<CommScope>;
+};
+
+/** Who a medium reaches (send) or is heard from (receive): OFF nobody; CONTACTS only the player’s accepted contacts in the app (myContacts), and on the send side only players who have the sender as a contact too; EVERYONE anyone the app’s own rules allow. */
+export enum CommScope {
+  Contacts = 'CONTACTS',
+  Everyone = 'EVERYONE',
+  Off = 'OFF'
+}
+
+/** A player’s voice and video settings in one app. The four scopes are the EFFECTIVE ones, which the realtime servers enforce on both sending and receiving: the player’s choice, never more than policy allows. An adult may choose anything (EVERYONE by default). For a player under 18 each medium is OFF until a parent consents to it (requestParentalConsent), and then at most CONTACTS. A block always wins: nothing passes between two players while either has blocked the other. */
+export type CommSettings = {
+  __typename?: 'CommSettings';
+  /** The app. */
+  appId: Scalars['BigInt']['output'];
+  /** What the player picked. */
+  choices: CommChoices;
+  /** Whether the player is under 18 (its age bracket is 13_15 or 16_17): every scope is capped at CONTACTS and each medium needs a parent’s consent. */
+  isMinor: Scalars['Boolean']['output'];
+  /** When the settings were last written; null before the player’s first token for the app. */
+  updatedAt: Maybe<Scalars['DateTime']['output']>;
+  /** The most video may be now, by the same rule as voiceAllowed. */
+  videoAllowed: CommScope;
+  /** Whether a parent has consented to video in this app. */
+  videoConsent: Scalars['Boolean']['output'];
+  /** Whose video the player sees. */
+  videoReceive: CommScope;
+  /** Whom the player’s video reaches. */
+  videoSend: CommScope;
+  /** The most voice may be now: EVERYONE for an adult; for a player under 18, OFF until a parent consents to voice, then CONTACTS. */
+  voiceAllowed: CommScope;
+  /** Whether a parent has consented to voice in this app. */
+  voiceConsent: Scalars['Boolean']['output'];
+  /** Whose voice the player hears. */
+  voiceReceive: CommScope;
+  /** Whom the player’s voice reaches. */
+  voiceSend: CommScope;
+};
+
 /** The result of completeGamePublish. */
 export type CompleteGamePublishResult = {
   __typename?: 'CompleteGamePublishResult';
@@ -2152,6 +2242,29 @@ export type ConnectionPageInfo = {
   /** Opaque cursor of the first edge in this page. */
   startCursor: Maybe<Scalars['String']['output']>;
 };
+
+/** A contact request waiting for an answer. */
+export type ContactRequest = {
+  __typename?: 'ContactRequest';
+  /** When it was made. */
+  createdAt: Scalars['DateTime']['output'];
+  /** Who asked whom. */
+  direction: ContactRequestDirection;
+  /** The other player. */
+  userId: Scalars['BigInt']['output'];
+};
+
+/** INCOMING: the other player asked you (acceptContact or removeContact answers it). OUTGOING: you asked them (removeContact cancels it). */
+export enum ContactRequestDirection {
+  Incoming = 'INCOMING',
+  Outgoing = 'OUTGOING'
+}
+
+/** PENDING: asked and not yet accepted. ACCEPTED: both players are each other’s contacts. */
+export enum ContactState {
+  Accepted = 'ACCEPTED',
+  Pending = 'PENDING'
+}
 
 /** Input for creating a new app access tier. */
 export type CreateAccessTierInput = {
@@ -4116,6 +4229,22 @@ export type ExecVersion = {
   version: Scalars['Int']['output'];
 };
 
+/** A report about another player of the app. */
+export type FileSafetyReportInput = {
+  /** The app. */
+  appId: Scalars['BigInt']['input'];
+  /** What happened, in the reporter’s words (at most 1,000 characters). */
+  details?: InputMaybe<Scalars['String']['input']>;
+  /** When it happened (within the past year). The report covers both players’ recorded sessions from 15 minutes before this to now. */
+  occurredAt: Scalars['DateTime']['input'];
+  /** Why. */
+  reason: SafetyReportReason;
+  /** The reported player’s actor id, if the client knows it: the 32-character id the realtime wire uses, in hex digits as the SDKs make them. */
+  reportedActorUuid?: InputMaybe<Scalars['String']['input']>;
+  /** The player reported. */
+  reportedUserId: Scalars['BigInt']['input'];
+};
+
 /** An org's free shared app slot quota usage. */
 export type FreeAppQuota = {
   __typename?: 'FreeAppQuota';
@@ -4855,6 +4984,27 @@ export type InviteOrgMemberInput = {
   userId: Scalars['BigInt']['input'];
 };
 
+/** How a player accepted documents: CLICKWRAP on a Crowded Kingdoms page or an SDK sign-up form, IN_GAME on the app’s own screen (the Minecraft client mod, for example). */
+export enum LegalAcceptanceMethod {
+  Clickwrap = 'CLICKWRAP',
+  InGame = 'IN_GAME'
+}
+
+/** A document players (or developers) accept: its id, the version currently required, its title and where to read it. appId is set for an app’s own document and null for the platform’s. */
+export type LegalDocument = {
+  __typename?: 'LegalDocument';
+  /** The app whose own document this is (BigInt as a decimal string); null for a platform document. */
+  appId: Maybe<Scalars['BigInt']['output']>;
+  /** Stable id, such as 'player-terms' or an app's 'rules'. */
+  documentId: Scalars['String']['output'];
+  /** Title to show the player. */
+  title: Scalars['String']['output'];
+  /** https URL where the document can be read. */
+  url: Scalars['String']['output'];
+  /** The version currently required, usually the page’s date. A new version asks every player again at their next mint. */
+  version: Scalars['String']['output'];
+};
+
 /** A legal hold an operator set on an organization or on one account. While it applies, deleting a managed player it covers is refused with LEGAL_HOLD, a player’s own account deletion closes the account but keeps its content (and preserves its identity) until the hold is released, and no erasure runs. An organization’s hold covers its managed players. A released hold stays readable as the record. */
 export type LegalHold = {
   __typename?: 'LegalHold';
@@ -4969,6 +5119,15 @@ export type ManagedPlayersPage = {
   players: Array<ManagedPlayer>;
 };
 
+/** A one-time server id for signInWithMinecraft. The Minecraft client joins it through Mojang’s session service (as for any server) as the account signed in to the game, then signs in with it before expiresAt. */
+export type MinecraftChallenge = {
+  __typename?: 'MinecraftChallenge';
+  /** When the server id stops being accepted. */
+  expiresAt: Scalars['DateTime']['output'];
+  /** 40 hex characters. Pass it unchanged as the serverId of Mojang’s session join, then to signInWithMinecraft. Good once, for one app, for two minutes. */
+  serverId: Scalars['String']['output'];
+};
+
 /** Input for mintAppToken: directly mint an app-scoped gameplay token for the calling user (native/direct path, no browser redirect). */
 export type MintAppTokenInput = {
   /** Numeric id of the app to mint a confined gameplay token for. Free/open apps are auto-granted access; paid apps require an existing entitlement (else FORBIDDEN). */
@@ -4986,8 +5145,12 @@ export type MintGridTokenInput = {
 };
 
 export type MintManagedPlayerTokenInput = {
+  /** The player's age in whole years, as your organization knows it. Stored as a bracket (under_13, 13_15, 16_17, 18_plus), which hubs read and which sets a minor's defaults; a player under 13, or under the app's or the country's minimum, is refused AGE_REQUIREMENT_NOT_MET before it is created or signed in. Optional while every player is 18 or older under the Org-Managed Players Addendum (omitted, the player counts as 18_plus); required once players 13 and over are admitted (AGE_REQUIRED without it). */
+  ageYears?: InputMaybe<Scalars['Int']['input']>;
   /** The app to play: one of the org token's organization's apps. */
   appId: Scalars['BigInt']['input'];
+  /** The country the player lives in, ISO 3166-1 alpha-2 (such as US). A country Crowded Kingdoms does not serve is refused TERRITORY_NOT_SUPPORTED, and a country's own minimum age applies. Stored on the player; optional until players 13 and over are admitted, required after. */
+  country?: InputMaybe<Scalars['String']['input']>;
   /** The id your organization knows the player by (1-256 characters, no control characters). Use your own stable account id, not an email address. The first sign-in creates the player. */
   externalId: Scalars['String']['input'];
   /** Display name (at most 64 characters, none of them control, line-break or bidirectional-formatting characters). Set when the player is created; later sign-ins leave it (rename with updateManagedPlayer). */
@@ -5000,6 +5163,8 @@ export type Mutation = {
   __typename?: 'Mutation';
   /** RETIRED 2026-10-29: Crowded Kingdoms no longer hosts games and every tier runs with hosting off, so this answers CONTENT_HOSTING_DISABLED. Host your build on your own origin. Give up a STAGING publish and clear its staged objects. Requires manage_apps and a SESSION token. */
   abandonGamePublish: HostedGamePublish;
+  /** Accept another player’s contact request: both become each other’s contacts, and both players’ live sessions learn it within a second. NOT_FOUND when that player has not asked. Game plane: send the app-scoped token for this app to the app’s datacenter. */
+  acceptContact: PlayerContact;
   /** SESSION ONLY, an admin of the organization (its own admin grant: a super admin's or an operator's access does not stand in). Accept the Org-Managed Players Addendum on the organization's behalf, the version orgManagedPlayerSettings names as termsVersion (read it at termsUrl). Until the organization has accepted the current version, its managed players are neither created nor signed in (ORG_LEGAL_ACCEPTANCE_REQUIRED). A version that is not the current one is refused with CONFLICT; accepting the current one again changes nothing. Studio asks for it on the organization's Players tab. */
   acceptManagedPlayerTerms: OrgManagedPlayerSettings;
   /** Application liveness heartbeat for the authenticated user's existing actor rows in an app. Refreshes actors.updated_at so the user stays host-eligible, then returns the freshly-elected host so a client can fold its poll and heartbeat into one round-trip. This is not proof of a live Buddy session and does not refresh the separate Buddy presence lease used by security-sensitive artifact/compute occupancy gates. */
@@ -5032,6 +5197,8 @@ export type Mutation = {
   beginPlayerCardSetup: PlayerCardSetup;
   /** ADMIN/DESTRUCTIVE: blocks an account platform-wide. Every session and app token it holds is revoked, its realtime sessions and ck-exec sockets (developer sessions too) end in every datacenter, its mods stop, and every later sign-in and request, on CK and on Crowd Altar, is refused with ACCOUNT_BLOCKED until `until` (or until unblockAccount when absent). Not yourself, not a super-admin. Requires a super-admin bearer game token. */
   blockAccount: AccountBlock;
+  /** Block another player of the app: nothing of any kind (voice, video, text, direct messages) passes between the two, either way, enforced by the realtime servers for every session of both within a second, and hubs can ask (players.blocked). It also removes any contact or request between them. The blocked player is not told, and its contact requests to the caller are dropped. Blocking again changes nothing. At most 1,000 blocks per app (SOCIAL_LIMIT_REACHED). NOT_FOUND for a player the app does not know. Game plane: send the app-scoped token for this app to the app’s datacenter. */
+  blockPlayer: PlayerBlock;
   /** DESTRUCTIVE. Cancels an app's paid shared-environment subscription. The app loses its paid shared slot (typically at currentPeriodEnd) and may be denied runtime once the period lapses unless a free slot covers it. Returns the updated subscription. Requires the 'manage_billing' permission on the app's org. */
   cancelSharedSubscription: AppSharedSubscription;
   /** Captures an approved PayPal order after the hosted checkout redirects back, completes the checkout (wallet credit / access grant), and returns the updated Checkout. PayPal webhooks remain a backup for idempotent reconciliation if they arrive later. Requires an authenticated user who owns the checkout. */
@@ -5084,7 +5251,7 @@ export type Mutation = {
   createOrgRole: OrgRole;
   /** Mints a new org token (it starts with `cko_`) and returns the plaintext exactly once - save it, since subsequent queries only show metadata. An org token is the organization's SERVER credential for its org-managed players: with scope 'players:mint' its server signs the org's own players in (mintManagedPlayerToken), with 'players:manage' it manages them; `appIds` limits it to some of the org's apps. Never put one in a game client or a web page: a request with an Origin header is refused. Requires the 'manage_tokens' permission on the target org (super admins bypass). */
   createOrgToken: OrgTokenWithSecret;
-  /** Creates a new organization and makes the authenticated caller its owner (with full permissions). Requires a valid session token. */
+  /** Creates a new organization and makes the authenticated caller its owner (with full permissions). Requires a valid session token. Once developers accept their own documents (developerLegalDocuments not empty), refused with LEGAL_ACCEPTANCE_REQUIRED until recordDeveloperConsents, and to an account under 18 (AGE_REQUIREMENT_NOT_MET) or with no age (AGE_REQUIRED); administering an organization or app asks the same. */
   createOrganization: Organization;
   /** Create a one-time, PKCE-bound portal authorization code (browser handoff). The Overworld identity origin (holding the SESSION token) calls this; redirect the player to the destination game carrying the code, which the game exchanges via exchangePortalCode. Requires a SESSION token. */
   createPortalAuthorizationCode: PortalAuthorizationCode;
@@ -5142,9 +5309,9 @@ export type Mutation = {
   deleteChannelRole: Scalars['Boolean']['output'];
   /** Delete a studio-created peer grid so its chunk box no longer blocks overlapping grid creation. Requires app-admin ('manage_apps'). Returns a hybrid response — on success `gridId` is populated and `error` is NO_ERROR; on failure `gridId` is null and `error` is a UDP-style error code (e.g. GRID_NOT_FOUND, CANNOT_DELETE_DEFAULT_WORLD_GRID, GRID_HAS_NESTED_CHILDREN). The open-by-default world grid and any grid that still contains nested child grids cannot be deleted. */
   deleteGrid: DeleteGridResponse;
-  /** Delete a managed player, as an account deletion is: its sessions end, its externalId and gamertag are removed, and its player-side content is erased within minutes (Crowdy Studio projects, libraries and agent sessions, mods, actors, avatars and saved state, access grants, grid claims, team and channel memberships). Usage and billing records stay; world edits stay, under the account’s now anonymous id; recorded inputs age out with the input log’s retention. Refused with LEGAL_HOLD while a legal hold covers the player or the organization: disable it instead (updateManagedPlayer), which keeps everything. Signing the same external id in again creates a new player. False when there was no such player. An org token with players:manage, or an org admin with manage_players. */
+  /** Delete a managed player, as an account deletion is: its sessions end, its externalId and gamertag are removed, and its player-side content is erased within minutes (Crowdy Studio projects, libraries and agent sessions, mods, what the app’s ck-exec hubs hold of it, actors, avatars and saved state, access grants, communication settings, contacts and blocks, grid claims, team and channel memberships). Usage and billing records stay; world edits stay, under the account’s now anonymous id; recorded inputs age out with the input log’s retention. Refused with LEGAL_HOLD while a legal hold covers the player or the organization, and an open or escalated safety report about the player sets one first: disable it instead (updateManagedPlayer), which keeps everything. Signing the same external id in again creates a new player. False when there was no such player. An org token with players:manage, or an org admin with manage_players. */
   deleteManagedPlayer: Scalars['Boolean']['output'];
-  /** DESTRUCTIVE self-service: deletes the authenticated caller's OWN account. Every session, app token, realtime connection and ck-exec socket ends; the email, password, gamertag and profile state are removed from the account; and its player-side content is erased within minutes: Crowdy Studio projects, libraries and agent sessions, mods, actors, avatars and saved state, access grants, grid claims, and team and channel memberships. Wallet, billing, usage, audit and legal records stay, and so does everything the account owns as a developer (organizations, apps, published games); world edits stay, under the account's now anonymous id; recorded inputs age out with the input log's retention. Acts only on the caller (no target argument). Requires a valid token. */
+  /** DESTRUCTIVE self-service: deletes the authenticated caller's OWN account. Every session, app token, realtime connection and ck-exec socket ends; the email, password, gamertag and profile state are removed from the account; and its player-side content is erased within minutes: Crowdy Studio projects, libraries and agent sessions, mods, what the apps' ck-exec hubs hold of it, actors, avatars and saved state, access grants, communication settings, contacts and blocks, grid claims, and team and channel memberships. An open or escalated safety report about the account puts it under a legal hold first: the account still closes, but its content and identity are kept until the report is resolved. Wallet, billing, usage, audit and legal records stay, and so does everything the account owns as a developer (organizations, apps, published games); world edits stay, under the account's now anonymous id; recorded inputs age out with the input log's retention. Acts only on the caller (no target argument). Requires a valid token. */
   deleteMyAccount: Scalars['Boolean']['output'];
   /** Deletes an organization role. Requires the 'manage_members' permission on the role's org (super admins bypass). DESTRUCTIVE: removes the role and unassigns it from all members. Returns false if the role does not exist. */
   deleteOrgRole: Scalars['Boolean']['output'];
@@ -5162,7 +5329,9 @@ export type Mutation = {
   endManagedPlayerSessions: Scalars['Boolean']['output'];
   /** OPERATOR: end the sessions and app tokens of these accounts (at most 1000), skipping any this tier admits. Returns how many had sessions ended. Refused on prod. */
   endTierAccessSessions: Scalars['Int']['output'];
-  /** Exchange an assertion your organization signed for one of its players for that player's app-scoped gameplay token (the same token mintManagedPlayerToken returns). Public: the signature is the credential, so a game client calls it directly, from a browser on your registered origin or natively. The assertion must name a registered, active key (header kid) and carry iss and aud as registered (aud defaults to ck:app:<appId>), sub (your id for the player), iat, exp at most 300 seconds after iat, and a jti never used before for this app; optionally gamertag. The player is created on its first sign-in. Refusals are ASSERTION_REJECTED with extensions.reason; a valid assertion is refused with ORG_LEGAL_ACCEPTANCE_REQUIRED until an admin of the organization has accepted the current Org-Managed Players Addendum. */
+  /** Record that an open report was submitted to NCMEC's CyberTipline, under the CyberTipline report's id: its preserved copy is kept under COMPLIANCE retention for a year from now (nobody can delete it sooner), and the reported account's legal hold, if any, for as long. Escalating it again under the same id changes nothing; under another id is CONFLICT; a resolved report cannot be escalated (BAD_REQUEST). Requires 'moderate_safety' on the app (an org role, or the org's admins); super admins bypass. Send the identity session to the app's datacenter. */
+  escalateSafetyReport: SafetyReport;
+  /** Exchange an assertion your organization signed for one of its players for that player's app-scoped gameplay token (the same token mintManagedPlayerToken returns). Public: the signature is the credential, so a game client calls it directly, from a browser on your registered origin or natively. The assertion must name a registered, active key (header kid) and carry iss and aud as registered (aud defaults to ck:app:<appId>), sub (your id for the player), iat, exp at most 300 seconds after iat, and a jti never used before for this app; optionally gamertag, and ageYears (the player's age in whole years) and country (ISO 3166-1 alpha-2), which mintManagedPlayerToken describes and which are required once players 13 and over are admitted. The player is created on its first sign-in. Refusals are ASSERTION_REJECTED with extensions.reason; a valid assertion is refused with ORG_LEGAL_ACCEPTANCE_REQUIRED until an admin of the organization has accepted the current Org-Managed Players Addendum, and with TERRITORY_NOT_SUPPORTED, AGE_REQUIRED or AGE_REQUIREMENT_NOT_MET as mintManagedPlayerToken is. */
   exchangeManagedPlayerAssertion: AppTokenResponse;
   /** Exchange a one-time portal authorization code (with the matching PKCE verifier) for an app-scoped gameplay token. Public (the code + verifier authorize the call); called by the destination game at its own origin so the game never sees the player's session token. */
   exchangePortalCode: AppTokenResponse;
@@ -5210,6 +5379,8 @@ export type Mutation = {
   execSetEnabled: ExecAppStatus;
   /** Trust one author's CLIENT halves on a grid you stand in, at the hash of their union (`authorCapabilityHash`): it covers the author's CLIENT halves there while their union is no wider, and consents to each current one at its own hash. Answers CONFLICT when the hash is not the current one. Requires access to the app. */
   execTrustAuthor: Scalars['Boolean']['output'];
+  /** Report another player of the app, with the reporter's app token for the app (game plane: send it to the app's datacenter). The report covers both players' recorded sessions (the app's safety log) from 15 minutes before occurredAt to now, and their copy, both players' identities and the reported player's last-known address are preserved for moderators. The reported player is not told. Errors: NOT_FOUND for a player the app does not know; BAD_USER_INPUT for yourself, an unknown reason, details over 1,000 characters or an occurredAt outside the past year; RATE_LIMITED after 20 reports in an hour. */
+  fileSafetyReport: SafetyReportReceipt;
   /** ADMIN/DESTRUCTIVE: revokes ALL of the target user’s sessions by deleting every game_token row, forcing re-authentication on every device. Returns true if at least one session was revoked. Requires a super-admin bearer game token (and the management API enabled). */
   forceLogoutUser: Scalars['Boolean']['output'];
   /** Operator only (is_operator). Deletes the stored deliverability rows for one address (email_status and email_events) and returns how many rows went. Exists so a verification run is not reading the previous run's events, and so an address suppressed by a bounce that has since been fixed can be given another chance. Returns 0 when there was nothing stored. */
@@ -5248,17 +5419,23 @@ export type Mutation = {
   logout: Scalars['Boolean']['output'];
   /** Ends every active session for the authenticated user: deletes every session token and every app-scoped gameplay token derived from one, so the user is signed out of the platform and of every game they had entered. Takes effect immediately — a deleted token stops authenticating on its next request rather than at its next refresh. Requires a valid session token. */
   logoutAllDevices: Scalars['Boolean']['output'];
+  /** Start a Minecraft sign-in: a one-time server id for the app, good for two minutes. The client mod joins it through Mojang's session service as the account signed in to the game (the request a client makes to join any online-mode server), then calls signInWithMinecraft. Ask for it yourself: never join a server id something else hands you. Open only to Crowded Kingdoms' own apps (FORBIDDEN otherwise; FEATURE_DISABLED on a tier without Minecraft sign-in). Public; rate-limited per address. */
+  minecraftChallenge: MinecraftChallenge;
   /** Mint a short-lived, app-scoped gameplay token for the calling user (native/direct path; no browser redirect). Requires an identity SESSION token (app tokens cannot mint). Free/open apps auto-grant access; paid apps require an existing entitlement (else FORBIDDEN). Side effect: may create an app_user_access row on the app's free default tier. */
   mintAppToken: AppTokenResponse;
   /** Mint a grid-scoped token from the app token you hold (DN-10). The result can call only a short, fixed list of gameplay fields, and each is confined to the grid: world reads and replication sends must address a chunk inside it (a send's origin; its reach follows distance), and channels must be the grid's own. refreshAppToken and logout are refused, so the token cannot widen or tear down its parent. Requires an app token (not a session token, not another grid token), and the caller must own the grid or hold run_client_code on it. */
   mintGridToken: GridTokenResponse;
-  /** ORG TOKEN ONLY. Sign one of your organization's own players in and get its app-scoped gameplay token, the same token mintAppToken returns: hand `token` (and the URLs) to the player's device, which plays with it exactly as with any app token and refreshes it with refreshAppToken. Call from your server with `Authorization: Bearer cko_...` (scope players:mint); a request with an Origin header is refused. The player is created on its first sign-in (no email, password or wallet), and each sign-in lasts `sessionTtlSeconds` (default and maximum: the org's settings): after it the device comes back to you. The app must be one of your organization's apps (and in the token's app list, if it has one). Free tiers grant access automatically; a paid tier needs grantAppAccess. Refused with ORG_LEGAL_ACCEPTANCE_REQUIRED until an admin of the organization has accepted the current Org-Managed Players Addendum. */
+  /** ORG TOKEN ONLY. Sign one of your organization's own players in and get its app-scoped gameplay token, the same token mintAppToken returns: hand `token` (and the URLs) to the player's device, which plays with it exactly as with any app token and refreshes it with refreshAppToken. Call from your server with `Authorization: Bearer cko_...` (scope players:mint); a request with an Origin header is refused. The player is created on its first sign-in (no email, password or wallet), and each sign-in lasts `sessionTtlSeconds` (default and maximum: the org's settings): after it the device comes back to you. The app must be one of your organization's apps (and in the token's app list, if it has one). Free tiers grant access automatically; a paid tier needs grantAppAccess. Refused with ORG_LEGAL_ACCEPTANCE_REQUIRED until an admin of the organization has accepted the current Org-Managed Players Addendum. Pass the player's ageYears and country: the player is refused TERRITORY_NOT_SUPPORTED in a country Crowded Kingdoms does not serve, AGE_REQUIREMENT_NOT_MET under 13 or under the app's or the country's minimum age (before it is created), and AGE_REQUIRED without an age once players 13 and over are admitted; its bracket and country are stored on it, and a refresh is refused once its bracket is wholly below the app's minimum. */
   mintManagedPlayerToken: AppTokenResponse;
   /** Create managed players ahead of their first sign-in, up to 500 a call in one write (creating a player is a cluster-wide commit, so a large import goes in batches). A player that exists is left as it is. Refused with ORG_LEGAL_ACCEPTANCE_REQUIRED until the organization has accepted the current Org-Managed Players Addendum. An org token with players:manage, or an org admin with manage_players. */
   provisionManagedPlayers: ProvisionManagedPlayersResult;
   /** Publishes an app to the shared game-api environment. Free under the org's app-slot quota (result.free = true); beyond the quota, publish still succeeds and metered usage is charged to the org wallet. Requires the 'manage_apps' permission on the app's org. Blocked when SHARED_GAME_API_URL is not configured. */
   publishAppToShared: PublishAppResult;
-  /** Store acceptance of the current required legal documents (Game Terms, API Terms, SDK Developer Terms, Free Tier and Billing Basis, Overworld Privacy Policy) and the age-of-majority attestation. Both arguments must be true; a false value stores nothing and is refused with LEGAL_ACCEPTANCE_REQUIRED. Idempotent for a version already stored. Requires a session token. Gameplay tokens stay refused until this has succeeded for the current document set. */
+  /** Store acceptance of the current developer documents (developerLegalDocuments: the API Terms, SDK Developer Terms and Free Tier and Billing Basis). acceptDeveloperTerms must be true; false stores nothing and is refused with LEGAL_ACCEPTANCE_REQUIRED. The developer documents admit adults only: an account with no age is refused AGE_REQUIRED (recordPlayerAge first) and one under 18 AGE_REQUIREMENT_NOT_MET. Idempotent. Requires a session token. */
+  recordDeveloperConsents: Scalars['Boolean']['output'];
+  /** Record the signed-in player's birth date and country, and under 18 that a parent or guardian agreed, for an account whose age is not known yet (me.ageBracket is 'unknown'). Only the year and month are kept. Refused with CONFLICT when the account already has an age, TERRITORY_NOT_SUPPORTED for a country Crowded Kingdoms does not serve (the declared one or the network's), and AGE_REQUIREMENT_NOT_MET under 13, in which case the account keeps the bracket under_13 and the answer cannot be changed by asking again. Whether the player may play a given app (its minimum age, the country's) is decided at the mint. Returns the account; read ageBracket and country. Requires a session token. */
+  recordPlayerAge: User;
+  /** Store acceptance of the platform's current player documents (playerLegalDocuments) and, with appId, of the app's own (appRequiredDocuments), recorded with the app and the method. acceptLegal must be true. attestAgeOfMajority must be true too while the platform still uses the age-of-majority attestation (the player then counts as 18 or older); once players give a birth date instead (recordPlayerAge) it is ignored. A refused call stores nothing (LEGAL_ACCEPTANCE_REQUIRED). Idempotent for a version already stored. Requires a session token. Gameplay tokens stay refused until this has succeeded for the current documents. */
   recordPlayerConsents: Scalars['Boolean']['output'];
   /** Rotate the calling app token for a fresh one (same app, extended TTL) and revoke the old. Call before the current token expires to keep playing without bouncing back through the Overworld. Allowed for app-scoped tokens; re-checks entitlement. NATIVE CLIENTS: pass `currentServer` (the ip4 + clientPort serverWithLeastClients gave you) and the new token is authorized on that same Buddy -- read `authorizedServer` on the response: when it is set, keep your UDP session and just switch tokens; when it is null, call serverWithLeastClients for a fresh placement. `authorizedServer` is null when the node is gone, draining, Full, on the wrong shard -- or when it is NearCapacity / running hot and a Ready sibling has room: a refresh is the cheapest moment to rebalance a resident, so expect to be moved occasionally under load. Without `currentServer` the new token is not known to any Buddy until you call serverWithLeastClients. */
   refreshAppToken: AppTokenResponse;
@@ -5274,6 +5451,8 @@ export type Mutation = {
   releaseLegalHold: LegalHold;
   /** Remove a member from a channel. Requires the 'manage_members' channel permission, except that any member may remove themselves. Notifies Buddy to stop routing to the removed member. Returns true if a membership was removed. */
   removeChannelMember: Scalars['Boolean']['output'];
+  /** Remove a contact, decline the other player’s request, or cancel the caller’s own: everything between the two players in the app goes, both ways. False when there was nothing. Game plane: send the app-scoped token for this app to the app’s datacenter. */
+  removeContact: Scalars['Boolean']['output'];
   /** Removes a user from an organization. Requires the 'manage_members' permission on the org (super admins bypass). DESTRUCTIVE: revokes the user's membership and role assignments in that org. Returns false if the user was not a member. */
   removeOrgMember: Scalars['Boolean']['output'];
   /** Removes a saved (vaulted) off-session payment method from the org; returns true on success. If it was the method backing auto-billing, recharges will fail until another is set up. Requires the 'manage_billing' org permission. */
@@ -5282,8 +5461,12 @@ export type Mutation = {
   removeTeamMember: Scalars['Boolean']['output'];
   /** OPERATOR: erase the player-side content of a deleted account, as a deletion does: one deleted before account erasure existed (2026-10-23), or one whose erasure stopped after its retries (its attempts start again). Refused for an account that is not deleted. A legal hold defers it. */
   requestAccountErasure: AccountErasure;
+  /** Ask another player of the app to be a contact. If they already asked the caller, both become contacts at once (ACCEPTED); asking again changes nothing. Refused while the caller has blocked them (unblockPlayer first). At most 100 requests may wait at once (SOCIAL_LIMIT_REACHED), and 1,000 contacts per app. NOT_FOUND for a player the app does not know. Game plane: send the app-scoped token for this app to the app’s datacenter. */
+  requestContact: PlayerContact;
   /** Passwordless: email a one-time magic sign-in link to the address (creates the account on first sign-in). Always reports sent=true (no account enumeration). Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited. */
   requestLoginLink: RequestLoginLinkResult;
+  /** For a player under 18: ask a parent, through the consent service (Kids Web Services), to allow one medium (VOICE or VIDEO) in this app. The service emails parentEmail; once the parent consents, the medium opens up to CONTACTS (see myCommSettings). The address goes to the service and is not stored by Crowded Kingdoms. NOT_REQUIRED for a player 18 or over, ALREADY_GRANTED if a parent has consented. Errors: PARENTAL_CONSENT_UNAVAILABLE while the service is not configured on this deployment; RATE_LIMITED after three requests in an hour. Game plane: send the app-scoped token for this app to the app’s datacenter. */
+  requestParentalConsent: ParentalConsentRequest;
   /** Starts the password-reset flow by emailing a reset link to the address. Always returns true regardless of whether the email exists (prevents account enumeration). The reset link is also the ownership-proven way an existing passwordless account adds a password. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited. */
   requestPasswordReset: Scalars['Boolean']['output'];
   /** Request to join a request-only channel (creates a pending membership a manager can approve via addChannelMember). Behaves identically to joinChannel; named for request-policy UIs. */
@@ -5294,6 +5477,8 @@ export type Mutation = {
   resendConfirmationEmail: Scalars['Boolean']['output'];
   /** Completes a password reset using the reset token and a new password. Returns true on success; throws if the token is invalid or expired. Public (the token authorizes the call); first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise). EVERY existing session for the account is revoked (and every app token minted from one): a reset is what an owner does after losing control of the account, so whoever held a session loses it. The user signs in again with the new password. */
   resetPassword: Scalars['Boolean']['output'];
+  /** Resolve an open report with its outcome: its preserved copy is deleted and the legal hold its reported account got on deletion, if any, is released (a deferred erasure then resumes). Resolving it again changes nothing; an escalated report cannot be resolved (BAD_REQUEST). Requires 'moderate_safety' on the app (an org role, or the org's admins); super admins bypass. Send the identity session to the app's datacenter. */
+  resolveSafetyReport: SafetyReport;
   /** Re-apply every player's tier keys that follow onto the app's world grid (today use_video_chat) and rebuild the world grid's permissions. Tier changes (grantAppAccess with a tier, updateAccessTier with permissionKeys) already do this; call it after any change made another way. Requires the 'manage_access_tiers' permission on the app; super admins bypass. */
   resyncTierGridPermissions: Scalars['Boolean']['output'];
   /** OPERATOR ONLY. Retires an organization: sets organizations.status to 'retired', stamps deleted_at, archives its apps, and writes a tombstone to org_retirements. RETIREMENT IS A STATE, NOT A DELETION — no wallet_transactions, org_billing_waivers, app_shared_usage_charges or other ledger row is altered or removed, so an auditor can still reconstruct exactly what this organization spent, with the same joins as before, indefinitely. There is no purge and no retention window, by decision rather than by omission: org ledger rows are retained forever (operator decision, 2026-08-21), so retirement is only ever a state. A retired organization's remaining wallet balance is FROZEN indefinitely by the same decision — held, not refunded and not forfeited — and the amount is recorded on the tombstone. AFTER RETIREMENT the org's API tokens stop authenticating, its members lose every org permission (super admins excepted, so this is reversible), and it is excluded from the caller's organization list — but it is still readable by id and slug, because a retired org that answers like a missing one is worse than one that says what it is. Refuses unless expectedSlug matches the org named by orgId, and refuses an organization holding money unless acknowledgeFrozenBalance is passed. Reverse it with reinstateOrganization. */
@@ -5354,6 +5539,8 @@ export type Mutation = {
   setAppGridClaimPolicy: GridClaimPolicy;
   /** Let the organization's org-managed players build and run mods (and use the Studio agent) in this app, or stop them. The organization pays for what they use: their mod compute and egress as its own compute, their project storage as the app's, their model tokens from the org wallet. Turning it off pauses their mods within a minute and refuses new builds. Requires manage_billing on the app's organization. Returns the new setting. */
   setAppManagedPlayerMods: Scalars['Boolean']['output'];
+  /** Set the documents the app's players accept before playing, replacing the list: documents not named stop being required, and a new version of one asks every player of the app again at their next mint or refresh (LEGAL_ACCEPTANCE_REQUIRED until they accept it). At most 10; ids may not reuse the platform's. Requires the 'manage_apps' permission on the app; super admins bypass. */
+  setAppRequiredDocuments: Array<LegalDocument>;
   /** Reserve capacity for a shared app. A reservation is a FLOOR, not a ceiling: the platform provisions and holds a minimum for you and does not limit what you may use beyond it. Billed monthly from the org wallet whether or not it is used; upgrades are prorated for the current month. Note that the ~1 MB/s free-tier shaping is lifted by funding a wallet, not by reserving. Requires 'manage_billing' on the app's org. */
   setAppReservedThroughput: SetAppReservedThroughputResult;
   /** Sets per-app hourly/daily spend caps (in cents) and returns the re-evaluated runtime state. Pass null for a limit to clear that cap. Exceeding a cap denies the app's runtime (runtimeDenialReason = spend_cap). Requires the 'manage_billing' permission on the app's org. */
@@ -5384,6 +5571,8 @@ export type Mutation = {
   setInitialPassword: Scalars['Boolean']['output'];
   /** OPERATOR: put an organization (and its managed players) or one account under a legal hold. While it applies, deleting a managed player it covers is refused with LEGAL_HOLD, a player’s own deletion closes the account but keeps its content and preserves its identity, and no erasure runs. */
   setLegalHold: LegalHold;
+  /** Set the caller’s voice and video choices in the app; fields left out keep their choice. The effective scopes are the choices capped by policy, so a player can only lower what it sends and receives; the change reaches its live sessions within a second. Game plane: send the app-scoped token for this app to the app’s datacenter. */
+  setMyCommSettings: CommSettings;
   /** Super-admin only. Flip users.is_operator to grant or revoke control-plane / operator access. */
   setOperator: User;
   /** OPERATOR ONLY. Sets or clears an organization billing exemption. When true, org-wallet debits and money-driven runtime denials are skipped; usage is still metered and every waived amount is written to org_billing_waivers. Does not waive player-wallet charges, failure breakers, or the per-minute compute budget. reason is required when setting true. SIDE EFFECT: re-evaluates the runtime gate for every shared app in the org, so clearing the exemption re-denies immediately instead of waiting for the next hourly tick. */
@@ -5408,12 +5597,16 @@ export type Mutation = {
   setTeamMemberRoles: GroupMember;
   /** Set who may create teams in an app and the default membership policy for new teams. Requires app-admin ('manage_apps'). Affects future team creation only, not existing teams. */
   setTeamPolicy: AppGroupPolicy;
+  /** OPERATOR ONLY. Block or open a country, or set its minimum age, with the reason on record. Every instance applies it within a minute; players already signed in there are refused at their next refresh. */
+  setTerritoryPolicy: TerritoryPolicy;
   /** SUPER ADMIN: set this tier to OBSERVE (log what would be refused) or ENFORCE. Refused on prod, where the gate is always off. */
   setTierAccessMode: TierAccessSettings;
   /** OPERATOR: grant one account access to this tier regardless of its email (a service account, an unverifiable address), optionally until a date, or clear the grant. Clearing ends its sessions if nothing else admits it. Refused on prod. */
   setUserTierAccess: UserTierAccess;
   /** Begins vaulting a card for off-session auto-billing. Returns a Stripe SetupIntent client secret the browser confirms; no charge is made here. Requires the 'manage_billing' org permission. */
   setupSharedPaymentMethod: PaymentMethodSetup;
+  /** Sign a Minecraft player in to one of Crowded Kingdoms' own apps, as a player its organization manages (no Crowded Kingdoms account): the same app token mintManagedPlayerToken returns, refreshed with refreshAppToken. ck-api asks Mojang whether `username` joined with `serverId` (minecraftChallenge) and admits the player only on a yes; the player is identified by its Minecraft account, not its name. Refusals: MINECRAFT_VERIFICATION_FAILED (extensions.reason: malformed, forged, expired, not_joined, replayed: start again from minecraftChallenge), MINECRAFT_VERIFICATION_UNAVAILABLE (Mojang did not answer; retryable), TERRITORY_NOT_SUPPORTED (the declared country or the network's), AGE_REQUIREMENT_NOT_MET (under 13, or under the app's or the country's minimum age), LEGAL_ACCEPTANCE_REQUIRED (acceptedDocuments misses one in extensions.missingDocuments), and ORG_LEGAL_ACCEPTANCE_REQUIRED for an organization that has not accepted the Org-Managed Players Addendum. The accepted documents are recorded with method IN_GAME. Public; rate-limited per address. */
+  signInWithMinecraft: AppTokenResponse;
   /** Complete a federated sign-in from the provider callback (code + state). Returns a session AuthResponse, creating/linking the account by provider identity. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise). */
   socialLoginComplete: AuthResponse;
   /** Begin a federated (social) sign-in: returns an authorizeUrl to redirect the user to and an opaque state to round-trip back to socialLoginComplete. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise). */
@@ -5434,6 +5627,8 @@ export type Mutation = {
   unbanTeamMember: Scalars['Boolean']['output'];
   /** ADMIN: lifts an account block now. Nothing is restored; the account signs in again. The last block stays readable through accountBlock. Requires a super-admin bearer game token. */
   unblockAccount: AccountBlock;
+  /** Lift a block the caller set. A contact the block removed does not come back. False when there was no such block. Game plane: send the app-scoped token for this app to the app’s datacenter. */
+  unblockPlayer: Scalars['Boolean']['output'];
   /** Unlink a federated identity from the signed-in account by identityId. Refuses to remove your last remaining sign-in method. Requires a session token. */
   unlinkIdentity: Scalars['Boolean']['output'];
   /** Lift a user's suspension (suspendAppAccess) before it lapses. A no-op for a user who is not suspended. Requires the 'manage_access_tiers' permission on the app; super admins bypass. */
@@ -5444,7 +5639,7 @@ export type Mutation = {
   updateActor: Actor;
   /** Replaces an actor’s `publicState` and/or `privateState` blobs (fields omitted from `input` are left unchanged). OWNER-EXCLUSIVE: only the actor’s owner may write (throws Unauthorized otherwise). Game-plane: requires an app token for the actor’s app (a session token or another app’s token is answered NotFound). `uuid` is the 32-character ASCII actor id; blobs are base64-encoded binary. */
   updateActorState: Actor;
-  /** Update mutable fields of an existing app (name, description, visibility, status, metadata, wildernessWritesOpen, claimOwnerKeys, replayLoggingEnabled, replayLoggingRecordsMedia); only fields present in the input are changed. Turning replayLoggingEnabled on is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet can spend at least the projected cost of keeping one retention period of the app's recent traffic (extensions.requiredMicrousd and spendableMicrousd say how much), or the org is billing-exempt; recordings already kept go on billing after it is turned off, until they age out. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility, or restore an archived app (status back to DRAFT/LIVE). Throws if the app id does not exist. */
+  /** Update mutable fields of an existing app (name, description, visibility, status, metadata, wildernessWritesOpen, claimOwnerKeys, replayLoggingEnabled, replayLoggingRecordsMedia, replayLoggingRecordsVoice, replayLoggingRecordsVideo, minPlayerAge); only fields present in the input are changed. Turning replayLoggingEnabled on is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet can spend at least the projected cost of keeping one retention period of the app's recent traffic (extensions.requiredMicrousd and spendableMicrousd say how much), or the org is billing-exempt; recordings already kept go on billing after it is turned off, until they age out. Turning it off is refused with SAFETY_LOG_REQUIRED while the app admits players under 18. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility, or restore an archived app (status back to DRAFT/LIVE). Throws if the app id does not exist. */
   updateApp: App;
   /** Updates an avatar’s mutable fields (currently `name`) and returns it. OWNER-EXCLUSIVE: only the avatar’s owner may call this (throws Unauthorized otherwise). Requires a valid game token. To change state blobs use `updateAvatarState`. */
   updateAvatar: Avatar;
@@ -5490,6 +5685,12 @@ export type Mutation = {
 export type MutationAbandonGamePublishArgs = {
   publishId: Scalars['BigInt']['input'];
   slug: Scalars['String']['input'];
+};
+
+
+export type MutationAcceptContactArgs = {
+  appId: Scalars['BigInt']['input'];
+  userId: Scalars['BigInt']['input'];
 };
 
 
@@ -5575,6 +5776,12 @@ export type MutationBeginGamePublishArgs = {
 export type MutationBlockAccountArgs = {
   reason: Scalars['String']['input'];
   until?: InputMaybe<Scalars['DateTime']['input']>;
+  userId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationBlockPlayerArgs = {
+  appId: Scalars['BigInt']['input'];
   userId: Scalars['BigInt']['input'];
 };
 
@@ -5904,6 +6111,13 @@ export type MutationEndTierAccessSessionsArgs = {
 };
 
 
+export type MutationEscalateSafetyReportArgs = {
+  appId: Scalars['BigInt']['input'];
+  ncmecReportId: Scalars['String']['input'];
+  reportId: Scalars['BigInt']['input'];
+};
+
+
 export type MutationExchangeManagedPlayerAssertionArgs = {
   input: ExchangeManagedPlayerAssertionInput;
 };
@@ -6067,6 +6281,11 @@ export type MutationExecTrustAuthorArgs = {
 };
 
 
+export type MutationFileSafetyReportArgs = {
+  input: FileSafetyReportInput;
+};
+
+
 export type MutationForceLogoutUserArgs = {
   userId: Scalars['BigInt']['input'];
 };
@@ -6156,6 +6375,11 @@ export type MutationLoginArgs = {
 };
 
 
+export type MutationMinecraftChallengeArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
 export type MutationMintAppTokenArgs = {
   input: MintAppTokenInput;
 };
@@ -6186,9 +6410,21 @@ export type MutationPublishAppToSharedArgs = {
 };
 
 
+export type MutationRecordDeveloperConsentsArgs = {
+  acceptDeveloperTerms: Scalars['Boolean']['input'];
+};
+
+
+export type MutationRecordPlayerAgeArgs = {
+  input: RecordPlayerAgeInput;
+};
+
+
 export type MutationRecordPlayerConsentsArgs = {
   acceptLegal: Scalars['Boolean']['input'];
-  attestAgeOfMajority: Scalars['Boolean']['input'];
+  appId?: InputMaybe<Scalars['BigInt']['input']>;
+  attestAgeOfMajority?: InputMaybe<Scalars['Boolean']['input']>;
+  method?: InputMaybe<LegalAcceptanceMethod>;
 };
 
 
@@ -6229,6 +6465,12 @@ export type MutationRemoveChannelMemberArgs = {
 };
 
 
+export type MutationRemoveContactArgs = {
+  appId: Scalars['BigInt']['input'];
+  userId: Scalars['BigInt']['input'];
+};
+
+
 export type MutationRemoveOrgMemberArgs = {
   idempotencyKey?: InputMaybe<Scalars['String']['input']>;
   orgId: Scalars['BigInt']['input'];
@@ -6254,8 +6496,21 @@ export type MutationRequestAccountErasureArgs = {
 };
 
 
+export type MutationRequestContactArgs = {
+  appId: Scalars['BigInt']['input'];
+  userId: Scalars['BigInt']['input'];
+};
+
+
 export type MutationRequestLoginLinkArgs = {
   input: RequestLoginLinkInput;
+};
+
+
+export type MutationRequestParentalConsentArgs = {
+  appId: Scalars['BigInt']['input'];
+  feature: ParentalConsentFeature;
+  parentEmail: Scalars['String']['input'];
 };
 
 
@@ -6281,6 +6536,13 @@ export type MutationResendConfirmationEmailArgs = {
 
 export type MutationResetPasswordArgs = {
   resetPasswordInput: ResetPasswordInput;
+};
+
+
+export type MutationResolveSafetyReportArgs = {
+  appId: Scalars['BigInt']['input'];
+  outcome: Scalars['String']['input'];
+  reportId: Scalars['BigInt']['input'];
 };
 
 
@@ -6447,6 +6709,12 @@ export type MutationSetAppManagedPlayerModsArgs = {
 };
 
 
+export type MutationSetAppRequiredDocumentsArgs = {
+  appId: Scalars['BigInt']['input'];
+  documents: Array<AppRequiredDocumentInput>;
+};
+
+
 export type MutationSetAppReservedThroughputArgs = {
   idempotencyKey?: InputMaybe<Scalars['String']['input']>;
   input: SetAppReservedThroughputInput;
@@ -6532,6 +6800,12 @@ export type MutationSetLegalHoldArgs = {
 };
 
 
+export type MutationSetMyCommSettingsArgs = {
+  appId: Scalars['BigInt']['input'];
+  input: SetCommSettingsInput;
+};
+
+
 export type MutationSetOperatorArgs = {
   userId: Scalars['BigInt']['input'];
   value: Scalars['Boolean']['input'];
@@ -6606,6 +6880,11 @@ export type MutationSetTeamPolicyArgs = {
 };
 
 
+export type MutationSetTerritoryPolicyArgs = {
+  input: SetTerritoryPolicyInput;
+};
+
+
 export type MutationSetTierAccessModeArgs = {
   mode: TierAccessStoredMode;
 };
@@ -6621,6 +6900,11 @@ export type MutationSetUserTierAccessArgs = {
 export type MutationSetupSharedPaymentMethodArgs = {
   idempotencyKey?: InputMaybe<Scalars['String']['input']>;
   orgId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationSignInWithMinecraftArgs = {
+  input: SignInWithMinecraftInput;
 };
 
 
@@ -6676,6 +6960,12 @@ export type MutationUnbanTeamMemberArgs = {
 
 
 export type MutationUnblockAccountArgs = {
+  userId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationUnblockPlayerArgs = {
+  appId: Scalars['BigInt']['input'];
   userId: Scalars['BigInt']['input'];
 };
 
@@ -7212,6 +7502,30 @@ export type PageInfo = {
   totalCount: Scalars['Int']['output'];
 };
 
+/** What a parent consents to for a player under 18 in one app: VOICE (voice chat and channel audio) or VIDEO (webcam video). */
+export enum ParentalConsentFeature {
+  Video = 'VIDEO',
+  Voice = 'VOICE'
+}
+
+/** The answer to requestParentalConsent. */
+export type ParentalConsentRequest = {
+  __typename?: 'ParentalConsentRequest';
+  /** The app. */
+  appId: Scalars['BigInt']['output'];
+  /** The medium asked for. */
+  feature: ParentalConsentFeature;
+  /** Whether a request went to the parent. */
+  status: ParentalConsentRequestStatus;
+};
+
+/** REQUESTED: the consent service emailed the parent; the medium opens (to contacts) when the parent consents. ALREADY_GRANTED: a parent has consented; nothing was sent. NOT_REQUIRED: the player is 18 or over and needs no consent; nothing was sent. */
+export enum ParentalConsentRequestStatus {
+  AlreadyGranted = 'ALREADY_GRANTED',
+  NotRequired = 'NOT_REQUIRED',
+  Requested = 'REQUESTED'
+}
+
 /** A single inbound payment-provider webhook event from the reconciliation audit log. */
 export type PaymentEventRecord = {
   __typename?: 'PaymentEventRecord';
@@ -7338,6 +7652,15 @@ export type PlayerAutoBilling = {
   /** Amount charged per auto-recharge. */
   rechargeAmountCents: Scalars['BigInt']['output'];
   /** The owning player user id. */
+  userId: Scalars['BigInt']['output'];
+};
+
+/** A player the caller blocked in the app. Nothing of any kind passes between the two, either way, while the block stands; the blocked player is not told. */
+export type PlayerBlock = {
+  __typename?: 'PlayerBlock';
+  /** When it was blocked. */
+  createdAt: Scalars['DateTime']['output'];
+  /** The blocked player. */
   userId: Scalars['BigInt']['output'];
 };
 
@@ -7504,6 +7827,34 @@ export type PlayerCodeVersion = {
   versionId: Scalars['String']['output'];
   /** Monotonic version number within the listing. */
   versionNo: Scalars['Int']['output'];
+};
+
+/** Another player in the caller’s contacts list for the app. Contacts are mutual: an accepted contact is in both players’ lists, and it is what a CONTACTS scope admits. */
+export type PlayerContact = {
+  __typename?: 'PlayerContact';
+  /** When it was accepted; null while pending. */
+  acceptedAt: Maybe<Scalars['DateTime']['output']>;
+  /** When the request was made. */
+  createdAt: Scalars['DateTime']['output'];
+  /** PENDING or ACCEPTED (myContacts lists accepted ones only). */
+  state: ContactState;
+  /** The other player (resolve its name with playerProfile). */
+  userId: Scalars['BigInt']['output'];
+};
+
+/** One player's data in one app, for an operator answering a data request. */
+export type PlayerDataExport = {
+  __typename?: 'PlayerDataExport';
+  /** The app. */
+  appId: Scalars['BigInt']['output'];
+  /** When it was assembled. */
+  exportedAt: Scalars['DateTime']['output'];
+  /** Whether every recorded input still kept is in it (false: the export stopped at 50 sessions or 20,000 inputs). */
+  inputsComplete: Scalars['Boolean']['output'];
+  /** The export, as one JSON document: `identity` (the account row), `platform` (legal acceptances, avatars, the app's grant, actors, app and avatar state, communication settings, contacts, the player's own blocks, parental consents and the reports the player filed), `recordedInputs` (its sessions in the safety log and their inputs) and `hubs` (each ck-exec hub's share, or why there is none). */
+  json: Scalars['String']['output'];
+  /** The player. */
+  userId: Scalars['BigInt']['output'];
 };
 
 /** A player's public profile: what another player's client may show (a nametag, a friends list). Carries nothing private; for your own account read `me`. */
@@ -7825,6 +8176,8 @@ export type Query = {
   appPlayerMarkupAccruedMicrousd: Scalars['BigInt']['output'];
   /** Per-player usage aggregate for an app over a trailing window (top spenders / quota utilization): the compute units each player's mods used, and what the player was charged for this app. automationUnits and compileCount are legacy and always 0 for usage since the legacy engines were removed. Requires 'view_compute_diagnostics'. */
   appPlayerUsage: Array<AppPlayerUsageRow>;
+  /** An app's own documents (its rules, an addendum), which its players accept on top of the platform's (recordPlayerConsents with the appId) before their next mint. Empty when the app requires none. Public. */
+  appRequiredDocuments: Array<LegalDocument>;
   /** Shared-environment runtime gate decision plus current hour/day billing-window usage for an app. Read this to learn why an app is not running (runtimeDenialReason). Caller must be a member of the app's org. */
   appRuntimeState: AppRuntimeState;
   /** An app's paid shared-environment subscription, or null when it has none (e.g. unpublished or on the free quota). Caller must be a member of the app's org. */
@@ -7877,6 +8230,8 @@ export type Query = {
   checkouts: CheckoutsPage;
   /** Cross-tenant payments audit across all users, orgs, and apps (newest first), with optional filtering. Restricted to super admins; requests from non-super-admins are rejected. For a caller's own history use `myCheckoutsConnection` instead. Relay cursor connection; prefer this over the offset-based checkouts. */
   checkoutsConnection: CheckoutsConnection;
+  /** Contact requests waiting in the app: INCOMING ones other players sent the caller, then OUTGOING ones it sent, newest first. Game plane: send the app-scoped token for this app to the app’s datacenter. */
+  contactRequests: Array<ContactRequest>;
   /** Operator only. The ledger invariant runs, newest first: whether the sums closed and, when they did not, which check failed and by how much. */
   cpBillingInvariantRuns: Array<BillingInvariantRun>;
   /** Operator only. Ledger-versus-provider reconciliation, one row per provider per UTC day. */
@@ -7919,6 +8274,10 @@ export type Query = {
   crowdyStudioProjects: Array<CrowdyStudioProject>;
   /** Read whether the caller has consented to their project source reaching a model provider for this app. The metered model endpoint (POST /v1/model/chat/completions) refuses with AGENT_SCOPE_DENIED until it is recorded. Requires 'use_studio_agent'. */
   crowdyStudioProviderConsent: CrowdyStudioProviderConsent;
+  /** Whether the signed-in account has accepted the current developer documents (developerLegalDocuments). False means creating or administering an organization is refused with LEGAL_ACCEPTANCE_REQUIRED until recordDeveloperConsents. Requires a session token. */
+  developerLegalAcceptance: Scalars['Boolean']['output'];
+  /** The documents a developer accepts (recordDeveloperConsents) before creating or administering an organization, at the versions required now; only an account of 18 or older may. Empty while the platform asks developers for nothing beyond the player documents. Public. */
+  developerLegalDocuments: Array<LegalDocument>;
   /** Resolves the single most-specific quota that applies to the given (tierId, appId, orgId, metric) by walking tier -> app -> org -> free-tier defaults and returning the first match; its limitValue/period describe the enforced limit. Returns null if no matching rule and no free-tier default exist for the metric. Requires the 'view_usage' permission on the most-specific scope provided: tierId or appId -> 'view_usage' on the (owning) app; orgId -> 'view_usage' on the org. A metric-only query (no scope ids) resolves the platform free-tier default and only requires an authenticated user. */
   effectiveQuota: Maybe<ServiceQuota>;
   /** Operator only (is_operator). Everything this API knows about whether an address can be emailed: its stored status, whether its domain is suppressed, and the recent SES events for it (the `send` written when the message was handed to SES, and the `delivery` / `bounce` / `complaint` that came back on the SNS webhook). */
@@ -7959,6 +8318,8 @@ export type Query = {
   execStarters: ExecStarterPack;
   /** An app's deployed ck-exec versions, newest first, and which is active. Requires the org 'view_compute_diagnostics' permission. */
   execVersions: Array<ExecVersion>;
+  /** OPERATOR: everything the platform holds about one player in one app, with its recorded inputs (while the safety log keeps them; reading them is audited) and the app's hubs' export from its ck-exec manager. Send the identity session to the app's datacenter. NOT_FOUND for an unknown user. */
+  exportPlayerData: PlayerDataExport;
   /** Reports whether a free-play window is active now, a human-readable schedule description, and the ISO-8601 start of the next window. PUBLIC: no authentication required. Takes no arguments; computed from server config and the current clock. */
   freePlayWindowInfo: FreePlayWindowInfo;
   /** Single startup payload for browser game clients: the authenticated user, server/min-client version requirements, current UDP proxy status, realtime protocol details (subprotocol + subscription name), and the spatial send limits/constants (maxReplicationDistance, maxDecayRate, sequenceNumberModulo). Requires a bearer game token. Read-only: does not open a UDP proxy session. Call this once after login to initialize a play session. */
@@ -8001,7 +8362,7 @@ export type Query = {
   hostedGamePublishes: Array<HostedGamePublish>;
   /** RETIRED 2026-10-29: Crowded Kingdoms no longer hosts games and every tier runs with hosting off, so this answers []. Host your build on your own origin. The LIVE and LISTED hosted third-party games, for the Overworld lobby and the marketplace. PUBLIC. Empty when the tier does not host third-party games. Operators see every game with allHostedGames. */
   hostedGames: Array<HostedGame>;
-  /** The recorded inputs of one session, oldest first, each exactly as the client sent it (without its authentication tail). Read from the input log by the offset ranges its index holds, so inputs past the published retention are gone even while the session is still listed. With 'manage_apps' on the app you may read any session; anyone else may read only their own, and any other session answers NOT_FOUND. Game plane: send the app-scoped token for this app to the app's datacenter. Page with `first` (default 50, max 200) and `after`, the previous page's endCursor for this same session (a cursor from another session is BAD_USER_INPUT); a page can hold fewer than `first` inputs, or none, when it stopped at its time or scan limit, so keep paging while hasNextPage is true. An operation may select this field only once. A server runs one read per user (two per app and per org) at a time; a read over that share waits for the earlier one within its own few-second deadline, and a read whose request is closed stops. Errors: INPUT_LOG_UNAVAILABLE when input logging is not configured on this deployment, or this server may not read its log (do not retry); INPUT_LOG_RATE_LIMITED (429) when the wait for an earlier read ran out or left too little time to read, and INPUT_LOG_TEMPORARILY_UNAVAILABLE (503) when the log cannot be read just now, both with extensions.retryable: retry shortly with the same cursor. A read whose request closed stops as INPUT_LOG_READ_ABORTED (499), which nobody receives. */
+  /** The recorded inputs of one session, oldest first, each exactly as the client sent it (without its authentication tail). Read from the input log by the offset ranges its index holds, so inputs past the published retention are gone even while the session is still listed. With 'manage_apps' on the app you may read any session; with 'moderate_safety' (a moderator) only the sessions an open or escalated safety report covers (SafetyReport.sessions); anyone else may read only their own, and any other session answers NOT_FOUND. Every read of another player's session is audited. Game plane: send the app-scoped token for this app to the app's datacenter. Page with `first` (default 50, max 200) and `after`, the previous page's endCursor for this same session (a cursor from another session is BAD_USER_INPUT); a page can hold fewer than `first` inputs, or none, when it stopped at its time or scan limit, so keep paging while hasNextPage is true. An operation may select this field only once. A server runs one read per user (two per app and per org) at a time; a read over that share waits for the earlier one within its own few-second deadline, and a read whose request is closed stops. Errors: INPUT_LOG_UNAVAILABLE when input logging is not configured on this deployment, or this server may not read its log (do not retry); INPUT_LOG_RATE_LIMITED (429) when the wait for an earlier read ran out or left too little time to read, and INPUT_LOG_TEMPORARILY_UNAVAILABLE (503) when the log cannot be read just now, both with extensions.retryable: retry shortly with the same cursor. A read whose request closed stops as INPUT_LOG_READ_ABORTED (499), which nobody receives. */
   inputLogMessages: InputLogMessageConnection;
   /** Recorded client sessions of an app with replay logging on (App.replayLoggingEnabled), newest first. With 'manage_apps' on the app you see every session and may filter by userId; anyone else sees only their own, and asking for another user's is FORBIDDEN. Game plane: send the app-scoped token for this app to the app's datacenter. Page with `first` (default 50, max 200) and `after`. INPUT_LOG_UNAVAILABLE when input logging is not configured on this deployment. */
   inputLogSessions: InputLogSessionConnection;
@@ -8029,12 +8390,18 @@ export type Query = {
   myAuthorizedApps: Array<AppAuthorizationGrant>;
   /** Lists all avatars owned by the authenticated user, including full `publicState` and `privateState` (the caller is always the owner here). Requires a valid bearer game token; takes no arguments. State blobs are base64-encoded binary. Use `userAvatars` to view another user’s avatars (private state is stripped for non-owners). */
   myAvatars: Array<AvatarDto>;
+  /** The players the caller blocked in the app, most recent first (at most 1,000). Game plane: send the app-scoped token for this app to the app’s datacenter. */
+  myBlocks: Array<PlayerBlock>;
   /** The caller's channels in an app, with their roles and effective channel permissions (e.g. whether they hold send_messages). Use this to discover which channels the current user can read/post in. */
   myChannels: Array<GroupMembership>;
   /** Lists the authenticated caller's own checkouts (newest first), across every org and app. Use this for a self-service payment history; use `checkouts` for the cross-tenant super-admin view. Requires an authenticated user. */
   myCheckouts: CheckoutsPage;
   /** Lists the authenticated caller's own checkouts (newest first), across every org and app. Use this for a self-service payment history; use `checkoutsConnection` for the cross-tenant super-admin view. Requires an authenticated user. Relay cursor connection; prefer this over the offset-based myCheckouts. */
   myCheckoutsConnection: CheckoutsConnection;
+  /** The caller’s voice and video settings in the app: the effective scopes the realtime servers enforce, what the player picked, and what policy allows (a player under 18 needs a parent’s consent per medium and is capped at CONTACTS). Game plane: send the app-scoped token for this app to the app’s datacenter. */
+  myCommSettings: CommSettings;
+  /** The caller’s accepted contacts in the app, most recent first (at most 1,000). Contacts are mutual, per app, and what a CONTACTS scope admits. Game plane: send the app-scoped token for this app to the app’s datacenter. */
+  myContacts: Array<PlayerContact>;
   /**
    * Lifetime donation totals for the authenticated user, summed across every app. Requires a valid game token.
    * @deprecated Legacy donation/property-token data; these products are no longer purchasable. Retained for historical records.
@@ -8095,8 +8462,10 @@ export type Query = {
   platformConfig: PlatformConfig;
   /** The caller's player-wallet auto-recharge settings (off-session card top-up before the player gate denies for funds). */
   playerAutoBilling: PlayerAutoBilling;
-  /** Whether the signed-in account has stored the current required legal documents and the age-of-majority attestation. False means createPortalAuthorizationCode and mintAppToken will refuse with LEGAL_ACCEPTANCE_REQUIRED until recordPlayerConsents. Requires a session token. */
+  /** Whether the signed-in account has stored the platform's current player documents (playerLegalDocuments) and, with appId, the app's own (appRequiredDocuments); while the platform still asks for it, the age-of-majority attestation or a birth date too. False means createPortalAuthorizationCode and mintAppToken will refuse with LEGAL_ACCEPTANCE_REQUIRED until recordPlayerConsents. Requires a session token. */
   playerLegalAcceptance: Scalars['Boolean']['output'];
+  /** The platform's documents every player accepts before playing, at the versions required now. Show them, with an app's own (appRequiredDocuments), before recordPlayerConsents. Public. */
+  playerLegalDocuments: Array<LegalDocument>;
   /** A player's public profile (user id, gamertag, disambiguation), for a game client's nametags and lists. Requires a valid game token. Null when there is no such user. */
   playerProfile: Maybe<PlayerProfile>;
   /** Public profiles (user id, gamertag, disambiguation) for up to 100 user ids in one call, in no particular order; ids with no user are omitted. Requires a valid game token. Use it after batchLookupActors to name everyone in view at once. */
@@ -8128,6 +8497,8 @@ export type Query = {
   retiredOrganizations: Array<OrgRetirementType>;
   /** Lists all valid runtime permission keys (e.g. "access", "teleport", "update_voxel_data", "use_voice_chat", "use_video_chat") that may be assigned to an access tier permissionKeys. PUBLIC: no authentication required. Ordered by the permission bit index. */
   runtimePermissions: Array<Scalars['String']['output']>;
+  /** The app's safety reports, newest first, with open CHILD_SAFETY reports ahead of the rest; only those with the given status if one is given. At most `first` (default 50, at most 200). Requires 'moderate_safety' on the app (an org role, or the org's admins); super admins bypass. Send the identity session to the app's datacenter. */
+  safetyReports: Array<SafetyReport>;
   /** Pick a low-load game server for a native (direct-UDP) client to connect to: returns a random server from the least-loaded ~20% (by client count) of ReadyForClients servers to spread load, always CO-LOCATED with the datacenter that holds the data for this app (all rows for one app live in a single datacenter). This REFUSES rather than returning a Buddy elsewhere, because every gameplay write for the session would otherwise cross datacenters — invisible, because each write still succeeds — and the refusal tells you which of three situations you are in. If you reached the wrong datacenter (the shared entry name resolves to all of them, so this is the common case for a client that has not re-discovered) it is WRONG_DATACENTER, carrying gameApiUrl and gameApiWsUrl in extensions: reconnect there and retry, which the CrowdyJS and CrowdyCPP clients do for you. If the app’s own datacenter is not serving at all it is APP_UNAVAILABLE, deliberately with no endpoint. Only when this IS the app’s datacenter and it has no healthy co-located Buddy is it NO_LOCAL_BUDDY — also with no endpoint, because there is nowhere else to go; that one needs an operator. Requires a bearer game token; as a side effect it authorizes that token’s P2P session with the chosen Buddy so the native client’s spatial datagrams are accepted. Connect the native client to the returned ip4 and clientPort. Browser clients should instead use the UDP proxy (connectUdpProxy / udpNotifications) and do not need this. */
   serverWithLeastClients: ServerStatus;
   /** @deprecated Legacy monthly app-slot subscription catalog. New shared publishes use wallet usage billing only. */
@@ -8142,6 +8513,8 @@ export type Query = {
   teamRoles: Array<GroupRole>;
   /** List all active teams in an app (not just the caller's). */
   teams: Array<Group>;
+  /** The countries Crowded Kingdoms lists, by code: those it does not serve ('blocked': sign-up and play refused with TERRITORY_NOT_SUPPORTED, by the country a player gives or connects from) and those with a minimum age above 13. A country not listed is open at the platform's minimum. Public, so a sign-up form can say so before an account exists. */
+  territoryPolicies: Array<TerritoryPolicy>;
   /** OPERATOR: who on this tier would be refused -- counts, a page of refused accounts with what they hold, and organizations with no admitted member. Reads every account; for review, not for polling. Refused on prod. */
   tierAccessInventory: TierAccessInventory;
   /** Whether this tier is an internal environment (dev and test are: Crowded Kingdoms staff, approved contractors and test harnesses only), with a sentence for sign-in pages and the production Studio address. Public. */
@@ -8314,6 +8687,11 @@ export type QueryAppPlayerUsageArgs = {
 };
 
 
+export type QueryAppRequiredDocumentsArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
 export type QueryAppRuntimeStateArgs = {
   appId: Scalars['BigInt']['input'];
 };
@@ -8454,6 +8832,11 @@ export type QueryCheckoutsConnectionArgs = {
   after?: InputMaybe<Scalars['String']['input']>;
   filter?: InputMaybe<CheckoutFilterInput>;
   first?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryContactRequestsArgs = {
+  appId: Scalars['BigInt']['input'];
 };
 
 
@@ -8682,6 +9065,12 @@ export type QueryExecVersionsArgs = {
 };
 
 
+export type QueryExportPlayerDataArgs = {
+  appId: Scalars['BigInt']['input'];
+  userId: Scalars['BigInt']['input'];
+};
+
+
 export type QueryGameClientBootstrapArgs = {
   appId: Scalars['BigInt']['input'];
 };
@@ -8845,6 +9234,11 @@ export type QueryMyAppAccessArgs = {
 };
 
 
+export type QueryMyBlocksArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
 export type QueryMyChannelsArgs = {
   appId: Scalars['BigInt']['input'];
 };
@@ -8859,6 +9253,16 @@ export type QueryMyCheckoutsArgs = {
 export type QueryMyCheckoutsConnectionArgs = {
   after?: InputMaybe<Scalars['String']['input']>;
   first?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryMyCommSettingsArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryMyContactsArgs = {
+  appId: Scalars['BigInt']['input'];
 };
 
 
@@ -8950,6 +9354,11 @@ export type QueryPaymentEventsConnectionArgs = {
 };
 
 
+export type QueryPlayerLegalAcceptanceArgs = {
+  appId?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
+
 export type QueryPlayerProfileArgs = {
   userId: Scalars['BigInt']['input'];
 };
@@ -8994,6 +9403,13 @@ export type QueryQuotasForAppArgs = {
 
 export type QueryQuotasForOrgArgs = {
   orgId: Scalars['BigInt']['input'];
+};
+
+
+export type QuerySafetyReportsArgs = {
+  appId: Scalars['BigInt']['input'];
+  first?: InputMaybe<Scalars['Int']['input']>;
+  status?: InputMaybe<SafetyReportStatus>;
 };
 
 
@@ -9207,6 +9623,16 @@ export type RealtimeConnectionEvent = {
   status: Scalars['String']['output'];
 };
 
+/** A player’s birth date, country and (under 18) parental agreement. Kept as the year and month only. */
+export type RecordPlayerAgeInput = {
+  /** Birth date, YYYY-MM-DD (YYYY-MM is accepted too). Only the year and month are kept, and the age is counted from the last day of that month. */
+  birthDate: Scalars['String']['input'];
+  /** The country the player lives in: ISO 3166-1 alpha-2, such as US. */
+  country: Scalars['String']['input'];
+  /** True when a player under 18 confirms that a parent or guardian agreed to their account. Required true under 18; ignored at 18 or over. */
+  parentalConfirmation?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
 export type RegisterOrgSigningKeyInput = {
   /** 'EdDSA' (Ed25519), 'ES256' (P-256) or 'RS256' (RSA, 2048 bits or more). */
   algorithm: Scalars['String']['input'];
@@ -9225,14 +9651,20 @@ export type RegisterOrgSigningKeyInput = {
 };
 
 export type RegisterUserInput = {
-  /** True when the player has agreed to the current required legal documents (Game Terms, API Terms, SDK Developer Terms, Free Tier and Billing Basis, Overworld Privacy Policy). A browser signup that omits this, or sends false, is refused with LEGAL_ACCEPTANCE_REQUIRED. Calls with no Origin header may omit it; gameplay tokens stay refused until the documents are stored. */
+  /** True when the player has agreed to the platform's current player documents (playerLegalDocuments). A browser signup that omits this, or sends false, is refused with LEGAL_ACCEPTANCE_REQUIRED. Calls with no Origin header may omit it; gameplay tokens stay refused until the documents are stored. */
   acceptLegal?: InputMaybe<Scalars['Boolean']['input']>;
-  /** True when the player attests they are at least 18, or the age of majority where they live if that is higher. Same requirement as acceptLegal: required on a browser signup, optional when the request has no Origin. */
+  /** True when the player attests they are at least 18, or the age of majority where they live if that is higher. Same requirement as acceptLegal while the platform uses the attestation: required on a browser signup, optional when the request has no Origin. Ignored once the platform asks for birthDate instead. */
   attestAgeOfMajority?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Birth date, YYYY-MM-DD (YYYY-MM is accepted too); only the year and month are kept, and the age is counted from the last day of that month. Sent with country. Required on a browser signup once the platform admits players under 18 (AGE_REQUIRED without it); a request with no Origin may omit it and gives it later with recordPlayerAge. Under 13, or under the minimum age where the player is, the signup is refused with AGE_REQUIREMENT_NOT_MET and no account is made. */
+  birthDate?: InputMaybe<Scalars['String']['input']>;
+  /** The country the player lives in, ISO 3166-1 alpha-2 (such as US); required with birthDate. A country Crowded Kingdoms does not serve, declared or detected from the network address, is refused with TERRITORY_NOT_SUPPORTED before an account exists. */
+  country?: InputMaybe<Scalars['String']['input']>;
   /** Email for the new account; the confirmation email is sent here. */
   email: Scalars['String']['input'];
   /** Optional initial public gamertag (3 to 64 characters, none of them control, line-break or bidirectional-formatting characters). Can be set later via updateGamertag. */
   gamertag?: InputMaybe<Scalars['String']['input']>;
+  /** True when a player under 18 confirms that a parent or guardian agreed to their account. Required true under 18; ignored at 18 or over. */
+  parentalConfirmation?: InputMaybe<Scalars['Boolean']['input']>;
   /** Password for the new account (min 8 characters). */
   password: Scalars['String']['input'];
 };
@@ -9360,6 +9792,97 @@ export type RollbackVoxelUpdatesInput = {
   /** Id of the user (decimal string) whose edits within the window will be reverted. */
   userId: Scalars['BigInt']['input'];
 };
+
+/** Where the report’s copy into the preservation store stands. PENDING: nothing copied yet (it is retried every minute; the store may not be configured on this deployment). PARTIAL: some parts copied, the rest retried. COMPLETE: every part copied. DISCARDED: the report was resolved and its copy deleted. */
+export enum SafetyCaptureStatus {
+  Complete = 'COMPLETE',
+  Discarded = 'DISCARDED',
+  Partial = 'PARTIAL',
+  Pending = 'PENDING'
+}
+
+/** A report about a player, filed by another player (fileSafetyReport) or by the app’s hub (the node API’s safety.report). Moderators (moderate_safety on the app) read and decide it. */
+export type SafetyReport = {
+  __typename?: 'SafetyReport';
+  /** The app. */
+  appId: Scalars['BigInt']['output'];
+  /** Its copy in the preservation store. */
+  capture: SafetyReportCapture;
+  /** What the reporter wrote (at most 1,000 characters). */
+  details: Maybe<Scalars['String']['output']>;
+  /** When it was filed. */
+  filedAt: Scalars['DateTime']['output'];
+  /** The legal hold set on the reported account when it was deleted while the report was open or escalated (legalHolds). */
+  holdId: Maybe<Scalars['BigInt']['output']>;
+  /** The CyberTipline report it was escalated as. */
+  ncmecReportId: Maybe<Scalars['String']['output']>;
+  /** When the CyberTipline report was recorded. */
+  ncmecSubmittedAt: Maybe<Scalars['DateTime']['output']>;
+  /** When it happened, as the reporter said. */
+  occurredAt: Scalars['DateTime']['output'];
+  /** The moderator’s outcome, once resolved. */
+  outcome: Maybe<Scalars['String']['output']>;
+  /** Why. */
+  reason: SafetyReportReason;
+  /** The report. */
+  reportId: Scalars['BigInt']['output'];
+  /** The reported player’s actor, when the report named one. */
+  reportedActorUuid: Maybe<Scalars['String']['output']>;
+  /** Who is reported. */
+  reportedUserId: Scalars['BigInt']['output'];
+  /** Who reported. */
+  reporterUserId: Scalars['BigInt']['output'];
+  /** When it was resolved or escalated. */
+  resolvedAt: Maybe<Scalars['DateTime']['output']>;
+  /** The moderator who resolved or escalated it. */
+  resolvedBy: Maybe<Scalars['BigInt']['output']>;
+  /** The recorded sessions it covers (InputLogSession.gameTokenId): both players’ sessions from 15 minutes before it occurred to its filing. A moderator reads them with inputLogMessages while the report is open or escalated. */
+  sessions: Array<Scalars['BigInt']['output']>;
+  /** Where it stands. */
+  status: SafetyReportStatus;
+};
+
+/** What a safety report’s capture holds in the preservation store: both players’ identities, the reported player’s last-known address, the recorded inputs of the sessions the report covers, and each player’s hub data on ck-exec. Each object is kept under a legal hold while the report is open. */
+export type SafetyReportCapture = {
+  __typename?: 'SafetyReportCapture';
+  /** Bytes copied. */
+  bytes: Scalars['Float']['output'];
+  /** Objects the complete copy has. */
+  expected: Scalars['Int']['output'];
+  /** Objects copied. */
+  objects: Scalars['Int']['output'];
+  /** Until when the copy is kept under COMPLIANCE retention (an escalated report: a year from the CyberTipline submission); null while it is kept by a legal hold. */
+  retainUntil: Maybe<Scalars['DateTime']['output']>;
+  /** Where the copy stands. */
+  status: SafetyCaptureStatus;
+};
+
+/** Why a player is reported. CHILD_SAFETY reports come first in the moderation queue. */
+export enum SafetyReportReason {
+  Cheating = 'CHEATING',
+  ChildSafety = 'CHILD_SAFETY',
+  Harassment = 'HARASSMENT',
+  Hate = 'HATE',
+  Other = 'OTHER',
+  SelfHarm = 'SELF_HARM',
+  SexualContent = 'SEXUAL_CONTENT'
+}
+
+/** A filed safety report, as its reporter sees it. */
+export type SafetyReportReceipt = {
+  __typename?: 'SafetyReportReceipt';
+  /** When it was filed. */
+  filedAt: Scalars['DateTime']['output'];
+  /** The report. */
+  reportId: Scalars['BigInt']['output'];
+};
+
+/** OPEN: waiting for a moderator. RESOLVED: closed with an outcome; its preserved evidence is deleted and its account hold released. ESCALATED: reported to the CyberTipline; its evidence and its account hold are kept for a year from the submission. */
+export enum SafetyReportStatus {
+  Escalated = 'ESCALATED',
+  Open = 'OPEN',
+  Resolved = 'RESOLVED'
+}
 
 /** Create or optimistically update one private reusable personal-library file. */
 export type SaveCrowdyStudioLibraryFileInput = {
@@ -9658,6 +10181,18 @@ export type SetChannelPolicyInput = {
   maxMembers?: InputMaybe<Scalars['Int']['input']>;
 };
 
+/** The player’s choices; a field left out keeps its current choice. A choice above what policy allows is kept and takes effect only up to the cap (see CommSettings.voiceAllowed), so a player can only ever lower what it sends and receives. */
+export type SetCommSettingsInput = {
+  /** Whose video the player may see. */
+  videoReceive?: InputMaybe<CommScope>;
+  /** Whom the player’s video may reach. */
+  videoSend?: InputMaybe<CommScope>;
+  /** Whose voice the player may hear. */
+  voiceReceive?: InputMaybe<CommScope>;
+  /** Whom the player’s voice may reach. */
+  voiceSend?: InputMaybe<CommScope>;
+};
+
 /** Patch an app's Agentic Studio policy. Requires manage_compute. Omitted fields stay unchanged; all supplied authority and limits are clamped to platform policy. */
 export type SetCrowdyStudioAgentAppPolicyInput = {
   /** Replacement exact model allowlist (max 64). On an APP patch every id must already be in the platform allowlist or the whole write is refused with AGENT_POLICY_INVALID naming that list; values are never silently dropped. On the PLATFORM patch this list IS the ceiling. Empty denies all models at either layer. */
@@ -9912,6 +10447,18 @@ export type SetTeamPolicyInput = {
   maxMembers?: InputMaybe<Scalars['Int']['input']>;
 };
 
+/** An operator’s change to one country’s policy. */
+export type SetTerritoryPolicyInput = {
+  /** ISO 3166-1 alpha-2 country code. */
+  countryCode: Scalars['String']['input'];
+  /** The youngest age admitted there, 13 to 18 (default 13). */
+  minAge?: InputMaybe<Scalars['Int']['input']>;
+  /** Why, for the record (at most 500 characters). */
+  reason: Scalars['String']['input'];
+  /** 'open' or 'blocked'. */
+  status: Scalars['String']['input'];
+};
+
 /** @deprecated Legacy monthly app-slot subscription plan. New shared publishes use wallet usage billing. */
 export type SharedEnvPlan = {
   __typename?: 'SharedEnvPlan';
@@ -9930,6 +10477,24 @@ export type SharedEnvPlan = {
   priceCents: Scalars['BigInt']['output'];
   /** Plan status, e.g. 'active' (offered) or 'archived'. */
   status: Scalars['String']['output'];
+};
+
+/** A Minecraft player signing in to one of Crowded Kingdoms’ own apps (signInWithMinecraft). */
+export type SignInWithMinecraftInput = {
+  /** The documents the player accepted in game: every one playerLegalDocuments and appRequiredDocuments(appId) name, at those versions. They are recorded with method IN_GAME. */
+  acceptedDocuments: Array<AcceptedDocumentInput>;
+  /** The app (BigInt as a decimal string): the one minecraftChallenge was asked for. */
+  appId: Scalars['BigInt']['input'];
+  /** The player’s birth date, YYYY-MM-DD (YYYY-MM is accepted too), from the mod’s age screen. Only the age bracket is kept, counted from the last day of the month. */
+  birthDate: Scalars['String']['input'];
+  /** The country the player lives in: ISO 3166-1 alpha-2, such as US. */
+  country: Scalars['String']['input'];
+  /** True when a player under 18 confirms that a parent or guardian agreed. Required true under 18; ignored at 18 or over. */
+  parentalConfirmation?: InputMaybe<Scalars['Boolean']['input']>;
+  /** The serverId from minecraftChallenge, after the client joined it through Mojang’s session service. */
+  serverId: Scalars['String']['input'];
+  /** The Minecraft account name the client is signed in with (1-16 letters, digits and underscores). */
+  username: Scalars['String']['input'];
 };
 
 /** Input for sending an actor-to-actor message: a message delivered only to the single actor identified by targetUuid. It is spatially routed (the sender must know the destination actor’s chunk), but unlike normal spatial messages it is NOT broadcast to other nearby actors and has no distance/decay. */
@@ -10016,6 +10581,17 @@ export type TeleportResponse = {
   errorCode: UdpErrorCode;
   /** True when the teleport is authorized/accepted; false otherwise (inspect errorCode for the reason). */
   success: Scalars['Boolean']['output'];
+};
+
+/** A country Crowded Kingdoms lists: 'blocked' refuses its players (TERRITORY_NOT_SUPPORTED), and minAge raises the youngest age admitted there. A country not listed is open at the platform's minimum. */
+export type TerritoryPolicy = {
+  __typename?: 'TerritoryPolicy';
+  /** ISO 3166-1 alpha-2 country code, such as KR. */
+  countryCode: Scalars['String']['output'];
+  /** The youngest age admitted in the country (13 to 18); the platform's and the app's minimums still apply when higher. */
+  minAge: Scalars['Int']['output'];
+  /** 'open' or 'blocked'. */
+  status: Scalars['String']['output'];
 };
 
 export type TierAccessCount = {
@@ -10327,12 +10903,18 @@ export type UpdateAppInput = {
   description?: InputMaybe<Scalars['String']['input']>;
   /** New JSON-encoded marketplace metadata string, replacing the existing value (see App.metadata). Omit to leave unchanged. */
   metadata?: InputMaybe<Scalars['String']['input']>;
+  /** The youngest age the app admits, 13 to 18. It only ever raises the platform's minimum (18 until players 13 and over are admitted, then 13), never lowers it; younger players are refused AGE_REQUIREMENT_NOT_MET at their next mint or refresh. null returns the app to the platform's minimum. Omit to leave unchanged. */
+  minPlayerAge?: InputMaybe<Scalars['Int']['input']>;
   /** New display name (1-256 chars). Omit to leave unchanged. */
   name?: InputMaybe<Scalars['String']['input']>;
-  /** Turn replay logging on (true) or off (false): record every client message the realtime servers accept for this app (keep-alives included), kept for the input log's published retention and billed as stored input logs (input_log_storage_byte_hours, no free allowance). Turning it ON is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet can spend at least the projected cost of keeping one retention period of the app's recent traffic, or the org is billing-exempt; turning it off always succeeds, and what was already recorded goes on billing until it ages out. Recording starts and stops within about 15 seconds. Omit to leave unchanged. */
+  /** Turn replay logging (the safety log) on (true) or off (false): record every client message the realtime servers accept for this app (keep-alives included), kept for the input log's published retention and billed as stored input logs (input_log_storage_byte_hours, no free allowance). Turning it ON is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet can spend at least the projected cost of keeping one retention period of the app's recent traffic, or the org is billing-exempt. Turning it off is refused with SAFETY_LOG_REQUIRED while the app admits players under 18 (its minimum player age, or the platform's, is under 18); otherwise it succeeds, and what was already recorded goes on billing until it ages out. Recording starts and stops within about 15 seconds. Omit to leave unchanged. */
   replayLoggingEnabled?: InputMaybe<Scalars['Boolean']['input']>;
   /** With replay logging on, record the app's voice (sendAudioPacket), webcam video (sendVideoPacket) and channel audio (sendChannelAudio) too (true, the default) or leave them out of the input log (false); every other message is recorded either way. Takes effect within about 15 seconds; what was already recorded stays until it ages out. Omit to leave unchanged. */
   replayLoggingRecordsMedia?: InputMaybe<Scalars['Boolean']['input']>;
+  /** With replay logging on, record the app's webcam video (sendVideoPacket) (true, the default) or leave it out (false). Overrides replayLoggingRecordsMedia for video when both are given; replayLoggingRecordsMedia then reads true if voice or video is recorded. Omit to leave unchanged. */
+  replayLoggingRecordsVideo?: InputMaybe<Scalars['Boolean']['input']>;
+  /** With replay logging on, record the app's voice (sendAudioPacket) and channel audio (sendChannelAudio) (true, the default) or leave them out (false). Overrides replayLoggingRecordsMedia for voice when both are given; replayLoggingRecordsMedia then reads true if voice or video is recorded. Omit to leave unchanged. */
+  replayLoggingRecordsVoice?: InputMaybe<Scalars['Boolean']['input']>;
   /** New lifecycle status; set LIVE to publish, or DRAFT/LIVE to restore an archived app. Omit to leave unchanged. */
   status?: InputMaybe<AppStatus>;
   /** New visibility (PUBLIC/UNLISTED/PRIVATE). Omit to leave unchanged. */
@@ -10509,6 +11091,10 @@ export type UsageRatePeaks = {
 
 export type User = {
   __typename?: 'User';
+  /** The player's age bracket now: 'unknown' (no age given yet: recordPlayerAge), 'under_13', '13_15', '16_17' or '18_plus'. A CK account's comes from its birth month (counted from the month's last day, so it moves on that date); a managed player's from its organization. Private: null unless the caller is this user, a super-admin or an operator. */
+  ageBracket: Maybe<Scalars['String']['output']>;
+  /** The country the player declared, or its organization asserted (ISO 3166-1 alpha-2); null when none was given. Private: null unless the caller is this user, a super-admin or an operator. */
+  country: Maybe<Scalars['String']['output']>;
   /** Account creation timestamp (ISO-8601). */
   createdAt: Scalars['DateTime']['output'];
   /** Discriminator paired with `gamertag` to form a unique handle; null if unset. */

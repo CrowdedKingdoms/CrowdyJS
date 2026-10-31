@@ -1,0 +1,7 @@
+query TerritoryPolicies {
+  territoryPolicies {
+    countryCode
+    status
+    minAge
+  }
+}

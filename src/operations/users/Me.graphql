@@ -13,5 +13,7 @@ query Me {
     externalId
     userType
     isSuperAdmin
+    ageBracket
+    country
   }
 }

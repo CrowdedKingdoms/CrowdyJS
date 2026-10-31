@@ -1,0 +1,5 @@
+mutation EscalateSafetyReport($appId: BigInt!, $reportId: BigInt!, $ncmecReportId: String!) {
+  escalateSafetyReport(appId: $appId, reportId: $reportId, ncmecReportId: $ncmecReportId) {
+    ...SafetyReportFields
+  }
+}
