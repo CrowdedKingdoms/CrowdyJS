@@ -91,6 +91,11 @@ const PLATFORM_ONLY = [
   // moderate_safety, an org role, and are wrapped (client.moderation).
   'setTerritoryPolicy',
   'exportPlayerData',
+  // ck-api v2.61.0: CK's child-safety queue across apps, an operator's account erasure (a
+  // parent's request), and a parent's emailed withdrawal of consent.
+  'childSafetyReports',
+  'eraseAccount',
+  'recordParentalConsentWithdrawal',
 ];
 
 /** How the schema's descriptions say a field is for super-admins or operators only. */
@@ -157,6 +162,8 @@ test('the description rule sees the platform-only fields and not the org-admin o
     'checkouts',
     'setTerritoryPolicy',
     'exportPlayerData',
+    'childSafetyReports',
+    'recordParentalConsentWithdrawal',
   ]) {
     assert.equal(describedAs(name), true, name);
   }

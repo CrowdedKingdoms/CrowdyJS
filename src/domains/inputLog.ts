@@ -43,11 +43,15 @@ export interface InputLogPageOptions<Filter> {
  * or hosted sign-in). An identity session token is refused, and the client follows
  * the app to its datacenter like any gameplay call.
  *
- * **Who sees what.** A player reads only the sessions and inputs they sent. A holder of
- * `manage_apps` on the app reads every session and may filter by `userId`. A moderator
- * (`moderate_safety`, ck-api v2.60.0) reads with {@link messages} only the sessions an open or
+ * **Who sees what.** Every player reads the sessions and inputs they sent: on an app with
+ * the safety log, that is the player's own records (call {@link sessions} without a filter,
+ * then {@link messages} for one of them). A moderator (`moderate_safety`: an appointed
+ * moderator or the organization's admins, ck-api v2.60.0) reads only the sessions an open or
  * escalated safety report covers (`client.moderation.reports(appId)`, each report's
- * `sessions`), and every read of another player's session is audited.
+ * `sessions`; `filter.userId` narrows them). `manage_apps` reads every session and may
+ * filter by `userId` only on an app for adults (effective minimum age 18), and never a
+ * player under 18's (ck-api v2.61.0). Every read of another player's session is audited, and
+ * on an app that admits players under 18 every read is, the player's own included.
  *
  * Inputs are kept for the input log's published retention (crowdedkingdoms.com/pricing,
  * up to about an hour longer) and then deleted, so an old session can still be listed

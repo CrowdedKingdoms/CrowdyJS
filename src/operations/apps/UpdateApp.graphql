@@ -19,6 +19,7 @@ mutation UpdateApp($appId: BigInt!, $input: UpdateAppInput!) {
     }
     minPlayerAge
     effectiveMinPlayerAge
+    hasSafetyModerator
     claimOwnerKeys
     updatedAt
   }

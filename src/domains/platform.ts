@@ -79,9 +79,12 @@ export class PlatformAPI {
    * `blocked` for one it does not serve (sign-up and play are refused there with
    * `TERRITORY_NOT_SUPPORTED`, by the country a player gives or connects from), and `open`
    * with a `minAge` above the platform's for the others it lists. A country not listed is
-   * open at the platform's youngest age. **Public**, so a sign-up form can tell a player
-   * before an account exists that the service is not available in their country. Do not show
-   * the ages: a sign-up screen names none. ck-api v2.60.0.
+   * open at the platform's youngest age. Since ck-api v2.61.0 a row may be for one region of
+   * a country (`regionCode`, ISO 3166-2, such as `UA-43`; null on a country's own row): a
+   * country with a region listed is checked by region, so a connection whose region cannot be
+   * told is refused there, and an organization sends its players' `region`. **Public**, so a
+   * sign-up form can tell a player before an account exists that the service is not available
+   * where they are. Do not show the ages: a sign-up screen names none. ck-api v2.60.0.
    */
   async territoryPolicies(): Promise<TerritoryPolicyRecord[]> {
     const data = await this.api.request(TerritoryPoliciesDocument, {});

@@ -19,6 +19,7 @@ query App($appId: BigInt!) {
     }
     minPlayerAge
     effectiveMinPlayerAge
+    hasSafetyModerator
     claimOwnerKeys
     splitMode
     deploymentTarget

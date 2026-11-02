@@ -120,6 +120,35 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.25.0: appointed moderators, regions, and the consent refusal's reason
+
+**What it needs.** ck-api `v2.61.0` (cks-game-api #623, #624): `apps.app()` and `apps.update()`
+select `hasSafetyModerator`, and `platform.territoryPolicies()` selects `regionCode`; against an
+older API those fail as GraphQL validation errors. Dev runs it with players from 13 admitted.
+
+- **One change of type:** `parentalConsentUnavailableOf(err)` returns `{ reason } | null` instead
+  of a boolean (`reason`: `not_configured`, `provider_refused` or `provider_unavailable`, or null
+  from an API that does not say). `if (parentalConsentUnavailableOf(err))` works as before;
+  replace a comparison with `true`.
+- **Appointed moderators.** A player under 18 is refused `SAFETY_MODERATOR_REQUIRED`
+  (`safetyModeratorRequiredOf`, `SAFETY_MODERATOR_REQUIRED_CODE`) in an app that admits players
+  under 18 while its organization has appointed no safety moderator: a member whose own role grants
+  `moderate_safety` (an admin alone does not count). `App.hasSafetyModerator` says whether it has
+  one, for the organization's members (null for anyone else).
+- **Regions.** A country Crowded Kingdoms checks by region (Ukraine today) needs the player's
+  ISO 3166-2 region: `region` on the managed-player mint's input (`MintManagedPlayerTokenInput`)
+  and on `ManagedPlayerAssertionClaims`. Without it, or in a blocked region, the sign-in is refused
+  `TERRITORY_NOT_SUPPORTED`. `territoryPolicies()` rows carry `regionCode`.
+- **No refusal names an age** (`AGE_REQUIREMENT_NOT_MET` has no extensions), the same client is
+  refused at sign-up and `recordPlayerAge` for 24 hours after one, an account that answers
+  `recordPlayerAge` under 13 is deleted, and an org-managed player said to be under 13 is too.
+- **A player's own records.** On an app with the safety log a player reads its own sessions with
+  `inputLog.sessions(appId)` and `messages`; on an app that admits players under 18,
+  `manage_apps` reads nothing more and moderators read the sessions a report covers.
+
+The operator's `childSafetyReports`, `eraseAccount` and `recordParentalConsentWithdrawal` are not
+wrapped. The schema is cks-game-api's at `dev/v2.61.0`.
+
 ## 18.24.0: the teen safety program
 
 No breaking change: every existing call takes what it took. **What it needs.** ck-api `v2.60.0`

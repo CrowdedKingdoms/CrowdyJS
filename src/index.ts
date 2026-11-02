@@ -47,7 +47,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '18.24.0';
+export const VERSION = '18.25.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -203,6 +203,7 @@ export {
   AGE_REQUIREMENT_NOT_MET_CODE,
   TERRITORY_NOT_SUPPORTED_CODE,
   SAFETY_LOG_REQUIRED_CODE,
+  SAFETY_MODERATOR_REQUIRED_CODE,
   PARENTAL_CONSENT_UNAVAILABLE_CODE,
   SOCIAL_LIMIT_REACHED_CODE,
   MINECRAFT_VERIFICATION_FAILED_CODE,
@@ -212,6 +213,7 @@ export {
   ageRequirementNotMetOf,
   territoryNotSupportedOf,
   safetyLogRequiredOf,
+  safetyModeratorRequiredOf,
   parentalConsentUnavailableOf,
   socialLimitReachedOf,
   minecraftVerificationFailedOf,
@@ -243,6 +245,7 @@ export type {
   CrowdyPlayerFault,
   MinecraftVerificationFailure,
   MissingLegalDocument,
+  ParentalConsentUnavailableReason,
 } from './errors.js';
 export { moveFromError, moveFromErrors } from './datacenter-redirect.js';
 export type { DatacenterMove } from './datacenter-redirect.js';
