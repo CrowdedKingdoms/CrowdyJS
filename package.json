@@ -120,7 +120,7 @@
     "graphql": "^16.13.2",
     "graphql-ws": "^6.2.1",
     "vscode-jsonrpc": "9.0.3",
-    "vscode-languageserver-protocol": "3.18.4",
+    "vscode-languageserver-protocol": "3.18.5",
     "web-tree-sitter": "0.26.11"
   },
   "overrides": {
