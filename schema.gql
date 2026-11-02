@@ -666,6 +666,70 @@ type ActorsConnection {
   totalCount: Int
 }
 
+"""
+A legal hold an operator set on an organization or on one account. While it applies, deleting a managed player it covers is refused with LEGAL_HOLD, a player’s own account deletion closes the account but keeps its content (and preserves its identity) until the hold is released, and no erasure runs. An organization’s hold covers its managed players. A released hold stays readable as the record.
+"""
+type LegalHold {
+  """The hold."""
+  holdId: BigInt!
+  """
+  The organization held (its public id), or null for a hold on one account.
+  """
+  orgId: BigInt
+  """The account held, or null for a hold on an organization."""
+  userId: BigInt
+  """Why, as the operator wrote it."""
+  reason: String!
+  """The operator who set it."""
+  setBy: BigInt!
+  """When it was set."""
+  setAt: DateTime!
+  """The operator who released it, or null while it applies."""
+  releasedBy: BigInt
+  """When it was released, or null while it applies."""
+  releasedAt: DateTime
+  """Whether it applies now."""
+  active: Boolean!
+}
+
+"""
+An account erasure: what deleting an account erases (its player-side content) and where that stands. Usage, billing, audit and legal records stay, and so does everything the account owns as a developer.
+"""
+type AccountErasure {
+  """The deleted account."""
+  userId: BigInt!
+  """
+  PENDING (apps still to do), RUNNING (finishing), DONE, FAILED (the finish threw; it is retried) or DEFERRED_HOLD (a legal hold applies; nothing is erased until it is released).
+  """
+  status: String!
+  """
+  Why it was asked for: SELF_DELETE (the player deleted its own account), MANAGED_DELETE (its organization deleted it) or OPERATOR.
+  """
+  reason: String!
+  """
+  Who asked: user:<id>, org_token:<id>, operator:<id> (requestAccountErasure), operator:<id>: <their reason> (eraseAccount), or age_gate (an account that declared an age under 13).
+  """
+  requestedBy: String
+  """When it was asked for."""
+  requestedAt: DateTime!
+  """When it finished, or null."""
+  completedAt: DateTime
+  """Apps the account had content in."""
+  apps: Int!
+  """Of those, the apps already erased."""
+  appsDone: Int!
+  """The last error, from the finish or from an app, or null."""
+  lastError: String
+  """
+  What was erased, as JSON: rows removed per table, summed over the apps, and the account-wide rows.
+  """
+  summary: String
+  """
+  OPERATOR ONLY. While a legal hold defers the erasure, what the account row said before it was blanked (email, gamertag, external id, organization), as JSON; null otherwise.
+  """
+  preservedIdentity: String
+}
+
 type AvatarDTO {
   """Avatar id, serialized as a GraphQL ID (a numeric string)."""
   avatarId: ID!
@@ -984,11 +1048,15 @@ type SendTestEmailResult {
 }
 
 """
-A country Crowded Kingdoms lists: 'blocked' refuses its players (TERRITORY_NOT_SUPPORTED), and minAge raises the youngest age admitted there. A country not listed is open at the platform's minimum.
+A country, or a region of one, that Crowded Kingdoms lists: 'blocked' refuses its players (TERRITORY_NOT_SUPPORTED), and minAge raises the youngest age admitted there. A country not listed is open at the platform's minimum. A country with a region listed is checked by region: a connection from it whose region cannot be told is refused, and so is an organization's player there sent without a region.
 """
 type TerritoryPolicy {
   """ISO 3166-1 alpha-2 country code, such as KR."""
   countryCode: String!
+  """
+  ISO 3166-2 code of the region this rule is for, such as UA-43; null for the country's own rule.
+  """
+  regionCode: String
   """'open' or 'blocked'."""
   status: String!
   """
@@ -1430,6 +1498,10 @@ type App {
   The organization that owns this app. Null if the owning org cannot be found.
   """
   org: Organization
+  """
+  Whether the app's organization has a safety moderator: a member one of whose roles grants moderate_safety itself (the admin role alone does not count; the moderator is appointed) and who is not deleted, blocked, banned from the organization or a minor. An app that admits players under 18 needs one, or its minors' sign-ins are refused SAFETY_MODERATOR_REQUIRED (the same check). Null unless you are a member of the app's organization (or a super admin).
+  """
+  hasSafetyModerator: Boolean
   """
   Whether the organization lets its org-managed players build and run mods (and use the Studio agent) in this app, paying for their mod compute, egress, storage and model tokens itself. False by default, and false on a tier that does not serve org-managed players. Set with setAppManagedPlayerMods (manage_billing). Players with a Crowded Kingdoms account are unaffected.
   """
@@ -6804,68 +6876,6 @@ type CrowdyStudioModelUsage {
 }
 
 """
-A legal hold an operator set on an organization or on one account. While it applies, deleting a managed player it covers is refused with LEGAL_HOLD, a player’s own account deletion closes the account but keeps its content (and preserves its identity) until the hold is released, and no erasure runs. An organization’s hold covers its managed players. A released hold stays readable as the record.
-"""
-type LegalHold {
-  """The hold."""
-  holdId: BigInt!
-  """
-  The organization held (its public id), or null for a hold on one account.
-  """
-  orgId: BigInt
-  """The account held, or null for a hold on an organization."""
-  userId: BigInt
-  """Why, as the operator wrote it."""
-  reason: String!
-  """The operator who set it."""
-  setBy: BigInt!
-  """When it was set."""
-  setAt: DateTime!
-  """The operator who released it, or null while it applies."""
-  releasedBy: BigInt
-  """When it was released, or null while it applies."""
-  releasedAt: DateTime
-  """Whether it applies now."""
-  active: Boolean!
-}
-
-"""
-An account erasure: what deleting an account erases (its player-side content) and where that stands. Usage, billing, audit and legal records stay, and so does everything the account owns as a developer.
-"""
-type AccountErasure {
-  """The deleted account."""
-  userId: BigInt!
-  """
-  PENDING (apps still to do), RUNNING (finishing), DONE, FAILED (the finish threw; it is retried) or DEFERRED_HOLD (a legal hold applies; nothing is erased until it is released).
-  """
-  status: String!
-  """
-  Why it was asked for: SELF_DELETE (the player deleted its own account), MANAGED_DELETE (its organization deleted it) or OPERATOR.
-  """
-  reason: String!
-  """Who asked: user:<id>, org_token:<id> or operator:<id>."""
-  requestedBy: String
-  """When it was asked for."""
-  requestedAt: DateTime!
-  """When it finished, or null."""
-  completedAt: DateTime
-  """Apps the account had content in."""
-  apps: Int!
-  """Of those, the apps already erased."""
-  appsDone: Int!
-  """The last error, from the finish or from an app, or null."""
-  lastError: String
-  """
-  What was erased, as JSON: rows removed per table, summed over the apps, and the account-wide rows.
-  """
-  summary: String
-  """
-  OPERATOR ONLY. While a legal hold defers the erasure, what the account row said before it was blanked (email, gamertag, external id, organization), as JSON; null otherwise.
-  """
-  preservedIdentity: String
-}
-
-"""
 What the player picked for each setting, before policy caps it; null is the default, EVERYONE.
 """
 type CommChoices {
@@ -6974,14 +6984,28 @@ type PlayerBlock {
   createdAt: DateTime!
 }
 
-"""The answer to requestParentalConsent."""
-type ParentalConsentRequest {
+"""
+The answer to recordParentalConsentWithdrawal: the consent it ended, if one was held, and the player’s communication settings recomputed after it.
+"""
+type ParentalConsentWithdrawal {
   """The app."""
   appId: BigInt!
-  """The medium asked for."""
+  """The player."""
+  userId: BigInt!
+  """The medium the parent withdrew."""
   feature: ParentalConsentFeature!
-  """Whether a request went to the parent."""
-  status: ParentalConsentRequestStatus!
+  """
+  True when a consent was held and has now ended; false when none was held (nothing changed but the recompute).
+  """
+  withdrawn: Boolean!
+  """
+  When the consent ended (now, when withdrawn is true); null when none was ever held.
+  """
+  revokedAt: DateTime
+  """
+  The player’s settings in the app after the recompute, which the realtime servers read.
+  """
+  settings: CommSettings!
 }
 
 """
@@ -6990,6 +7014,16 @@ What a parent consents to for a player under 18 in one app: VOICE (voice chat an
 enum ParentalConsentFeature {
   VOICE
   VIDEO
+}
+
+"""The answer to requestParentalConsent."""
+type ParentalConsentRequest {
+  """The app."""
+  appId: BigInt!
+  """The medium asked for."""
+  feature: ParentalConsentFeature!
+  """Whether a request went to the parent."""
+  status: ParentalConsentRequestStatus!
 }
 
 """
@@ -7137,7 +7171,7 @@ scalar DateTime
 
 type Query {
   """
-  Recorded client sessions of an app with replay logging on (App.replayLoggingEnabled), newest first. With 'manage_apps' on the app you see every session and may filter by userId; anyone else sees only their own, and asking for another user's is FORBIDDEN. Game plane: send the app-scoped token for this app to the app's datacenter. Page with `first` (default 50, max 200) and `after`. INPUT_LOG_UNAVAILABLE when input logging is not configured on this deployment.
+  Recorded client sessions of an app with replay logging on (App.replayLoggingEnabled), newest first. On an app for adults (effective minimum age 18), 'manage_apps' on the app sees every session but a player under 18's and may filter by userId; anyone else sees only their own, and asking for another user's is FORBIDDEN. On an app that admits players under 18 (the safety log), 'manage_apps' gives nothing more: 'moderate_safety' holders (moderators, and the organization's admins) see only the sessions an open or escalated safety report covers (filter.userId narrows them; your own userId lists your own), every other player sees only their own, asking for another user's is FORBIDDEN, and every listing is audited. Game plane: send the app-scoped token for this app to the app's datacenter. Page with `first` (default 50, max 200) and `after`. INPUT_LOG_UNAVAILABLE when input logging is not configured on this deployment.
   """
   inputLogSessions(
     """The app whose recorded sessions to list."""
@@ -7154,7 +7188,7 @@ type Query {
     filter: InputLogSessionFilter
   ): InputLogSessionConnection!
   """
-  The recorded inputs of one session, oldest first, each exactly as the client sent it (without its authentication tail). Read from the input log by the offset ranges its index holds, so inputs past the published retention are gone even while the session is still listed. With 'manage_apps' on the app you may read any session; with 'moderate_safety' (a moderator) only the sessions an open or escalated safety report covers (SafetyReport.sessions); anyone else may read only their own, and any other session answers NOT_FOUND. Every read of another player's session is audited. Game plane: send the app-scoped token for this app to the app's datacenter. Page with `first` (default 50, max 200) and `after`, the previous page's endCursor for this same session (a cursor from another session is BAD_USER_INPUT); a page can hold fewer than `first` inputs, or none, when it stopped at its time or scan limit, so keep paging while hasNextPage is true. An operation may select this field only once. A server runs one read per user (two per app and per org) at a time; a read over that share waits for the earlier one within its own few-second deadline, and a read whose request is closed stops. Errors: INPUT_LOG_UNAVAILABLE when input logging is not configured on this deployment, or this server may not read its log (do not retry); INPUT_LOG_RATE_LIMITED (429) when the wait for an earlier read ran out or left too little time to read, and INPUT_LOG_TEMPORARILY_UNAVAILABLE (503) when the log cannot be read just now, both with extensions.retryable: retry shortly with the same cursor. A read whose request closed stops as INPUT_LOG_READ_ABORTED (499), which nobody receives.
+  The recorded inputs of one session, oldest first, each exactly as the client sent it (without its authentication tail): a session holds only what its own player sent. Read from the input log by the offset ranges its index holds, so inputs past the published retention are gone even while the session is still listed. With 'moderate_safety' (a moderator, or the organization's admins) you may read the sessions an open or escalated safety report covers (SafetyReport.sessions); every player may read their own; any other session answers NOT_FOUND. With 'manage_apps' you may also read any session of an app for adults, but not on an app that admits players under 18 (the safety log), nor a session of a player under 18 anywhere. Every read of another player's session is audited, and so is every read on an app that admits players under 18, your own included. Game plane: send the app-scoped token for this app to the app's datacenter. Page with `first` (default 50, max 200) and `after`, the previous page's endCursor for this same session (a cursor from another session is BAD_USER_INPUT); a page can hold fewer than `first` inputs, or none, when it stopped at its time or scan limit, so keep paging while hasNextPage is true. An operation may select this field only once. A server runs one read per user (two per app and per org) at a time; a read over that share waits for the earlier one within its own few-second deadline, and a read whose request is closed stops. Errors: INPUT_LOG_UNAVAILABLE when input logging is not configured on this deployment, or this server may not read its log (do not retry); INPUT_LOG_RATE_LIMITED (429) when the wait for an earlier read ran out or left too little time to read, and INPUT_LOG_TEMPORARILY_UNAVAILABLE (503) when the log cannot be read just now, both with extensions.retryable: retry shortly with the same cursor. A read whose request closed stops as INPUT_LOG_READ_ABORTED (499), which nobody receives.
   """
   inputLogMessages(
     """The app the session belongs to."""
@@ -7457,7 +7491,7 @@ type Query {
   """
   developerLegalAcceptance: Boolean!
   """
-  The countries Crowded Kingdoms lists, by code: those it does not serve ('blocked': sign-up and play refused with TERRITORY_NOT_SUPPORTED, by the country a player gives or connects from) and those with a minimum age above 13. A country not listed is open at the platform's minimum. Public, so a sign-up form can say so before an account exists.
+  The countries Crowded Kingdoms lists, by code, then the regions it lists (regionCode, ISO 3166-2): those it does not serve ('blocked': sign-up and play refused with TERRITORY_NOT_SUPPORTED, by the country a player gives or the country and region it connects from) and those with a minimum age above 13. A country not listed is open at the platform's minimum. A country with a region listed is checked by region, and a connection from it whose region cannot be told is refused. Public, so a sign-up form can say so before an account exists.
   """
   territoryPolicies: [TerritoryPolicy!]!
   """
@@ -7749,6 +7783,15 @@ type Query {
     """How many (1 to 200)."""
     first: Int = 50
   ): [SafetyReport!]! @requiresPermission(scope: "app", permission: "moderate_safety", scopeArg: "appId")
+  """
+  OPERATOR: CK's child-safety queue (decision 41), the CHILD_SAFETY reports of every app, open ones first, then the newest; only those with the given status if one is given. At most `first` (default 50, at most 200). Each report is also announced to CK's abuse inbox when it is filed. The app's own moderators still read and decide it (safetyReports, resolveSafetyReport, escalateSafetyReport); operators read its evidence with exportPlayerData. Send the identity session; any datacenter answers.
+  """
+  childSafetyReports(
+    """Only reports with this status."""
+    status: SafetyReportStatus
+    """How many (1 to 200)."""
+    first: Int = 50
+  ): [SafetyReport!]! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   OPERATOR: everything the platform holds about one player in one app, with its recorded inputs (while the safety log keeps them; reading them is audited) and the app's hubs' export from its ck-exec manager. Send the identity session to the app's datacenter. NOT_FOUND for an unknown user.
   """
@@ -8875,7 +8918,7 @@ type Query {
 """Narrows inputLogSessions. All fields are optional and AND-combined."""
 input InputLogSessionFilter {
   """
-  Only this user's sessions. Without manage_apps on the app, only your own user id is accepted (and is the default).
+  Only this user's sessions. On an app for adults, without manage_apps only your own user id is accepted (and is the default). On an app that admits players under 18, a moderator (moderate_safety) may name any player to narrow the reported sessions, and everyone else only their own.
   """
   userId: BigInt
   """Only sessions still active at or after this instant."""
@@ -9209,6 +9252,17 @@ type Mutation {
     userId: BigInt!
   ): AccountBlock! @requiresPermission(scope: "super_admin", permission: "is_super_admin")
   """
+  OPERATOR/DESTRUCTIVE: deletes another account and erases it, on Crowded Kingdoms' own word (a parent's request for a child's account, say): exactly what deleteMyAccount does to it, holds included. An open or escalated safety report about the account holds it first, and under a legal hold the account still closes but its content and identity are kept until the hold is released. The erasure record names you and your reason (AccountErasure.requestedBy is `operator:<your id>: <reason>`), and accountErasure(userId) follows it. Refused for your own account, a staff account (operator or super admin) and an account already deleted (requestAccountErasure runs a deleted account's erasure again); NOT_FOUND for an unknown user. Send the identity session; any datacenter answers.
+  """
+  eraseAccount(
+    """The account to delete and erase."""
+    userId: BigInt!
+    """
+    Why (1 to 500 characters), kept on the erasure record for operators: the request it answers, such as a support ticket.
+    """
+    reason: String!
+  ): AccountErasure! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
   DESTRUCTIVE self-service: deletes the authenticated caller's OWN account. Every session, app token, realtime connection and ck-exec socket ends; the email, password, gamertag and profile state are removed from the account; and its player-side content is erased within minutes: Crowdy Studio projects, libraries and agent sessions, mods, what the apps' ck-exec hubs hold of it, actors, avatars and saved state, access grants, communication settings, contacts and blocks, grid claims, and team and channel memberships. An open or escalated safety report about the account puts it under a legal hold first: the account still closes, but its content and identity are kept until the report is resolved. Wallet, billing, usage, audit and legal records stay, and so does everything the account owns as a developer (organizations, apps, published games); world edits stay, under the account's now anonymous id; recorded inputs age out with the input log's retention. Acts only on the caller (no target argument). Requires a valid token.
   """
   deleteMyAccount: Boolean!
@@ -9464,7 +9518,7 @@ type Mutation {
     method: LegalAcceptanceMethod
   ): Boolean!
   """
-  Record the signed-in player's birth date and country, and under 18 that a parent or guardian agreed, for an account whose age is not known yet (me.ageBracket is 'unknown'). Only the year and month are kept. Refused with CONFLICT when the account already has an age, TERRITORY_NOT_SUPPORTED for a country Crowded Kingdoms does not serve (the declared one or the network's), and AGE_REQUIREMENT_NOT_MET under 13, in which case the account keeps the bracket under_13 and the answer cannot be changed by asking again. Whether the player may play a given app (its minimum age, the country's) is decided at the mint. Returns the account; read ageBracket and country. Requires a session token.
+  Record the signed-in player's birth date and country, and under 18 that a parent or guardian agreed, for an account whose age is not known yet (me.ageBracket is 'unknown'). Only the year and month are kept. Refused with CONFLICT when the account already has an age, TERRITORY_NOT_SUPPORTED where Crowded Kingdoms does not serve (the declared country, or the network's country or region; not for Crowded Kingdoms staff), and AGE_REQUIREMENT_NOT_MET under 13, in which case the account is deleted and erased as deleteMyAccount does. That refusal names no age, and for 24 hours afterwards the same client (address and user agent) is refused AGE_REQUIREMENT_NOT_MET here and at register whatever it sends. Whether the player may play a given app (its minimum age, the country's) is decided at the mint. Returns the account; read ageBracket and country. Requires a session token.
   """
   recordPlayerAge(input: RecordPlayerAgeInput!): User!
   """
@@ -9581,7 +9635,7 @@ type Mutation {
     acceptDeveloperTerms: Boolean!
   ): Boolean!
   """
-  OPERATOR ONLY. Block or open a country, or set its minimum age, with the reason on record. Every instance applies it within a minute; players already signed in there are refused at their next refresh.
+  OPERATOR ONLY. Block or open a country or (with regionCode) one of its regions, or set its minimum age, with the reason on record. Every instance applies it within a minute; players already signed in there are refused at their next refresh.
   """
   setTerritoryPolicy(input: SetTerritoryPolicyInput!): TerritoryPolicy! @requiresPermission(scope: "operator", permission: "is_operator")
   """
@@ -9813,7 +9867,7 @@ type Mutation {
   """
   setAppClientSettings(input: SetAppClientSettingsInput!): PortalConsentState!
   """
-  ORG TOKEN ONLY. Sign one of your organization's own players in and get its app-scoped gameplay token, the same token mintAppToken returns: hand `token` (and the URLs) to the player's device, which plays with it exactly as with any app token and refreshes it with refreshAppToken. Call from your server with `Authorization: Bearer cko_...` (scope players:mint); a request with an Origin header is refused. The player is created on its first sign-in (no email, password or wallet), and each sign-in lasts `sessionTtlSeconds` (default and maximum: the org's settings): after it the device comes back to you. The app must be one of your organization's apps (and in the token's app list, if it has one). Free tiers grant access automatically; a paid tier needs grantAppAccess. Refused with ORG_LEGAL_ACCEPTANCE_REQUIRED until an admin of the organization has accepted the current Org-Managed Players Addendum. Pass the player's ageYears and country: the player is refused TERRITORY_NOT_SUPPORTED in a country Crowded Kingdoms does not serve, AGE_REQUIREMENT_NOT_MET under 13 or under the app's or the country's minimum age (before it is created), and AGE_REQUIRED without an age once players 13 and over are admitted; its bracket and country are stored on it, and a refresh is refused once its bracket is wholly below the app's minimum.
+  ORG TOKEN ONLY. Sign one of your organization's own players in and get its app-scoped gameplay token, the same token mintAppToken returns: hand `token` (and the URLs) to the player's device, which plays with it exactly as with any app token and refreshes it with refreshAppToken. Call from your server with `Authorization: Bearer cko_...` (scope players:mint); a request with an Origin header is refused. The player is created on its first sign-in (no email, password or wallet), and each sign-in lasts `sessionTtlSeconds` (default and maximum: the org's settings): after it the device comes back to you. The app must be one of your organization's apps (and in the token's app list, if it has one). Free tiers grant access automatically; a paid tier needs grantAppAccess. Refused with ORG_LEGAL_ACCEPTANCE_REQUIRED until an admin of the organization has accepted the current Org-Managed Players Addendum. Pass the player's ageYears and country, and its region where the country is checked by region: the player is refused TERRITORY_NOT_SUPPORTED in a country or region Crowded Kingdoms does not serve (or without a region it needs), AGE_REQUIRED without an age once players 13 and over are admitted, and AGE_REQUIREMENT_NOT_MET under 13 or under the app's or the country's minimum age (before it is created); that refusal names no age, the same player is refused it for 24 hours whatever is sent, and a player that exists and is said to be under 13 is deleted as deleteManagedPlayer does; its bracket and country are stored on it, and a refresh is refused once its bracket is wholly below the app's minimum.
   """
   mintManagedPlayerToken(input: MintManagedPlayerTokenInput!): AppTokenResponse!
   """
@@ -9875,7 +9929,7 @@ type Mutation {
     keyId: BigInt!
   ): Boolean!
   """
-  Exchange an assertion your organization signed for one of its players for that player's app-scoped gameplay token (the same token mintManagedPlayerToken returns). Public: the signature is the credential, so a game client calls it directly, from a browser on your registered origin or natively. The assertion must name a registered, active key (header kid) and carry iss and aud as registered (aud defaults to ck:app:<appId>), sub (your id for the player), iat, exp at most 300 seconds after iat, and a jti never used before for this app; optionally gamertag, and ageYears (the player's age in whole years) and country (ISO 3166-1 alpha-2), which mintManagedPlayerToken describes and which are required once players 13 and over are admitted. The player is created on its first sign-in. Refusals are ASSERTION_REJECTED with extensions.reason; a valid assertion is refused with ORG_LEGAL_ACCEPTANCE_REQUIRED until an admin of the organization has accepted the current Org-Managed Players Addendum, and with TERRITORY_NOT_SUPPORTED, AGE_REQUIRED or AGE_REQUIREMENT_NOT_MET as mintManagedPlayerToken is.
+  Exchange an assertion your organization signed for one of its players for that player's app-scoped gameplay token (the same token mintManagedPlayerToken returns). Public: the signature is the credential, so a game client calls it directly, from a browser on your registered origin or natively. The assertion must name a registered, active key (header kid) and carry iss and aud as registered (aud defaults to ck:app:<appId>), sub (your id for the player), iat, exp at most 300 seconds after iat, and a jti never used before for this app; optionally gamertag, and ageYears (the player's age in whole years) and country (ISO 3166-1 alpha-2), which mintManagedPlayerToken describes and which are required once players 13 and over are admitted, and region (ISO 3166-2), required where the country is checked by region. The player is created on its first sign-in. Refusals are ASSERTION_REJECTED with extensions.reason; a valid assertion is refused with ORG_LEGAL_ACCEPTANCE_REQUIRED until an admin of the organization has accepted the current Org-Managed Players Addendum, and with TERRITORY_NOT_SUPPORTED, AGE_REQUIRED or AGE_REQUIREMENT_NOT_MET as mintManagedPlayerToken is.
   """
   exchangeManagedPlayerAssertion(input: ExchangeManagedPlayerAssertionInput!): AppTokenResponse!
   """
@@ -9897,7 +9951,7 @@ type Mutation {
     appId: BigInt!
   ): MinecraftChallenge!
   """
-  Sign a Minecraft player in to one of Crowded Kingdoms' own apps, as a player its organization manages (no Crowded Kingdoms account): the same app token mintManagedPlayerToken returns, refreshed with refreshAppToken. ck-api asks Mojang whether `username` joined with `serverId` (minecraftChallenge) and admits the player only on a yes; the player is identified by its Minecraft account, not its name. Refusals: MINECRAFT_VERIFICATION_FAILED (extensions.reason: malformed, forged, expired, not_joined, replayed: start again from minecraftChallenge), MINECRAFT_VERIFICATION_UNAVAILABLE (Mojang did not answer; retryable), TERRITORY_NOT_SUPPORTED (the declared country or the network's), AGE_REQUIREMENT_NOT_MET (under 13, or under the app's or the country's minimum age), LEGAL_ACCEPTANCE_REQUIRED (acceptedDocuments misses one in extensions.missingDocuments), and ORG_LEGAL_ACCEPTANCE_REQUIRED for an organization that has not accepted the Org-Managed Players Addendum. The accepted documents are recorded with method IN_GAME. Public; rate-limited per address.
+  Sign a Minecraft player in to one of Crowded Kingdoms' own apps, as a player its organization manages (no Crowded Kingdoms account): the same app token mintManagedPlayerToken returns, refreshed with refreshAppToken. ck-api asks Mojang whether `username` joined with `serverId` (minecraftChallenge) and admits the player only on a yes; the player is identified by its Minecraft account, not its name. Refusals: MINECRAFT_VERIFICATION_FAILED (extensions.reason: malformed, forged, expired, not_joined, replayed: start again from minecraftChallenge), MINECRAFT_VERIFICATION_UNAVAILABLE (Mojang did not answer; retryable), TERRITORY_NOT_SUPPORTED (the declared country, or the network's country or region), AGE_REQUIREMENT_NOT_MET (under 13, or under the app's or the country's minimum age; it names no age, and the same Minecraft account is then refused for 24 hours whatever it sends), LEGAL_ACCEPTANCE_REQUIRED (acceptedDocuments misses one in extensions.missingDocuments), and ORG_LEGAL_ACCEPTANCE_REQUIRED for an organization that has not accepted the Org-Managed Players Addendum. The age is checked once Mojang has confirmed the account, and the birth month of its first admitted sign-in stays its own: a later birthDate is ignored. The accepted documents are recorded with method IN_GAME. Public; rate-limited per address.
   """
   signInWithMinecraft(input: SignInWithMinecraftInput!): AppTokenResponse!
   """
@@ -9941,6 +9995,17 @@ type Mutation {
     """The parent or guardian’s email address."""
     parentEmail: String!
   ): ParentalConsentRequest!
+  """
+  OPERATOR: record a parent's withdrawal of consent to one medium (VOICE or VIDEO) for one player in one app, when it reached Crowded Kingdoms by email rather than through the consent service. It ends the consent as the service's own withdrawal does, recomputes the player's communication settings (a minor's medium goes back to OFF) and tells the realtime servers (P2P_SOCIAL_REFRESH) when that changes what they read, so live sessions apply it within a second. withdrawn is false when no consent was held; the settings are recomputed all the same, so calling it again is safe. NOT_FOUND unless the player has a grant or a consent in the app. Send the identity session to the app's datacenter.
+  """
+  recordParentalConsentWithdrawal(
+    """The app the consent was for."""
+    appId: BigInt!
+    """The player."""
+    userId: BigInt!
+    """The medium the parent withdrew."""
+    feature: ParentalConsentFeature!
+  ): ParentalConsentWithdrawal! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Ask another player of the app to be a contact. If they already asked the caller, both become contacts at once (ACCEPTED); asking again changes nothing. Refused while the caller has blocked them (unblockPlayer first). At most 100 requests may wait at once (SOCIAL_LIMIT_REACHED), and 1,000 contacts per app. NOT_FOUND for a player the app does not know. Game plane: send the app-scoped token for this app to the app’s datacenter.
   """
@@ -11713,7 +11778,7 @@ input RegisterUserInput {
   """
   attestAgeOfMajority: Boolean
   """
-  Birth date, YYYY-MM-DD (YYYY-MM is accepted too); only the year and month are kept, and the age is counted from the last day of that month. Sent with country. Required on a browser signup once the platform admits players under 18 (AGE_REQUIRED without it); a request with no Origin may omit it and gives it later with recordPlayerAge. Under 13, or under the minimum age where the player is, the signup is refused with AGE_REQUIREMENT_NOT_MET and no account is made.
+  Birth date, YYYY-MM-DD (YYYY-MM is accepted too); only the year and month are kept, and the age is counted from the last day of that month. Sent with country. Required on a browser signup once the platform admits players under 18 (AGE_REQUIRED without it); a request with no Origin may omit it and gives it later with recordPlayerAge. Under 13, or under the minimum age where the player is, the signup is refused with AGE_REQUIREMENT_NOT_MET (it names no age) and no account is made; for 24 hours afterwards the same client (address and user agent) is refused AGE_REQUIREMENT_NOT_MET whatever it sends.
   """
   birthDate: String
   """
@@ -11756,10 +11821,16 @@ input AppRequiredDocumentInput {
   url: String!
 }
 
-"""An operator’s change to one country’s policy."""
+"""
+An operator’s change to the policy of one country, or of one of its regions.
+"""
 input SetTerritoryPolicyInput {
   """ISO 3166-1 alpha-2 country code."""
   countryCode: String!
+  """
+  ISO 3166-2 code of a region of countryCode (such as UA-43) to set that region's rule instead of the country's. Listing a region makes its country checked by region.
+  """
+  regionCode: String
   """'open' or 'blocked'."""
   status: String!
   """The youngest age admitted there, 13 to 18 (default 13)."""
@@ -12058,13 +12129,17 @@ input MintManagedPlayerTokenInput {
   """
   sessionTtlSeconds: Int
   """
-  The player's age in whole years, as your organization knows it. Stored as a bracket (under_13, 13_15, 16_17, 18_plus), which hubs read and which sets a minor's defaults; a player under 13, or under the app's or the country's minimum, is refused AGE_REQUIREMENT_NOT_MET before it is created or signed in. Optional while every player is 18 or older under the Org-Managed Players Addendum (omitted, the player counts as 18_plus); required once players 13 and over are admitted (AGE_REQUIRED without it).
+  The player's age in whole years, as your organization knows it. Stored as a bracket (under_13, 13_15, 16_17, 18_plus), which hubs read and which sets a minor's defaults; a player under 13, or under the app's or the country's minimum, is refused AGE_REQUIREMENT_NOT_MET before it is created or signed in, and then refused again, whatever the age, for 24 hours. A player that exists and is asserted under 13 is deleted, as deleteManagedPlayer does. Optional while every player is 18 or older under the Org-Managed Players Addendum (omitted, the player counts as 18_plus); required once players 13 and over are admitted (AGE_REQUIRED without it).
   """
   ageYears: Int
   """
   The country the player lives in, ISO 3166-1 alpha-2 (such as US). A country Crowded Kingdoms does not serve is refused TERRITORY_NOT_SUPPORTED, and a country's own minimum age applies. Stored on the player; optional until players 13 and over are admitted, required after.
   """
   country: String
+  """
+  The region the player lives in, ISO 3166-2 within country (such as UA-30). Required in a country Crowded Kingdoms checks by region (territoryPolicies lists its regions): without it, or in a blocked region, the player is refused TERRITORY_NOT_SUPPORTED. Checked at each sign-in, not stored.
+  """
+  region: String
 }
 
 input ProvisionManagedPlayersInput {
@@ -12162,7 +12237,7 @@ input SignInWithMinecraftInput {
   """
   serverId: String!
   """
-  The player’s birth date, YYYY-MM-DD (YYYY-MM is accepted too), from the mod’s age screen. Only the age bracket is kept, counted from the last day of the month.
+  The player’s birth date, YYYY-MM or YYYY-MM-DD, from the mod’s age screen; the age is counted from the last day of the month. Only the year and month of the first admitted sign-in are kept, and they decide the account’s age from then on: a later sign-in’s birthDate is not used.
   """
   birthDate: String!
   """The country the player lives in: ISO 3166-1 alpha-2, such as US."""

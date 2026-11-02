@@ -442,8 +442,13 @@ export const TERRITORY_NOT_SUPPORTED_CODE = 'TERRITORY_NOT_SUPPORTED';
  */
 export const SAFETY_LOG_REQUIRED_CODE = 'SAFETY_LOG_REQUIRED';
 /**
- * `extensions.code` for "parental consent cannot be requested on this deployment" (HTTP 503);
- * see {@link parentalConsentUnavailableOf}.
+ * `extensions.code` for "the app admits players under 18 and its organization has appointed no
+ * safety moderator" (HTTP 403); see {@link safetyModeratorRequiredOf}.
+ */
+export const SAFETY_MODERATOR_REQUIRED_CODE = 'SAFETY_MODERATOR_REQUIRED';
+/**
+ * `extensions.code` for "parental consent cannot be requested right now" (HTTP 503), with why in
+ * `extensions.reason`; see {@link parentalConsentUnavailableOf}.
  */
 export const PARENTAL_CONSENT_UNAVAILABLE_CODE = 'PARENTAL_CONSENT_UNAVAILABLE';
 /**
@@ -472,6 +477,18 @@ export type MinecraftVerificationFailure =
   | 'expired'
   | 'not_joined'
   | 'replayed'
+  | (string & {});
+
+/**
+ * Why parental consent cannot be requested, as `extensions.reason` on
+ * `PARENTAL_CONSENT_UNAVAILABLE` carries it: `not_configured` (the deployment has no consent
+ * service), `provider_refused` (the service refused the request) or `provider_unavailable` (it
+ * did not answer). Open union: the server may add one.
+ */
+export type ParentalConsentUnavailableReason =
+  | 'not_configured'
+  | 'provider_refused'
+  | 'provider_unavailable'
   | (string & {});
 
 /** One document a refused player still has to accept, from `extensions.missingDocuments`. */
@@ -653,12 +670,15 @@ export function ageRequiredOf(value: unknown): boolean {
 /**
  * Whether an error is an `AGE_REQUIREMENT_NOT_MET` refusal (HTTP 403): by age, the player may
  * not play this app, or create or administer an organization. Not retryable, and asking for
- * the age again changes nothing: an account keeps the answer it gave.
+ * the age again changes nothing: an account keeps the answer it gave, and since ck-api v2.61.0
+ * the same client (address and user agent) is refused at sign-up and `auth.recordPlayerAge`
+ * for 24 hours whatever it sends, and an org-managed player at its sign-ins. An account that
+ * answers `recordPlayerAge` with an age under 13 is deleted.
  *
  * Deliberately a boolean. No refusal names an age (the platform's neutral age screen): tell the
  * player they cannot play this, without naming an age or a minimum, and do not offer to enter
- * the date again. Older APIs put `minimumAge` and `ageBracket` in the extensions; this reader
- * does not surface them, and a game must not show them.
+ * the date again. v2.60.0 put `minimumAge` and `ageBracket` in the extensions (v2.61.0 does
+ * not); this reader never surfaces them, and a game must not show them.
  */
 export function ageRequirementNotMetOf(value: unknown): boolean {
   return errorWithCode(value, AGE_REQUIREMENT_NOT_MET_CODE) !== null;
@@ -688,12 +708,31 @@ export function safetyLogRequiredOf(value: unknown): boolean {
 }
 
 /**
- * Whether an error is a `PARENTAL_CONSENT_UNAVAILABLE` refusal (HTTP 503) from
- * `safety.requestParentalConsent`: the deployment's consent service is not configured. Not
- * fixed by retrying soon; voice and video stay off for the player meanwhile.
+ * Whether an error is a `SAFETY_MODERATOR_REQUIRED` refusal (HTTP 403, ck-api v2.61.0): a player
+ * under 18 is refused a token in an app that admits players under 18 while the app's
+ * organization has appointed no safety moderator (a member whose own role grants
+ * `moderate_safety`; an admin alone does not count). The player cannot fix it: tell them the
+ * app cannot admit them yet. The organization appoints one; `App.hasSafetyModerator` (on
+ * `apps.app`, for the organization's members) says whether it has.
  */
-export function parentalConsentUnavailableOf(value: unknown): boolean {
-  return errorWithCode(value, PARENTAL_CONSENT_UNAVAILABLE_CODE) !== null;
+export function safetyModeratorRequiredOf(value: unknown): boolean {
+  return errorWithCode(value, SAFETY_MODERATOR_REQUIRED_CODE) !== null;
+}
+
+/**
+ * A `PARENTAL_CONSENT_UNAVAILABLE` refusal (HTTP 503) from `safety.requestParentalConsent`, or
+ * `null`: a parent cannot be asked right now. `reason` is `extensions.reason`:
+ * `not_configured` (the deployment has no consent service; retrying soon does not help),
+ * `provider_refused` or `provider_unavailable` (the service refused or did not answer); null
+ * from an API that does not say. Voice and video stay off for the player meanwhile.
+ */
+export function parentalConsentUnavailableOf(
+  value: unknown,
+): { reason: ParentalConsentUnavailableReason | null } | null {
+  const entry = errorWithCode(value, PARENTAL_CONSENT_UNAVAILABLE_CODE);
+  if (!entry) return null;
+  const reason = entry.extensions?.reason;
+  return { reason: typeof reason === 'string' && reason.length > 0 ? reason : null };
 }
 
 /**

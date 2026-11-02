@@ -34,6 +34,7 @@ so it needs that Game API or newer; promote the Game API before the SDK on each 
 
 | CrowdyJS | Needs the Game API (ck-api) |
 | --- | --- |
+| 18.25.0 | v2.61.0 or later (app reads and `apps.update` select `hasSafetyModerator`; `platform.territoryPolicies` selects `regionCode`) |
 | 18.24.0 | v2.60.0 or later (`users.me` selects `ageBracket` and `country`; app reads and `apps.update` select the safety log and age fields; the teen safety calls). `auth.recordPlayerConsents` with both flags and `auth.playerLegalAcceptance()` without an app work against older releases |
 | 18.22.0 | v2.58.0 or later (`ExecInstance.orphaned`) |
 | 18.11.0 | what 18.10.0 needs; the Game Kit's hub modules need the app to run the starter pack of a compute toolchain with ckx-sdk 0.10.0 (`kit.topology` deploys it) |
@@ -136,16 +137,21 @@ refresh: a country Crowded Kingdoms does not serve is refused `TERRITORY_NOT_SUP
 (`territoryNotSupportedOf(err)?.country`), an account with no age `AGE_REQUIRED`
 (`ageRequiredOf`), an age the app or the country does not admit `AGE_REQUIREMENT_NOT_MET`
 (`ageRequirementNotMetOf`), and a player under 18 in an app without its safety log
-`SAFETY_LOG_REQUIRED` (`safetyLogRequiredOf`). Ask the date of birth and the country on a
-neutral screen: it shows no age, and only a player under 18 sees the line that a parent or
-guardian agreed. Send the answers with `auth.register({ ..., birthDate, country,
-parentalConfirmation })`, or `auth.recordPlayerAge({ birthDate, country, parentalConfirmation })`
-for an account that has none. No refusal names an age and the SDK's readers surface none: tell
-the player they cannot play this, without a number, and do not offer the date again (the
-account keeps its answer). `users.me()` reports `ageBracket` and `country`, and
-`platform.territoryPolicies()` (public) lists the countries, so a sign-up form can say a
-country is not served before an account exists. The age is optional until the platform admits
-players under 18; until then the 18+ attestation still applies.
+`SAFETY_LOG_REQUIRED` (`safetyLogRequiredOf`), or (ck-api v2.61.0) in an app whose organization
+has appointed no safety moderator `SAFETY_MODERATOR_REQUIRED` (`safetyModeratorRequiredOf`).
+Ask the date of birth and the country on a neutral screen: it shows no age, and only a player
+under 18 sees the line that a parent or guardian agreed. Send the answers with
+`auth.register({ ..., birthDate, country, parentalConfirmation })`, or
+`auth.recordPlayerAge({ birthDate, country, parentalConfirmation })` for an account that has
+none. No refusal names an age and the SDK's readers surface none: tell the player they cannot
+play this, without a number, and do not offer the date again. Since v2.61.0 the same client
+(address and user agent) is refused at sign-up and `recordPlayerAge` for 24 hours after an age
+refusal, and an account that answers `recordPlayerAge` under 13 is deleted. `users.me()` reports
+`ageBracket` and `country`, and `platform.territoryPolicies()` (public) lists the countries and,
+since v2.61.0, regions (`regionCode`, ISO 3166-2: a country with a region listed is checked by
+region), so a sign-up form can say a place is not served before an account exists. The age is
+optional until the platform admits players under 18; until then the 18+ attestation still
+applies.
 
 Crowded Kingdoms no longer hosts games (retired 2026-10-29), so a customer's game
 always runs on its own domain and takes the first row. See
@@ -252,6 +258,7 @@ const res = await fetch('https://ck.dev.crowdedkingdoms.com/graphql', {
         gamertag: account.displayName,
         ageYears: account.ageYears, // whole years, as your organization knows them
         country: account.country,   // ISO 3166-1 alpha-2
+        region: account.region,     // ISO 3166-2 (UA-30), where the country is checked by region
       },
     },
   }),
@@ -274,20 +281,24 @@ the sign-in's lifetime ends (`sessionTtlSeconds`, at most the organization's set
 device asks your server again.
 
 **Age and country** (ck-api v2.60.0). Send the player's `ageYears` and `country` with every
-sign-in: on the mint's input (`MintManagedPlayerTokenInput`, exported as a type) or as the
-assertion's claims (`ManagedPlayerAssertionClaims`). Crowded Kingdoms stores an age bracket and
-the country on the player and applies a minor's defaults itself. A country it does not serve is
-refused `TERRITORY_NOT_SUPPORTED`, and an age under the app's, the country's or the platform's
-youngest `AGE_REQUIREMENT_NOT_MET`, before the player exists; a refresh is refused once the
-stored bracket is wholly below the app's youngest age. Both are optional while every managed
-player is 18 or older under the Org-Managed Players Addendum (left out, the player counts as an
-adult) and required once the platform admits players under 18 (`AGE_REQUIRED` without an age).
+sign-in, and `region` (ISO 3166-2, v2.61.0) where the country is checked by region (the regions
+`platform.territoryPolicies()` lists; Ukraine's today): on the mint's input
+(`MintManagedPlayerTokenInput`, exported as a type) or as the assertion's claims
+(`ManagedPlayerAssertionClaims`). Crowded Kingdoms stores an age bracket and the country on the
+player and applies a minor's defaults itself. A country or region it does not serve, or a
+missing region it needs, is refused `TERRITORY_NOT_SUPPORTED`, and an age under the app's, the
+country's or the platform's youngest `AGE_REQUIREMENT_NOT_MET`, before the player exists; then
+the same player is refused for 24 hours whatever is sent, and a player that exists and is said
+to be under 13 is deleted. A refresh is refused once the stored bracket is wholly below the
+app's youngest age. The age and country are optional while every managed player is 18 or older
+under the Org-Managed Players Addendum (left out, the player counts as an adult) and required
+once the platform admits players under 18 (`AGE_REQUIRED` without an age).
 
 **With a signed assertion.** Register a public key once
 (`managedPlayers.registerSigningKey({ orgId, kid, algorithm: 'EdDSA', publicJwk, issuer })`);
 your sign-in service signs a short JWS per player (`iss`, `aud: 'ck:app:<appId>'`, `sub` your
 account id, `iat`, `exp` at most 300 s later, a fresh `jti`, optionally `gamertag`, and
-`ageYears` and `country` as above: `ManagedPlayerAssertionClaims`) and the device trades it,
+`ageYears`, `country` and `region` as above: `ManagedPlayerAssertionClaims`) and the device trades it,
 without your server calling Crowded Kingdoms:
 
 ```ts
@@ -353,8 +364,8 @@ await game.safety.fileReport({ appId, reportedUserId, reason: 'HARASSMENT', deta
   them. An adult may choose anything (`EVERYONE` by default); a player under 18 (`isMinor`) has
   each medium `OFF` until a parent consents, then at most `CONTACTS`.
   `safety.requestParentalConsent(appId, 'VOICE' | 'VIDEO', parentEmail)` asks a parent through
-  the platform's consent service (`PARENTAL_CONSENT_UNAVAILABLE`, `parentalConsentUnavailableOf`,
-  while it is not configured).
+  the platform's consent service (`PARENTAL_CONSENT_UNAVAILABLE`: `parentalConsentUnavailableOf(err)?.reason`
+  is `not_configured`, `provider_refused` or `provider_unavailable`).
 - **Contacts.** `contacts`, `contactRequests` (`INCOMING`, then `OUTGOING`), `requestContact`,
   `acceptContact`, `removeContact` (removes, declines or cancels).
 - **Blocks.** `block`, `unblock`, `blocks`: nothing passes between the two players, either way,
@@ -371,7 +382,16 @@ and use their identity session: `client.moderation.reports(appId, { status })` (
 `CHILD_SAFETY` reports first), `resolveReport(appId, reportId, outcome)` and
 `escalateReport(appId, reportId, ncmecReportId)`. A report's `sessions` are the recorded sessions
 it covers; a moderator reads them with `inputLog.messages` on an app token for the app, while the
-report is open or escalated, and every read is audited.
+report is open or escalated, and every read is audited. An app that admits players under 18
+needs an **appointed** moderator (ck-api v2.61.0): a member whose own role grants
+`moderate_safety` (an admin alone does not count), or its minors are refused
+`SAFETY_MODERATOR_REQUIRED`. `apps.app(appId).hasSafetyModerator` tells the organization's
+members whether it has one (null for anyone else).
+
+**A player's own records.** On an app with the safety log a player reads what it sent itself:
+`inputLog.sessions(appId)` without a filter lists its own sessions, and `inputLog.messages(appId,
+gameTokenId)` reads one. On an app that admits players under 18, `manage_apps` reads nothing
+more, and every read is audited (ck-api v2.61.0).
 
 **App admins** (`manage_apps`): `apps.update(appId, { replayLoggingEnabled,
 replayLoggingRecordsVoice, replayLoggingRecordsVideo, minPlayerAge })` (an app that admits
@@ -1385,8 +1405,9 @@ The player gate and player safety (18.24.0): `legalAcceptanceRequiredOf(err)`
 (`LEGAL_ACCEPTANCE_REQUIRED`, with the `missingDocuments`), `ageRequiredOf(err)` (`AGE_REQUIRED`),
 `ageRequirementNotMetOf(err)` (`AGE_REQUIREMENT_NOT_MET`; a boolean on purpose, since no refusal
 names an age), `territoryNotSupportedOf(err)` (`TERRITORY_NOT_SUPPORTED`, with `country`),
-`safetyLogRequiredOf(err)` (`SAFETY_LOG_REQUIRED`), `parentalConsentUnavailableOf(err)`
-(`PARENTAL_CONSENT_UNAVAILABLE`), `socialLimitReachedOf(err)` (`SOCIAL_LIMIT_REACHED`), and for
+`safetyLogRequiredOf(err)` (`SAFETY_LOG_REQUIRED`), `safetyModeratorRequiredOf(err)`
+(`SAFETY_MODERATOR_REQUIRED`, 18.25.0), `parentalConsentUnavailableOf(err)`
+(`PARENTAL_CONSENT_UNAVAILABLE`, with `reason` since 18.25.0), `socialLimitReachedOf(err)` (`SOCIAL_LIMIT_REACHED`), and for
 Minecraft sign-in `minecraftVerificationFailedOf(err)` (with `reason`) and
 `minecraftVerificationUnavailableOf(err)` (retry shortly). Each has its `*_CODE` constant.
 
@@ -1475,16 +1496,23 @@ leaves the org behind and archives the app, so it runs only when asked to.
 starter hubs with `kit.topology`, builds and deploys them, and two players play them (on dev and
 test it also needs `CROWDY_PROVISIONING_TOKEN`, which their staff-only sign-up asks for).
 
-`test/e2e/teen-safety.test.mjs` runs the teen safety calls (18.24.0). With `CROWDY_SAFETY_APP_ID`
-(an app whose default tier admits any player) and `CROWDY_PROVISIONING_TOKEN` on dev and test,
-two new players sign up with a birth date and a country, read `me`, change their voice and
-video settings, ask, accept and remove a contact, block and unblock, and delete their accounts;
-sign-ups declaring a blocked country or an age under 13 are refused before any account exists.
-With `CROWDY_OWNER_EMAIL` / `_PASSWORD` (an admin of that app's org) one player also reports the
-other and the admin lists and resolves the report; without them no report is filed. With
-`CROWDY_ORG_TOKEN` (`players:mint` and `players:manage`) and `CROWDY_MANAGED_APP_ID`, an
-organization's server signs a managed player in with `ageYears` and `country`, a blocked country
-and an age under 13 are refused, and the player is deleted.
+`test/e2e/teen-safety.test.mjs` runs the teen safety calls (18.24.0, 18.25.0). With
+`CROWDY_SAFETY_APP_ID` (an app whose default tier admits any player) and
+`CROWDY_PROVISIONING_TOKEN` on dev and test, two new players sign up with a birth date and a
+country, read `me`, change their voice and video settings, ask, accept and remove a contact,
+block and unblock, and delete their accounts; a sign-up declaring a blocked country is refused
+before any account exists. That test registers two accounts, and a tier's sign-ups are limited
+and shared, so run it deliberately (`--test-name-pattern` selects the others). With
+`CROWDY_OWNER_EMAIL` / `_PASSWORD` (an admin of that app's org) one player also reports the
+other and the admin lists and resolves the report; without them no report is filed. With those
+and `CROWDY_PLAYER_EMAIL` / `_PASSWORD` (an existing player outside that org), existing accounts
+read `hasSafetyModerator`, the player's own input-log sessions and the territory regions, with no
+sign-up. With `CROWDY_ORG_TOKEN` (`players:mint` and `players:manage`) and
+`CROWDY_MANAGED_APP_ID`, an organization's server signs a managed player in with `ageYears` and
+`country`, a blocked country, a blocked region, a missing region and an age under 13 are
+refused, and the players are deleted. `CROWDY_E2E_UNDER13_SIGNUP=1` also signs up under 13; since
+ck-api v2.61.0 that blocks every sign-up from the machine's address and user agent for 24 hours,
+so do not set it on a shared builder.
 
 ## Maintainers: schema artifacts and fixtures
 

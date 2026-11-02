@@ -470,8 +470,10 @@ export class PortalAPI {
    * player's age is unknown (`auth.recordPlayerAge`); `AGE_REQUIREMENT_NOT_MET`
    * (`ageRequirementNotMetOf`) under the app's, the country's or the platform's
    * youngest age; then the documents. A player under 18 is also refused
-   * `SAFETY_LOG_REQUIRED` (`safetyLogRequiredOf`) in an app without the safety log.
-   * None of them is fixed by retrying.
+   * `SAFETY_LOG_REQUIRED` (`safetyLogRequiredOf`) in an app without the safety log,
+   * then `SAFETY_MODERATOR_REQUIRED` (`safetyModeratorRequiredOf`, ck-api v2.61.0) in
+   * one whose organization has appointed no safety moderator. None of them is fixed
+   * by retrying, and no refusal names an age.
    */
   async mintAppToken(appId: string): Promise<AppTokenResponse> {
     const data = await this.api.request(MintAppTokenDocument, {

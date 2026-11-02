@@ -1,28 +1,38 @@
 /**
- * The teen safety program against a tier (ck-api v2.60.0): every new call through the SDK.
+ * The teen safety program against a tier (ck-api v2.60.0 and v2.61.0): every new call through
+ * the SDK.
  *
  * Players with Crowded Kingdoms accounts (`client.auth`, `client.users`, `client.safety`): a
  * sign-up with a birth date and country, `me`'s bracket and country, `recordPlayerAge` refused
- * once an age is stored, a sign-up declaring a blocked country and one under 13 refused before
- * any account exists, the app's recording state, voice and video settings, contacts, blocks and
- * a report, which the app's moderator lists and resolves (`client.moderation`). The two players
- * delete their accounts at the end.
+ * once an age is stored, a sign-up declaring a blocked country refused before any account
+ * exists, the app's recording state, voice and video settings, contacts, blocks and a report,
+ * which the app's moderator lists and resolves (`client.moderation`). The two players delete
+ * their accounts at the end. This test REGISTERS two accounts: a tier's sign-ups are limited
+ * and shared, so run it deliberately.
  *
- * Org-managed players: the organization's server mints with `ageYears` and `country` (the SDK
- * has no wrapper for that mint: it is the org server's call), the device adopts the token and
- * reads `me`, a blocked country and an age under the platform's youngest are refused before a
- * player exists, and the adult is deleted with `managedPlayers.delete` on the org token.
+ * Existing accounts (no sign-up): `hasSafetyModerator` as the org's member and as an outsider,
+ * the player's own records in the input log, and the territory list's regions.
+ *
+ * Org-managed players: the organization's server mints with `ageYears`, `country` and, in a
+ * country checked by region, `region` (the SDK has no wrapper for that mint: it is the org
+ * server's call), the device adopts the token and reads `me`, a blocked country or region and
+ * an age under the platform's youngest are refused before a player exists, and the players are
+ * deleted with `managedPlayers.delete` on the org token.
  *
  *   CROWDY_HTTP_URL=https://ck.dev.crowdedkingdoms.com \
  *   CROWDY_PROVISIONING_TOKEN=...   # dev and test are staff-only: the `harness` token \
  *   CROWDY_SAFETY_APP_ID=<app id>   # an app whose default tier admits any player \
  *   CROWDY_OWNER_EMAIL=... CROWDY_OWNER_PASSWORD=...  # an admin of that app's org (moderator) \
+ *   CROWDY_PLAYER_EMAIL=... CROWDY_PLAYER_PASSWORD=...  # an existing player, not of that org \
  *   CROWDY_ORG_TOKEN=cko_...        # players:mint + players:manage, managed players on \
  *   CROWDY_MANAGED_APP_ID=<app id>  # an app of the org token's organization \
  *   node --test test/e2e/teen-safety.test.mjs
  *
  * Without the owner pair the report is not filed (an unresolved report would hold the reported
  * account). The country refusals assume the territory list blocks DE (seeded on every tier).
+ * CROWDY_E2E_UNDER13_SIGNUP=1 also checks that a sign-up under 13 is refused; since ck-api
+ * v2.61.0 that refusal blocks every sign-up from the same address and user agent for 24 hours,
+ * so never set it on a machine others register from.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -45,6 +55,18 @@ const managedSkip =
     ? `managed-player env not configured (missing: ${missingManaged.join(', ')})`
     : undefined;
 const moderatorReady = Boolean(process.env.CROWDY_OWNER_EMAIL && process.env.CROWDY_OWNER_PASSWORD);
+const missingExisting = [
+  'CROWDY_HTTP_URL',
+  'CROWDY_SAFETY_APP_ID',
+  'CROWDY_OWNER_EMAIL',
+  'CROWDY_OWNER_PASSWORD',
+  'CROWDY_PLAYER_EMAIL',
+  'CROWDY_PLAYER_PASSWORD',
+].filter((k) => !process.env[k]);
+const existingSkip =
+  missingExisting.length > 0
+    ? `existing-account env not configured (missing: ${missingExisting.join(', ')})`
+    : undefined;
 
 const run = randomBytes(4).toString('hex');
 const password = () => `Aa1!e2e-${randomBytes(8).toString('hex')}`;
@@ -131,17 +153,19 @@ test(
         .then(() => null, (e) => e);
       assert.equal(again?.code, 'CONFLICT', `recordPlayerAge on an account with an age: ${again?.message}`);
 
-      // Refused before any account exists: a blocked country, and an age under 13.
+      // Refused before any account exists: a blocked country (and, opt-in, an age under 13).
       const blocked = await signUp(createCrowdyClient, 'de', { birthDate: '1990-05-15', country: 'DE' }).then(
         () => assert.fail('a sign-up declaring DE was admitted'),
         (e) => e,
       );
       assert.deepEqual(sdk.territoryNotSupportedOf(blocked), { country: 'DE' }, blocked.message);
-      const child = await signUp(createCrowdyClient, 'child', { birthDate: '2018-02-01', country: 'US' }).then(
-        () => assert.fail('a sign-up under 13 was admitted'),
-        (e) => e,
-      );
-      assert.equal(sdk.ageRequirementNotMetOf(child), true, child.message);
+      if (process.env.CROWDY_E2E_UNDER13_SIGNUP === '1') {
+        const child = await signUp(createCrowdyClient, 'child', { birthDate: '2018-02-01', country: 'US' }).then(
+          () => assert.fail('a sign-up under 13 was admitted'),
+          (e) => e,
+        );
+        assert.equal(sdk.ageRequirementNotMetOf(child), true, child.message);
+      }
 
       // The players' app tokens, on the app's own datacenter.
       const accessA = await a.identity.portal.mintAppToken(appId);
@@ -259,55 +283,129 @@ test(
 );
 
 test(
-  'teen safety: an org-managed player signed in with ageYears and country; a blocked country refused',
+  'teen safety: existing accounts read hasSafetyModerator, their own records and the regions',
+  { skip: existingSkip, timeout: 90_000 },
+  async (t) => {
+    const sdk = await import('../../dist/index.js');
+    const { createCrowdyClient } = sdk;
+    const appId = process.env.CROWDY_SAFETY_APP_ID;
+    const owner = createCrowdyClient(entryClientConfig());
+    const player = createCrowdyClient(entryClientConfig());
+    let game = null;
+    try {
+      await owner.auth.login({ email: process.env.CROWDY_OWNER_EMAIL, password: process.env.CROWDY_OWNER_PASSWORD });
+      await player.auth.login({ email: process.env.CROWDY_PLAYER_EMAIL, password: process.env.CROWDY_PLAYER_PASSWORD });
+
+      // A member of the app's organization reads whether it appointed a moderator; an outsider reads null.
+      const asMember = await owner.apps.app(appId);
+      assert.equal(typeof asMember.hasSafetyModerator, 'boolean', 'a member reads hasSafetyModerator');
+      assert.equal((await player.apps.app(appId)).hasSafetyModerator, null, 'an outsider reads null');
+      t.diagnostic(`hasSafetyModerator ${asMember.hasSafetyModerator}, effectiveMinPlayerAge ${asMember.effectiveMinPlayerAge}`);
+
+      // The player's own records: the documents the tier asks for now, a token, then its sessions.
+      if (!(await player.auth.playerLegalAcceptance({ appId }))) {
+        await player.auth.recordPlayerConsents({ acceptLegal: true, appId });
+      }
+      const access = await player.portal.mintAppToken(appId);
+      game = createCrowdyClient(gameClientConfig(access));
+      game.setToken(access.token);
+      const page = await game.inputLog.sessions(appId, { first: 5 });
+      assert.ok(Array.isArray(page.edges), 'the player lists its own sessions');
+      const me = await player.users.me();
+      for (const edge of page.edges) assert.equal(String(edge.node.userId), String(me.userId), 'only its own');
+      t.diagnostic(`own sessions listed: ${page.edges.length}`);
+
+      // The territory list names regions of a country checked by region.
+      const policies = await player.platform.territoryPolicies();
+      const regions = policies.filter((p) => p.regionCode);
+      for (const p of regions) assert.match(p.regionCode, new RegExp(`^${p.countryCode}-[A-Z0-9]{1,3}$`));
+      t.diagnostic(`territory rows ${policies.length}, region rows ${regions.length}`);
+    } finally {
+      game?.close();
+      for (const client of [owner, player]) {
+        try {
+          if (client.getToken()) await client.auth.logout();
+        } catch {
+          /* best effort */
+        }
+        client.close();
+      }
+    }
+  },
+);
+
+test(
+  'teen safety: an org-managed player signed in with ageYears, country and region; blocked ones refused',
   { skip: managedSkip, timeout: 60_000 },
-  async () => {
+  async (t) => {
     const sdk = await import('../../dist/index.js');
     const appId = process.env.CROWDY_MANAGED_APP_ID;
+    const id = (label) => `crowdy-e2e-13p-${run}-${label}`;
 
-    const adult = await orgServerMint({
-      appId,
-      externalId: `crowdy-e2e-13p-${run}-adult`,
-      ageYears: 30,
-      country: 'US',
-    });
+    const adult = await orgServerMint({ appId, externalId: id('adult'), ageYears: 30, country: 'US' });
     assert.equal(adult.error, null, `the adult's mint: ${adult.error?.extensions?.code}: ${adult.error?.message}`);
     const device = sdk.createCrowdyClient(gameClientConfig(adult.data));
     const orgServer = sdk.createCrowdyClient(entryClientConfig());
+    const created = [id('adult')];
+    let orgId = null;
     try {
       device.portal.adoptAppToken(adult.data);
       const me = await device.users.me();
+      orgId = me.orgId;
       assert.equal(me.userType, 'org_managed');
       assert.equal(me.ageBracket, '18_plus', 'the asserted age is stored as a bracket');
       assert.equal(me.country, 'US', 'the asserted country is stored');
       assert.equal((await device.safety.commSettings(appId)).isMinor, false);
 
       // Refused before a player exists: a blocked country, and an age under the youngest admitted.
-      const blocked = await orgServerMint({
-        appId,
-        externalId: `crowdy-e2e-13p-${run}-de`,
-        ageYears: 30,
-        country: 'DE',
-      });
+      const refused = ['de', 'young'];
+      const blocked = await orgServerMint({ appId, externalId: id('de'), ageYears: 30, country: 'DE' });
       assert.deepEqual(sdk.territoryNotSupportedOf(blocked.error), { country: 'DE' }, blocked.error?.message);
-      const young = await orgServerMint({
-        appId,
-        externalId: `crowdy-e2e-13p-${run}-young`,
-        ageYears: 12,
-        country: 'US',
-      });
+      const young = await orgServerMint({ appId, externalId: id('young'), ageYears: 12, country: 'US' });
       assert.equal(sdk.ageRequirementNotMetOf(young.error), true, young.error?.message);
 
-      orgServer.setToken(process.env.CROWDY_ORG_TOKEN);
-      for (const label of ['de', 'young']) {
-        assert.equal(
-          await orgServer.managedPlayers.get(me.orgId, `crowdy-e2e-13p-${run}-${label}`),
-          null,
-          `no player was created for a refused sign-in (${label})`,
-        );
+      // A country checked by region (ck-api v2.61.0): a blocked region and no region are refused,
+      // and another region of it is admitted.
+      const policies = await device.platform.territoryPolicies();
+      const blockedRegion = policies.find((p) => p.regionCode && p.status === 'blocked');
+      if (!blockedRegion) {
+        t.diagnostic('no blocked region listed on this tier; region cases skipped');
+      } else {
+        const country = blockedRegion.countryCode;
+        const inRegion = await orgServerMint({
+          appId, externalId: id('blocked-region'), ageYears: 30, country, region: blockedRegion.regionCode,
+        });
+        assert.ok(sdk.territoryNotSupportedOf(inRegion.error), `${blockedRegion.regionCode}: ${inRegion.error?.message}`);
+        const noRegion = await orgServerMint({ appId, externalId: id('no-region'), ageYears: 30, country });
+        assert.ok(sdk.territoryNotSupportedOf(noRegion.error), `${country} without a region: ${noRegion.error?.message}`);
+        refused.push('blocked-region', 'no-region');
+        const open = policies.find((p) => p.countryCode === country && !p.regionCode)?.status !== 'blocked';
+        const listed = new Set(policies.filter((p) => p.countryCode === country).map((p) => p.regionCode));
+        const other = country === 'UA' && open && !listed.has('UA-30') ? 'UA-30' : null;
+        if (other) {
+          const admitted = await orgServerMint({ appId, externalId: id('region'), ageYears: 30, country, region: other });
+          assert.equal(admitted.error, null, `${other}: ${admitted.error?.extensions?.code}: ${admitted.error?.message}`);
+          created.push(id('region'));
+        }
+        t.diagnostic(`region cases on ${country}: ${blockedRegion.regionCode} and none refused${other ? `, ${other} admitted` : ''}`);
       }
-      assert.equal(await orgServer.managedPlayers.delete(me.orgId, `crowdy-e2e-13p-${run}-adult`), true);
+
+      orgServer.setToken(process.env.CROWDY_ORG_TOKEN);
+      for (const label of refused) {
+        assert.equal(await orgServer.managedPlayers.get(orgId, id(label)), null, `no player for a refused sign-in (${label})`);
+      }
+      for (const externalId of created.splice(0)) {
+        assert.equal(await orgServer.managedPlayers.delete(orgId, externalId), true, `deleted ${externalId}`);
+      }
     } finally {
+      orgServer.setToken(process.env.CROWDY_ORG_TOKEN);
+      for (const externalId of created) {
+        try {
+          if (orgId) await orgServer.managedPlayers.delete(orgId, externalId);
+        } catch (err) {
+          console.warn(`[teen-safety] cleanup ${externalId}: ${err?.message ?? err}`);
+        }
+      }
       device.close();
       orgServer.close();
     }

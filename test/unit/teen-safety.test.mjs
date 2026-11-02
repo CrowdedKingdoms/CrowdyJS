@@ -334,18 +334,35 @@ test('apps.setRequiredDocuments sends the whole list', async () => {
 test('app reads and updates select the safety log and age fields', () => {
   for (const document of [generated.AppDocument, generated.UpdateAppDocument]) {
     const text = print(document);
-    for (const field of ['replayLoggingRecordsVoice', 'replayLoggingRecordsVideo', 'minPlayerAge', 'effectiveMinPlayerAge']) {
+    for (const field of ['replayLoggingRecordsVoice', 'replayLoggingRecordsVideo', 'minPlayerAge', 'effectiveMinPlayerAge', 'hasSafetyModerator']) {
       assert.match(text, new RegExp(`\\b${field}\\b`), field);
     }
     assert.match(text, /recording \{\s*enabled\s+voice\s+video\s*\}/);
   }
 });
 
-test('platform.territoryPolicies reads the public list', async () => {
-  const gql = fakeGql(() => ({ territoryPolicies: [{ countryCode: 'DE', status: 'blocked', minAge: 13 }] }));
+test('platform.territoryPolicies reads the public list, regions included', async () => {
+  const gql = fakeGql(() => ({
+    territoryPolicies: [
+      { countryCode: 'DE', regionCode: null, status: 'blocked', minAge: 13 },
+      { countryCode: 'UA', regionCode: 'UA-43', status: 'blocked', minAge: 13 },
+    ],
+  }));
   const platform = new PlatformAPI(gql);
-  assert.equal((await platform.territoryPolicies())[0].status, 'blocked');
+  const rows = await platform.territoryPolicies();
+  assert.equal(rows[0].status, 'blocked');
+  assert.equal(rows[1].regionCode, 'UA-43');
   assert.deepEqual(gql.calls.map((c) => [c.field, c.variables]), [['territoryPolicies', {}]]);
+  assert.match(gql.calls[0].text, /\{\s*countryCode\s+regionCode\s+status\s+minAge\s*\}/);
+});
+
+test("a player's own records: inputLog.sessions without a filter names no user", async () => {
+  // On an app that admits players under 18 the server lists the caller's own sessions
+  // (a moderator's: the reported ones); the SDK must not add a userId of its own.
+  const { InputLogAPI } = await import('../../dist/domains/inputLog.js');
+  const gql = fakeGql(() => ({ inputLogSessions: { edges: [], pageInfo: { hasNextPage: false, endCursor: null }, totalCount: 0 } }));
+  await new InputLogAPI(gql).sessions('42');
+  assert.deepEqual(JSON.parse(JSON.stringify(gql.calls[0].variables)), { appId: '42' });
 });
 
 // --- portal: Minecraft sign-in --------------------------------------------------------------
@@ -443,7 +460,17 @@ test('territory, safety log, consent, social limit and Minecraft refusals read t
   assert.deepEqual(errors.territoryNotSupportedOf(refusal('TERRITORY_NOT_SUPPORTED')), { country: null });
   assert.equal(errors.territoryNotSupportedOf(refusal('AGE_REQUIRED')), null);
   assert.equal(errors.safetyLogRequiredOf(refusal('SAFETY_LOG_REQUIRED')), true);
-  assert.equal(errors.parentalConsentUnavailableOf(refusal('PARENTAL_CONSENT_UNAVAILABLE')), true);
+  assert.equal(errors.safetyModeratorRequiredOf(refusal('SAFETY_MODERATOR_REQUIRED')), true);
+  assert.equal(errors.safetyModeratorRequiredOf(refusal('SAFETY_LOG_REQUIRED')), false);
+  assert.equal(errors.safetyLogRequiredOf(refusal('SAFETY_MODERATOR_REQUIRED')), false);
+  assert.deepEqual(errors.parentalConsentUnavailableOf(refusal('PARENTAL_CONSENT_UNAVAILABLE')), { reason: null });
+  for (const reason of ['not_configured', 'provider_refused', 'provider_unavailable']) {
+    assert.deepEqual(
+      errors.parentalConsentUnavailableOf(refusal('PARENTAL_CONSENT_UNAVAILABLE', { reason })),
+      { reason },
+    );
+  }
+  assert.equal(errors.parentalConsentUnavailableOf(refusal('RATE_LIMITED')), null);
   assert.equal(errors.socialLimitReachedOf(refusal('SOCIAL_LIMIT_REACHED')), true);
   assert.equal(errors.socialLimitReachedOf(refusal('RATE_LIMITED')), false);
   assert.equal(errors.minecraftVerificationUnavailableOf(refusal('MINECRAFT_VERIFICATION_UNAVAILABLE', { retryable: true })), true);
@@ -464,6 +491,7 @@ test('the package exports every reader and code', () => {
     AGE_REQUIREMENT_NOT_MET_CODE: 'AGE_REQUIREMENT_NOT_MET',
     TERRITORY_NOT_SUPPORTED_CODE: 'TERRITORY_NOT_SUPPORTED',
     SAFETY_LOG_REQUIRED_CODE: 'SAFETY_LOG_REQUIRED',
+    SAFETY_MODERATOR_REQUIRED_CODE: 'SAFETY_MODERATOR_REQUIRED',
     PARENTAL_CONSENT_UNAVAILABLE_CODE: 'PARENTAL_CONSENT_UNAVAILABLE',
     SOCIAL_LIMIT_REACHED_CODE: 'SOCIAL_LIMIT_REACHED',
     MINECRAFT_VERIFICATION_FAILED_CODE: 'MINECRAFT_VERIFICATION_FAILED',
@@ -472,7 +500,7 @@ test('the package exports every reader and code', () => {
   for (const [name, value] of Object.entries(pairs)) assert.equal(sdk[name], value, name);
   for (const reader of [
     'legalAcceptanceRequiredOf', 'ageRequiredOf', 'ageRequirementNotMetOf', 'territoryNotSupportedOf',
-    'safetyLogRequiredOf', 'parentalConsentUnavailableOf', 'socialLimitReachedOf',
+    'safetyLogRequiredOf', 'safetyModeratorRequiredOf', 'parentalConsentUnavailableOf', 'socialLimitReachedOf',
     'minecraftVerificationFailedOf', 'minecraftVerificationUnavailableOf',
   ]) {
     assert.equal(sdk[reader], errors[reader], reader);

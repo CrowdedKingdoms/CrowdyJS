@@ -448,6 +448,12 @@ export class AppsAPI {
    * it to the platform's, and `effectiveMinPlayerAge` reads the result. Younger players
    * are refused `AGE_REQUIREMENT_NOT_MET` at their next mint or refresh.
    *
+   * App reads and this update also return `hasSafetyModerator` (ck-api v2.61.0): whether the
+   * organization has appointed a safety moderator, a member whose own role grants
+   * `moderate_safety` (an admin alone does not count). An app that admits players under 18
+   * needs one, or its minors are refused `SAFETY_MODERATOR_REQUIRED`. Null for a caller who is
+   * not a member of the app's organization.
+   *
    * @param appId - Numeric app id.
    * @param input - {@link UpdateAppInput} fields to change.
    * @returns The updated {@link App}.

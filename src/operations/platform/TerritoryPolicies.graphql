@@ -1,6 +1,7 @@
 query TerritoryPolicies {
   territoryPolicies {
     countryCode
+    regionCode
     status
     minAge
   }

@@ -563,7 +563,9 @@ export class AuthAPI {
    * {@link recordPlayerAge}. A country Crowded Kingdoms does not serve, declared or
    * detected, is refused `TERRITORY_NOT_SUPPORTED` (`territoryNotSupportedOf`), and an
    * age the platform does not admit `AGE_REQUIREMENT_NOT_MET`
-   * (`ageRequirementNotMetOf`); either way no account is made.
+   * (`ageRequirementNotMetOf`); either way no account is made. Since ck-api v2.61.0
+   * the age refusal names no age, and for 24 hours the same client (address and user
+   * agent) is refused it whatever it sends.
    */
   async register(input: {
     email: string;
@@ -686,11 +688,14 @@ export class AuthAPI {
    *
    * Ask on a neutral screen: the date of birth and the country, with no age shown,
    * and the parental line only for a player under 18. Refused with `CONFLICT` once
-   * the account has an age, `TERRITORY_NOT_SUPPORTED` for a country Crowded Kingdoms
-   * does not serve (declared or detected), and `AGE_REQUIREMENT_NOT_MET` under the
-   * platform's youngest age, in which case the account keeps that answer and asking
-   * again changes nothing. Whether the player may play a given app is decided at
-   * the mint. Returns the account's `ageBracket` and `country`.
+   * the account has an age, `TERRITORY_NOT_SUPPORTED` where Crowded Kingdoms does not
+   * serve (the declared country, or the network's country or region), and
+   * `AGE_REQUIREMENT_NOT_MET` under the platform's youngest age. Since ck-api v2.61.0
+   * that refusal names no age, the account is deleted and erased as
+   * `users.deleteMyAccount` does, and for 24 hours the same client (address and user
+   * agent) is refused here and at sign-up whatever it sends: drop the session and do
+   * not ask again. Whether the player may play a given app is decided at the mint.
+   * Returns the account's `ageBracket` and `country`.
    */
   async recordPlayerAge(input: PlayerAgeInput): Promise<PlayerAge> {
     const data = await this.graphql.request(RecordPlayerAgeDocument, {
