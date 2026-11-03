@@ -1,0 +1,5 @@
+query SafetyReports($appId: BigInt!, $status: SafetyReportStatus, $first: Int) {
+  safetyReports(appId: $appId, status: $status, first: $first) {
+    ...SafetyReportFields
+  }
+}

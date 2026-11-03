@@ -65,6 +65,8 @@ import { VoxelsAPI } from './domains/voxels.js';
 import { ActorsAPI } from './domains/actors.js';
 import { TeleportAPI } from './domains/teleport.js';
 import { InputLogAPI } from './domains/inputLog.js';
+import { SafetyAPI } from './domains/safety.js';
+import { ModerationAPI } from './domains/moderation.js';
 import { StateAPI } from './domains/state.js';
 import { ServerStatusAPI } from './domains/serverStatus.js';
 import { ChannelsAPI } from './domains/channels.js';
@@ -288,10 +290,12 @@ export class CrowdyClient {
   readonly usage: UsageAPI;
   /** Shared-environment publishing, runtime gating, auto-billing (studio admin). */
   readonly sharedEnvironment: SharedEnvironmentAPI;
+  /** An app's safety reports for its moderators (`moderate_safety`; identity session). */
+  readonly moderation: ModerationAPI;
   /**
    * Studio-admin facade grouping the privileged management-surface sub-clients
    * (`organizations`, `appAccess`, `billing`, `payments`, `quotas`,
-   * `usage`, `sharedEnvironment`, `grids`) under one namespace.
+   * `usage`, `sharedEnvironment`, `grids`, `moderation`) under one namespace.
    */
   readonly admin: AdminAPI;
 
@@ -306,6 +310,11 @@ export class CrowdyClient {
   readonly teleport: TeleportAPI;
   /** The input log: recorded client inputs of an app with replay logging on. */
   readonly inputLog: InputLogAPI;
+  /**
+   * The player's own safety controls in an app (app token): voice and video scopes,
+   * contacts, blocks, a parent's consent, and reports to the app's moderators.
+   */
+  readonly safety: SafetyAPI;
   /** Per-user/per-app persisted state blobs. */
   readonly state: StateAPI;
   /** Server status + version discovery (UDP availability, version floors). */
@@ -503,12 +512,14 @@ export class CrowdyClient {
     this.quotas = new QuotasAPI(this.graphql);
     this.usage = new UsageAPI(this.graphql);
     this.sharedEnvironment = new SharedEnvironmentAPI(this.graphql);
+    this.moderation = new ModerationAPI(this.graphql);
 
     this.chunks = new ChunksAPI(this.graphql);
     this.voxels = new VoxelsAPI(this.graphql);
     this.actors = new ActorsAPI(this.graphql);
     this.teleport = new TeleportAPI(this.graphql);
     this.inputLog = new InputLogAPI(this.graphql);
+    this.safety = new SafetyAPI(this.graphql);
     this.state = new StateAPI(this.graphql);
     this.serverStatus = new ServerStatusAPI(this.graphql);
     this.channels = new ChannelsAPI(this.graphql);
@@ -540,6 +551,7 @@ export class CrowdyClient {
       usage: this.usage,
       sharedEnvironment: this.sharedEnvironment,
       grids: this.gameApps,
+      moderation: this.moderation,
     });
   }
 

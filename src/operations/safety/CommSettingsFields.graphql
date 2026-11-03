@@ -1,0 +1,19 @@
+fragment CommSettingsFields on CommSettings {
+  appId
+  isMinor
+  voiceSend
+  voiceReceive
+  videoSend
+  videoReceive
+  choices {
+    voiceSend
+    voiceReceive
+    videoSend
+    videoReceive
+  }
+  voiceAllowed
+  videoAllowed
+  voiceConsent
+  videoConsent
+  updatedAt
+}

@@ -1,0 +1,3 @@
+mutation UnblockPlayer($appId: BigInt!, $userId: BigInt!) {
+  unblockPlayer(appId: $appId, userId: $userId)
+}
