@@ -1168,7 +1168,7 @@ set response headers. Then, in Studio, open the app's
 origin as the app's **Launch URL**. The redirect URI is what admits the origin to CORS
 and to the hosted sign-in return, so `portal.signIn` works there as in the
 [Quick start](#quick-start).
-[Host your game](https://docs.dev.crowdedkingdoms.com/build-a-game/host-your-game)
+[Host your game](https://docs.crowdedkingdoms.com/build-a-game/host-your-game)
 has the requirements and recipes.
 
 `client.hosting`, `uploadPublishFiles`, `publishDirectory` and `manifestForDirectory`
