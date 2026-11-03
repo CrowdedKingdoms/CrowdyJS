@@ -4,7 +4,7 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
   "rustVersion": "1.97.1",
   "sdkVersion": "0.1.0",
   "abiVersion": 0,
-  "contentHash": "ee2ede452d216671472b089bc9d6e43b5afcc9debe4d8e9ea2be4f041a282485",
+  "contentHash": "a9f43b0474361a326b6620437ba3613e16745722f44930c901db9de68a10e867",
   "crates": [
     {
       "name": "alloc",
@@ -13,8 +13,8 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "name": "ckx-sdk",
-      "version": "0.12.1",
-      "sourceHash": "d286cb4b12326cbaf7c78c10a593f393d28cbdaa248a3507a179c5c4843ce5aa"
+      "version": "0.13.0",
+      "sourceHash": "b7137dee863c90ec7ffc232b8c13d2ace102de796efff1188835868310941963"
     },
     {
       "name": "core",
@@ -338,6 +338,13 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "ckx_sdk",
+      "name": "Ctx::safety",
+      "kind": "method",
+      "signature": "pub fn safety(&self) -> node::Safety<'_>",
+      "docs": "Safety reports a player files through this hub (scope `safety.write`)."
+    },
+    {
+      "module": "ckx_sdk",
       "name": "Ctx::send",
       "kind": "method",
       "signature": "pub fn send(&self, node_type: &str, key: &str, method: &str, payload: &[u8]) -> Result<(), CallError>",
@@ -443,6 +450,13 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "ckx_sdk",
+      "name": "Error::not_implemented",
+      "kind": "method",
+      "signature": "pub fn not_implemented(hook: &str) -> Self",
+      "docs": "What a hook the hub does not implement answers ([`Hub::on_player_erased`], [`Hub::on_player_export`]). The platform tells it from a failure: it records it and goes on."
+    },
+    {
+      "module": "ckx_sdk",
       "name": "Error::unknown_method",
       "kind": "method",
       "signature": "pub fn unknown_method(method: &str) -> Self",
@@ -475,6 +489,20 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "kind": "method",
       "signature": "fn load(ctx: &Ctx, snapshot: &[u8], from_version: u64) -> Result<Self>;",
       "docs": "An instance restored from its last snapshot, written by code version `from_version`."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Hub::on_player_erased",
+      "kind": "method",
+      "signature": "fn on_player_erased(&mut self, _ctx: &Ctx, _player: u64) -> Result<()>",
+      "docs": "`player`'s account is being erased: delete or anonymize everything this hub holds about them. Every hub of the app that holds state hears it, a stopped one started for it, the player's own included (one keyed by their id, which the platform then deletes with its snapshot). The platform counts the hub done once a snapshot taken after this returns is stored; an error is recorded, and the erasure asks again later. Left out, the hub answers \"not implemented\", which is recorded and does not hold the erasure up."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Hub::on_player_export",
+      "kind": "method",
+      "signature": "fn on_player_export(&mut self, _ctx: &Ctx, _player: u64) -> Result<serde_json::Value>",
+      "docs": "What this hub holds about `player`, for their data export: JSON, at most [`limits::MAX_EXPORT_BYTES`] of it, or `Value::Null` when it holds nothing. Every hub of the app that holds state is asked, a stopped one started for it. Left out, the hub answers \"not implemented\", which the export records."
     },
     {
       "module": "ckx_sdk",
@@ -958,6 +986,13 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "kind": "module",
       "signature": "pub mod prelude",
       "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "serde_json",
+      "kind": "reexport",
+      "signature": "pub use serde_json;",
+      "docs": "What [`Hub::on_player_export`] answers in, for a crate that does not depend on it itself."
     },
     {
       "module": "ckx_sdk::cron",
@@ -7044,6 +7079,13 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "ckx_sdk::limits",
+      "name": "MAX_EXPORT_BYTES",
+      "kind": "const",
+      "signature": "pub const MAX_EXPORT_BYTES: usize = 1 << 20;",
+      "docs": "The most JSON a hub's [`crate::Hub::on_player_export`] may answer. A larger answer is an error, and the export records the hub as failed."
+    },
+    {
+      "module": "ckx_sdk::limits",
       "name": "MAX_LOG_BYTES",
       "kind": "const",
       "signature": "pub const MAX_LOG_BYTES: usize = 4 << 10;",
@@ -7744,6 +7786,69 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "ckx_sdk::node",
+      "name": "AgeBracket",
+      "kind": "enum",
+      "signature": "pub enum AgeBracket { /// No age is known: the platform refuses such a player a token, so a hub rarely sees one. Unknown, Under13, From13To15, From16To17, Adult, }",
+      "docs": "How old a player is, as a bracket: never their age itself."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "AgeBracket::Adult",
+      "kind": "variant",
+      "signature": "Adult",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "AgeBracket::From13To15",
+      "kind": "variant",
+      "signature": "From13To15",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "AgeBracket::From16To17",
+      "kind": "variant",
+      "signature": "From16To17",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "AgeBracket::Under13",
+      "kind": "variant",
+      "signature": "Under13",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "AgeBracket::Unknown",
+      "kind": "variant",
+      "signature": "Unknown",
+      "docs": "No age is known: the platform refuses such a player a token, so a hub rarely sees one."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "AgeBracket::as_str",
+      "kind": "method",
+      "signature": "pub fn as_str(self) -> &'static str",
+      "docs": "As the platform writes it: `unknown`, `under_13`, `13_15`, `16_17` or `18_plus`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "AgeBracket::deserialize",
+      "kind": "method",
+      "signature": "fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "AgeBracket::is_minor",
+      "kind": "method",
+      "signature": "pub fn is_minor(self) -> bool",
+      "docs": "13 to 17: the platform holds the player to minors' defaults."
+    },
+    {
+      "module": "ckx_sdk::node",
       "name": "Chunk",
       "kind": "struct",
       "signature": "pub struct Chunk { pub id: u64, pub at: ChunkPos, pub voxels: Option<Vec<u8>>, pub chunk_state: Option<Vec<u8>>, }",
@@ -7818,6 +7923,20 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "kind": "field",
       "signature": "pub z: i64",
       "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "FiledReport",
+      "kind": "struct",
+      "signature": "pub struct FiledReport { /// What moderators know it by. #[serde(deserialize_with = \"de_u64\", alias = \"reportId\")] pub report_id: u64, }",
+      "docs": "A report the platform recorded."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "FiledReport::report_id",
+      "kind": "field",
+      "signature": "pub report_id: u64",
+      "docs": "What moderators know it by."
     },
     {
       "module": "ckx_sdk::node",
@@ -8017,6 +8136,13 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "ckx_sdk::node",
+      "name": "MAX_REPORT_DETAILS",
+      "kind": "const",
+      "signature": "pub const MAX_REPORT_DETAILS: usize = 1_000;",
+      "docs": "A safety report's details, in characters as the game API counts them (UTF-16 units)."
+    },
+    {
+      "module": "ckx_sdk::node",
       "name": "MAX_VOXEL_STATE",
       "kind": "const",
       "signature": "pub const MAX_VOXEL_STATE: usize = 1024;",
@@ -8054,8 +8180,15 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "module": "ckx_sdk::node",
       "name": "Player",
       "kind": "struct",
-      "signature": "pub struct Player { #[serde(deserialize_with = \"de_u64\")] pub player: u64, pub gamertag: String, /// What tells players with the same gamertag apart; most players have none. #[serde(default)] pub disambiguation: Option<String>, }",
+      "signature": "pub struct Player { #[serde(deserialize_with = \"de_u64\")] pub player: u64, pub gamertag: String, /// What tells players with the same gamertag apart; most players have none. #[serde(default)] pub disambiguation: Option<String>, /// The player's age bracket; `None` from a platform that does not say. #[serde(default, alias = \"ageBracket\")] pub age_bracket: Option<AgeBracket>, }",
       "docs": "A player's public identity."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Player::age_bracket",
+      "kind": "field",
+      "signature": "pub age_bracket: Option<AgeBracket>",
+      "docs": "The player's age bracket; `None` from a platform that does not say."
     },
     {
       "module": "ckx_sdk::node",
@@ -8129,6 +8262,13 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "ckx_sdk::node",
+      "name": "Players::blocked",
+      "kind": "method",
+      "signature": "pub fn blocked(&self, player: u64, other: u64) -> Result<bool, CallError>",
+      "docs": "Whether either player has blocked the other in this app: check it before mail, friend requests, trades, duels or invites pass between them, and before the hub's own events carry one's words to the other (the realtime servers pass what a hub emits, blocks or not). Scope `players.read`."
+    },
+    {
+      "module": "ckx_sdk::node",
       "name": "Players::check_permission",
       "kind": "method",
       "signature": "pub fn check_permission(&self, player: u64, group: u64, permission: Option<&str>) -> Result<bool, CallError>",
@@ -8161,6 +8301,125 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "kind": "method",
       "signature": "pub fn state(&self, player: u64) -> Result<Option<Vec<u8>>, CallError>",
       "docs": "The player's state blob for this app, which game clients read too. Scope `players.read`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "ReportReason",
+      "kind": "enum",
+      "signature": "pub enum ReportReason { ChildSafety, Harassment, SexualContent, Hate, SelfHarm, Cheating, Other, }",
+      "docs": "Why a player is reported ([`SafetyReport::reason`])."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "ReportReason::Cheating",
+      "kind": "variant",
+      "signature": "Cheating",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "ReportReason::ChildSafety",
+      "kind": "variant",
+      "signature": "ChildSafety",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "ReportReason::Harassment",
+      "kind": "variant",
+      "signature": "Harassment",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "ReportReason::Hate",
+      "kind": "variant",
+      "signature": "Hate",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "ReportReason::Other",
+      "kind": "variant",
+      "signature": "Other",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "ReportReason::SelfHarm",
+      "kind": "variant",
+      "signature": "SelfHarm",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "ReportReason::SexualContent",
+      "kind": "variant",
+      "signature": "SexualContent",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Safety",
+      "kind": "struct",
+      "signature": "pub struct Safety<'a>(pub(crate) &'a Ctx);",
+      "docs": "Safety reports: [`Ctx::safety`]."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "Safety::report",
+      "kind": "method",
+      "signature": "pub fn report(&self, report: &SafetyReport) -> Result<FiledReport, CallError>",
+      "docs": "Files `report` as its reporter would from the game, both players being the app's: moderators review it with what the app's safety log recorded of both around when it happened. Scope `safety.write`."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "SafetyReport",
+      "kind": "struct",
+      "signature": "pub struct SafetyReport { /// The player reporting. pub reporter: u64, /// The player reported. pub reported: u64, /// The reported player's actor (its 32-character id), when the report is about what it /// did in the world. pub reported_actor: Option<String>, pub reason: ReportReason, /// What happened, in the reporter's words: at most [`MAX_REPORT_DETAILS`] characters. pub details: String, /// When it happened, in Unix milliseconds. pub occurred_at_ms: u64, }",
+      "docs": "A safety report a hub files for one player about another ([`Safety::report`])."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "SafetyReport::details",
+      "kind": "field",
+      "signature": "pub details: String",
+      "docs": "What happened, in the reporter's words: at most [`MAX_REPORT_DETAILS`] characters."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "SafetyReport::occurred_at_ms",
+      "kind": "field",
+      "signature": "pub occurred_at_ms: u64",
+      "docs": "When it happened, in Unix milliseconds."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "SafetyReport::reason",
+      "kind": "field",
+      "signature": "pub reason: ReportReason",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "SafetyReport::reported",
+      "kind": "field",
+      "signature": "pub reported: u64",
+      "docs": "The player reported."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "SafetyReport::reported_actor",
+      "kind": "field",
+      "signature": "pub reported_actor: Option<String>",
+      "docs": "The reported player's actor (its 32-character id), when the report is about what it did in the world."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "SafetyReport::reporter",
+      "kind": "field",
+      "signature": "pub reporter: u64",
+      "docs": "The player reporting."
     },
     {
       "module": "ckx_sdk::node",
@@ -8332,9 +8591,9 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "ckx_sdk::prelude",
-      "name": "crate::node::{ChunkPos, GridPick, VoxelWrite}",
+      "name": "crate::node::{AgeBracket, ChunkPos, GridPick, ReportReason, SafetyReport, VoxelWrite}",
       "kind": "reexport",
-      "signature": "pub use crate::node::{ChunkPos, GridPick, VoxelWrite};",
+      "signature": "pub use crate::node::{AgeBracket, ChunkPos, GridPick, ReportReason, SafetyReport, VoxelWrite};",
       "docs": ""
     },
     {
