@@ -10,6 +10,16 @@ query App($appId: BigInt!) {
     metadata
     wildernessWritesOpen
     replayLoggingEnabled
+    replayLoggingRecordsVoice
+    replayLoggingRecordsVideo
+    recording {
+      enabled
+      voice
+      video
+    }
+    minPlayerAge
+    effectiveMinPlayerAge
+    hasSafetyModerator
     claimOwnerKeys
     splitMode
     deploymentTarget

@@ -1,0 +1,11 @@
+mutation RequestParentalConsent(
+  $appId: BigInt!
+  $feature: ParentalConsentFeature!
+  $parentEmail: String!
+) {
+  requestParentalConsent(appId: $appId, feature: $feature, parentEmail: $parentEmail) {
+    appId
+    feature
+    status
+  }
+}

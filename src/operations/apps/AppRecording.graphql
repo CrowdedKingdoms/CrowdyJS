@@ -1,0 +1,10 @@
+query AppRecording($appId: BigInt!) {
+  app(appId: $appId) {
+    appId
+    recording {
+      enabled
+      voice
+      video
+    }
+  }
+}

@@ -1,0 +1,26 @@
+fragment SafetyReportFields on SafetyReport {
+  appId
+  reportId
+  reporterUserId
+  reportedUserId
+  reportedActorUuid
+  reason
+  details
+  occurredAt
+  filedAt
+  status
+  outcome
+  resolvedBy
+  resolvedAt
+  ncmecReportId
+  ncmecSubmittedAt
+  holdId
+  sessions
+  capture {
+    status
+    objects
+    expected
+    bytes
+    retainUntil
+  }
+}

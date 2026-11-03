@@ -1,0 +1,3 @@
+mutation RemoveContact($appId: BigInt!, $userId: BigInt!) {
+  removeContact(appId: $appId, userId: $userId)
+}

@@ -10,6 +10,16 @@ mutation UpdateApp($appId: BigInt!, $input: UpdateAppInput!) {
     metadata
     wildernessWritesOpen
     replayLoggingEnabled
+    replayLoggingRecordsVoice
+    replayLoggingRecordsVideo
+    recording {
+      enabled
+      voice
+      video
+    }
+    minPlayerAge
+    effectiveMinPlayerAge
+    hasSafetyModerator
     claimOwnerKeys
     updatedAt
   }
