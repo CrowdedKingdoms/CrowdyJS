@@ -1,0 +1,9 @@
+mutation SetAppRequiredDocuments($appId: BigInt!, $documents: [AppRequiredDocumentInput!]!) {
+  setAppRequiredDocuments(appId: $appId, documents: $documents) {
+    documentId
+    version
+    title
+    url
+    appId
+  }
+}

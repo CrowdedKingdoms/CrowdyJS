@@ -30,6 +30,9 @@ so it needs that Game API or newer; promote the Game API before the SDK on each 
 
 | CrowdyJS | Needs the Game API (ck-api) |
 | --- | --- |
+| 18.25.0 | v2.61.0 or later (app reads and `apps.update` select `hasSafetyModerator`; `platform.territoryPolicies` selects `regionCode`) |
+| 18.24.0 | v2.60.0 or later (`users.me` selects `ageBracket` and `country`; app reads and `apps.update` select the safety log and age fields; the teen safety calls). `auth.recordPlayerConsents` with both flags and `auth.playerLegalAcceptance()` without an app work against older releases |
+| 18.22.0 | v2.58.0 or later (`ExecInstance.orphaned`) |
 | 18.11.0 | what 18.10.0 needs; the Game Kit's hub modules need the app to run the starter pack of a compute toolchain with ckx-sdk 0.10.0 (`kit.topology` deploys it) |
 | 18.10.0 | the release after v2.43.1 (channel and team bans); the access-ended close needs ck-exec 0.16 |
 | 18.9.0 | the release after v2.40.2 (`InputLogSession.missingRecords`) |
@@ -114,14 +117,37 @@ the player, from a phishing page.
 **Every player stores the terms and an age attestation before playing** (ck-api
 v2.35.0, 2026-10-07). Until they do, `portal.mintAppToken`,
 `portal.createAuthorizationCode` and `portal.refresh` answer
-`LEGAL_ACCEPTANCE_REQUIRED` (`isLegalAcceptanceRequiredError`). On the first row
-Studio's `/authorize` asks for both, so a browser game only has to send the player
+`LEGAL_ACCEPTANCE_REQUIRED` (`isLegalAcceptanceRequiredError`;
+`legalAcceptanceRequiredOf(err).missingDocuments` names what is missing). On the first row
+Studio's `/authorize` asks for everything, so a browser game only has to send the player
 back through `portal.signIn` when a refresh is refused that way. On the other rows,
-show your own two checkboxes linking each document, then call
-`client.auth.recordPlayerConsents({ acceptLegal: true, attestAgeOfMajority: true })`
-before minting; `client.auth.playerLegalAcceptance()` says whether that is still
-needed. `auth.register` takes the same two fields, and a browser page must send both.
+show the documents with your own checkbox, each linked (`client.auth.playerLegalDocuments()`
+and, since ck-api v2.60.0, the app's own `client.auth.appRequiredDocuments(appId)`), then call
+`client.auth.recordPlayerConsents({ acceptLegal: true, attestAgeOfMajority: true, appId })`
+before minting; `client.auth.playerLegalAcceptance({ appId })` says whether that is still
+needed. `auth.register` takes the same fields, and a browser page must send them.
 See [MIGRATION.md](MIGRATION.md#1840-the-terms-and-age-gate).
+
+**The player gate** (ck-api v2.60.0, the teen safety program) runs at every mint and
+refresh: a country Crowded Kingdoms does not serve is refused `TERRITORY_NOT_SUPPORTED`
+(`territoryNotSupportedOf(err)?.country`), an account with no age `AGE_REQUIRED`
+(`ageRequiredOf`), an age the app or the country does not admit `AGE_REQUIREMENT_NOT_MET`
+(`ageRequirementNotMetOf`), and a player under 18 in an app without its safety log
+`SAFETY_LOG_REQUIRED` (`safetyLogRequiredOf`), or (ck-api v2.61.0) in an app whose organization
+has appointed no safety moderator `SAFETY_MODERATOR_REQUIRED` (`safetyModeratorRequiredOf`).
+Ask the date of birth and the country on a neutral screen: it shows no age, and only a player
+under 18 sees the line that a parent or guardian agreed. Send the answers with
+`auth.register({ ..., birthDate, country, parentalConfirmation })`, or
+`auth.recordPlayerAge({ birthDate, country, parentalConfirmation })` for an account that has
+none. No refusal names an age and the SDK's readers surface none: tell the player they cannot
+play this, without a number, and do not offer the date again. Since v2.61.0 the same client
+(address and user agent) is refused at sign-up and `recordPlayerAge` for 24 hours after an age
+refusal, and an account that answers `recordPlayerAge` under 13 is deleted. `users.me()` reports
+`ageBracket` and `country`, and `platform.territoryPolicies()` (public) lists the countries and,
+since v2.61.0, regions (`regionCode`, ISO 3166-2: a country with a region listed is checked by
+region), so a sign-up form can say a place is not served before an account exists. The age is
+optional until the platform admits players under 18; until then the 18+ attestation still
+applies.
 
 Crowded Kingdoms no longer hosts games (retired 2026-10-29), so a customer's game
 always runs on its own domain and takes the first row. See
@@ -221,7 +247,16 @@ const res = await fetch('https://ck.dev.crowdedkingdoms.com/graphql', {
   body: JSON.stringify({
     query: `mutation($i: MintManagedPlayerTokenInput!) { mintManagedPlayerToken(input: $i) {
       token gameTokenId appId expiresAt gameApiUrl gameApiWsUrl discoveryUrl launchUrl } }`,
-    variables: { i: { appId, externalId: account.id, gamertag: account.displayName } },
+    variables: {
+      i: {
+        appId,
+        externalId: account.id,
+        gamertag: account.displayName,
+        ageYears: account.ageYears, // whole years, as your organization knows them
+        country: account.country,   // ISO 3166-1 alpha-2
+        region: account.region,     // ISO 3166-2 (UA-30), where the country is checked by region
+      },
+    },
   }),
 });
 const { data } = await res.json();
@@ -241,11 +276,26 @@ and the same id is always the same player. The token refreshes (`refreshGameplay
 the sign-in's lifetime ends (`sessionTtlSeconds`, at most the organization's setting); then the
 device asks your server again.
 
+**Age and country** (ck-api v2.60.0). Send the player's `ageYears` and `country` with every
+sign-in, and `region` (ISO 3166-2, v2.61.0) where the country is checked by region (the regions
+`platform.territoryPolicies()` lists; Ukraine's today): on the mint's input
+(`MintManagedPlayerTokenInput`, exported as a type) or as the assertion's claims
+(`ManagedPlayerAssertionClaims`). Crowded Kingdoms stores an age bracket and the country on the
+player and applies a minor's defaults itself. A country or region it does not serve, or a
+missing region it needs, is refused `TERRITORY_NOT_SUPPORTED`, and an age under the app's, the
+country's or the platform's youngest `AGE_REQUIREMENT_NOT_MET`, before the player exists; then
+the same player is refused for 24 hours whatever is sent, and a player that exists and is said
+to be under 13 is deleted. A refresh is refused once the stored bracket is wholly below the
+app's youngest age. The age and country are optional while every managed player is 18 or older
+under the Org-Managed Players Addendum (left out, the player counts as an adult) and required
+once the platform admits players under 18 (`AGE_REQUIRED` without an age).
+
 **With a signed assertion.** Register a public key once
 (`managedPlayers.registerSigningKey({ orgId, kid, algorithm: 'EdDSA', publicJwk, issuer })`);
 your sign-in service signs a short JWS per player (`iss`, `aud: 'ck:app:<appId>'`, `sub` your
-account id, `iat`, `exp` at most 300 s later, a fresh `jti`, optionally `gamertag`) and the
-device trades it, without your server calling Crowded Kingdoms:
+account id, `iat`, `exp` at most 300 s later, a fresh `jti`, optionally `gamertag`, and
+`ageYears`, `country` and `region` as above: `ManagedPlayerAssertionClaims`) and the device trades it,
+without your server calling Crowded Kingdoms:
 
 ```ts
 const access = await game.portal.exchangeManagedPlayerAssertion({ appId, assertion });
@@ -281,6 +331,75 @@ keep the socket and sign with the new token; when it is null, place again with
 `serverWithLeastClients`. A Buddy silently drops datagrams for a token it was
 never told about, so a native refresh without it is a re-placement.
 
+## Player safety
+
+The teen safety program (18.24.0, ck-api v2.60.0). The platform enforces a player's voice and
+video scopes, contacts and blocks on the realtime servers, and keeps the app's safety log;
+your game shows the player the controls, the recording notice and the indicator. Everything a
+player does here takes the app token, on the game client:
+
+```ts
+// The safety log: show a notice before the player first speaks or appears on camera while
+// voice or video is recorded, and an indicator while it is.
+const recording = await game.apps.recording(appId); // { enabled, voice, video }
+if (recording?.voice || recording?.video) showRecordingNoticeAndIndicator(recording);
+
+// Voice and video: who the player sends to and hears from (OFF, CONTACTS, EVERYONE).
+const settings = await game.safety.commSettings(appId);
+await game.safety.setCommSettings(appId, { voiceReceive: 'CONTACTS' });
+
+// Contacts (mutual, per app: what CONTACTS admits), blocks and reports.
+await game.safety.requestContact(appId, otherUserId);
+await game.safety.acceptContact(appId, requesterUserId);
+await game.safety.block(appId, otherUserId);
+await game.safety.fileReport({ appId, reportedUserId, reason: 'HARASSMENT', details, occurredAt: new Date() });
+```
+
+- **Scopes.** `commSettings` returns the EFFECTIVE scopes the servers enforce, the player's
+  `choices`, and what policy allows (`voiceAllowed`, `videoAllowed`). A player can only lower
+  them. An adult may choose anything (`EVERYONE` by default); a player under 18 (`isMinor`) has
+  each medium `OFF` until a parent consents, then at most `CONTACTS`.
+  `safety.requestParentalConsent(appId, 'VOICE' | 'VIDEO', parentEmail)` asks a parent through
+  the platform's consent service (`PARENTAL_CONSENT_UNAVAILABLE`: `parentalConsentUnavailableOf(err)?.reason`
+  is `not_configured`, `provider_refused` or `provider_unavailable`).
+- **Contacts.** `contacts`, `contactRequests` (`INCOMING`, then `OUTGOING`), `requestContact`,
+  `acceptContact`, `removeContact` (removes, declines or cancels).
+- **Blocks.** `block`, `unblock`, `blocks`: nothing passes between the two players, either way,
+  and the blocked player is not told (its contact requests are answered as usual and dropped).
+  A hub that carries one player's words or media to another asks first (ck-exec's
+  `players.blocked`), because the realtime servers pass what a hub emits.
+- **Reports.** `fileReport` covers both players' recorded sessions from 15 minutes before
+  `occurredAt`, and the platform preserves them for the app's moderators. `SOCIAL_LIMIT_REACHED`
+  (`socialLimitReachedOf`) refuses past 100 waiting requests, 1,000 contacts or 1,000 blocks.
+- Every change reaches the player's live sessions within a second.
+
+**Moderators** hold `moderate_safety` on the app (an organization role, or the org's admins)
+and use their identity session: `client.moderation.reports(appId, { status })` (open
+`CHILD_SAFETY` reports first), `resolveReport(appId, reportId, outcome)` and
+`escalateReport(appId, reportId, ncmecReportId)`. A report's `sessions` are the recorded sessions
+it covers; a moderator reads them with `inputLog.messages` on an app token for the app, while the
+report is open or escalated, and every read is audited. An app that admits players under 18
+needs an **appointed** moderator (ck-api v2.61.0): a member whose own role grants
+`moderate_safety` (an admin alone does not count), or its minors are refused
+`SAFETY_MODERATOR_REQUIRED`. `apps.app(appId).hasSafetyModerator` tells the organization's
+members whether it has one (null for anyone else).
+
+**A player's own records.** On an app with the safety log a player reads what it sent itself:
+`inputLog.sessions(appId)` without a filter lists its own sessions, and `inputLog.messages(appId,
+gameTokenId)` reads one. On an app that admits players under 18, `manage_apps` reads nothing
+more, and every read is audited (ck-api v2.61.0).
+
+**App admins** (`manage_apps`): `apps.update(appId, { replayLoggingEnabled,
+replayLoggingRecordsVoice, replayLoggingRecordsVideo, minPlayerAge })` (an app that admits
+players under 18 must keep its safety log: `SAFETY_LOG_REQUIRED`), and
+`apps.setRequiredDocuments(appId, documents)` for the app's own documents, which its players
+accept on top of the platform's.
+
+**Crowded Kingdoms' own apps** sign Minecraft players in: `portal.minecraftChallenge(appId)`, a
+Mojang session join by the Minecraft client itself, then `portal.signInWithMinecraft({ appId,
+username, serverId, birthDate, country, parentalConfirmation, acceptedDocuments })`. Any other app
+is refused `FORBIDDEN`.
+
 ## Game-loop lifecycle
 
 1. Sign in on the identity client with `client.auth` (`login` / `register`), or
@@ -305,12 +424,13 @@ never told about, so a native refresh without it is a re-placement.
 
 | Sub-client | What it does |
 |---|---|
-| `client.auth` | Sign-in: `login` / `register` (email + password), magic link, social/OIDC. Passwords: `requestPasswordReset` / `resetPassword`, `changePassword`, and `setInitialPassword` for an account created by magic link or a social provider (added in 15.1.0). Log out, and linked identities (`myIdentities`, `linkIdentity`/`unlinkIdentity`). **No dev bypass** — `devLogin` was removed in 15.0.0 and `DEV_AUTH_BYPASS` is gone from every tier. |
-| `client.users` | `me`, `updateGamertag`, profile reads; `playerProfile` / `playerProfiles` (up to 100) for other players' public `{ userId, gamertag, disambiguation }`. |
+| `client.auth` | Sign-in: `login` / `register` (email + password, with the age answers `birthDate` / `country` / `parentalConfirmation`), magic link, social/OIDC. Passwords: `requestPasswordReset` / `resetPassword`, `changePassword`, and `setInitialPassword` for an account created by magic link or a social provider (added in 15.1.0). Log out, and linked identities (`myIdentities`, `linkIdentity`/`unlinkIdentity`). The terms and the age: `playerLegalDocuments`, `appRequiredDocuments`, `recordPlayerConsents`, `playerLegalAcceptance`, `recordPlayerAge`; a developer's: `developerLegalDocuments`, `recordDeveloperConsents`, `developerLegalAcceptance`. **No dev bypass** — `devLogin` was removed in 15.0.0 and `DEV_AUTH_BYPASS` is gone from every tier. |
+| `client.users` | `me` (with `ageBracket` and `country`), `updateGamertag`, profile reads; `playerProfile` / `playerProfiles` (up to 100) for other players' public `{ userId, gamertag, disambiguation }`. |
+| `client.safety` | The player's own controls in an app (app token): voice and video scopes (`commSettings`, `setCommSettings`), a parent's consent (`requestParentalConsent`), contacts, blocks and reports (`fileReport`). See [Player safety](#player-safety). |
 | `client.session` | Token store, `restore()`, `getToken()`, manual `setToken()`. |
-| `client.portal` | App-scoped token minting (`mintAppToken`) and the cross-origin PKCE entry flow (`beginEntry` / `handleAuthorizeRequest` / `completeEntry` / `refresh`). For an org-managed player, `adoptAppToken` stores the token its organization minted and `exchangeManagedPlayerAssertion` trades the organization's signed assertion. |
+| `client.portal` | App-scoped token minting (`mintAppToken`) and the cross-origin PKCE entry flow (`beginEntry` / `handleAuthorizeRequest` / `completeEntry` / `refresh`). For an org-managed player, `adoptAppToken` stores the token its organization minted and `exchangeManagedPlayerAssertion` trades the organization's signed assertion. Crowded Kingdoms' own apps sign Minecraft players in (`minecraftChallenge`, `signInWithMinecraft`). |
 | `client.hosting` | **Deprecated.** Crowded Kingdoms no longer hosts games (retired 2026-10-29): the hosting API answers `CONTENT_HOSTING_DISABLED` on every tier, and its reads return null or an empty list. The methods (`claim`, `beginPublish` / `completePublish` / `abandonPublish`, `setEnabled`, `game(slug)`, `listed()`) and the Node helper `publishDirectory` (`@crowdedkingdoms/crowdyjs/hosting`) remain in the package. See [Hosting your game](#hosting-your-game). |
-| `client.platform` | Public platform configuration (`config()`). |
+| `client.platform` | Public platform configuration (`config()`) and the territory list (`territoryPolicies()`). |
 | `client.serverStatus` | `gameClientBootstrap(appId)` — per-app version info, UDP status, spatial limits. |
 | `client.chunks`, `client.voxels`, `client.actors`, `client.avatars`, `client.state` | World data reads + writes: terrain/LODs, voxel edit + history/rollback, durable actors, avatars, per-user app state blobs. |
 | `client.host` | Game-host election (`get`, `amIHost`) + actor liveness `heartbeat`. `amIHost` is UI convenience only — a hub decides host-only actions from its caller. |
@@ -336,7 +456,8 @@ grouped under `client.admin` and mirrored at the top level):
 |---|---|
 | `client.organizations` | Orgs, members, RBAC roles, org API tokens (with `scopes` and `appIds` for org-managed players). |
 | `client.managedPlayers` | Org-managed players: list, provision, rename, disable, end sessions, delete; assertion signing keys; whether the org pays for their mods in an app; where the org stands on the addendum. See [Org-managed players](#org-managed-players). |
-| `client.apps` | App registry, discovery + routing (`create`, `routeFor`, `marketplace`), visibility, and player-code admission mode / allow-list administration. |
+| `client.apps` | App registry, discovery + routing (`create`, `routeFor`, `marketplace`), visibility, and player-code admission mode / allow-list administration. The safety log's state for players (`recording`, readable with an app token) and the app's own documents (`setRequiredDocuments`). |
+| `client.moderation` | An app's safety reports for its moderators (`moderate_safety`): `reports`, `resolveReport`, `escalateReport`. See [Player safety](#player-safety). |
 | `client.appAccess` | Access tiers + per-user grants, and the feature keys a tier grants (`defineFeature`, `grantTierFeature`, `tierFeatures`, …), which a hub checks with the node API's `players.features`; timed bans (`suspend`, `unsuspend`) and `resyncTierGridPermissions`. |
 | `client.billing` | Org wallet + per-app spend budgets. |
 | `client.payments` | Payment checkouts (wallet top-ups, plan purchases). |
@@ -1047,7 +1168,7 @@ set response headers. Then, in Studio, open the app's
 origin as the app's **Launch URL**. The redirect URI is what admits the origin to CORS
 and to the hosted sign-in return, so `portal.signIn` works there as in the
 [Quick start](#quick-start).
-[Host your game](https://docs.dev.crowdedkingdoms.com/build-a-game/host-your-game)
+[Host your game](https://docs.crowdedkingdoms.com/build-a-game/host-your-game)
 has the requirements and recipes.
 
 `client.hosting`, `uploadPublishFiles`, `publishDirectory` and `manifestForDirectory`
@@ -1276,6 +1397,16 @@ before entering the world. For org-managed players: `assertionRejectedOf(err)`
 (`ASSERTION_REJECTED`, with the failed check as `reason`) and `managedPlayerNotAllowedOf(err)`
 (`MANAGED_PLAYER_NOT_ALLOWED`: no wallet, or mods the organization has not switched on).
 
+The player gate and player safety (18.24.0): `legalAcceptanceRequiredOf(err)`
+(`LEGAL_ACCEPTANCE_REQUIRED`, with the `missingDocuments`), `ageRequiredOf(err)` (`AGE_REQUIRED`),
+`ageRequirementNotMetOf(err)` (`AGE_REQUIREMENT_NOT_MET`; a boolean on purpose, since no refusal
+names an age), `territoryNotSupportedOf(err)` (`TERRITORY_NOT_SUPPORTED`, with `country`),
+`safetyLogRequiredOf(err)` (`SAFETY_LOG_REQUIRED`), `safetyModeratorRequiredOf(err)`
+(`SAFETY_MODERATOR_REQUIRED`, 18.25.0), `parentalConsentUnavailableOf(err)`
+(`PARENTAL_CONSENT_UNAVAILABLE`, with `reason` since 18.25.0), `socialLimitReachedOf(err)` (`SOCIAL_LIMIT_REACHED`), and for
+Minecraft sign-in `minecraftVerificationFailedOf(err)` (with `reason`) and
+`minecraftVerificationUnavailableOf(err)` (retry shortly). Each has its `*_CODE` constant.
+
 ## Idempotent retries
 
 Destructive game-client mutations accept an optional **idempotency key**. Pass
@@ -1360,6 +1491,24 @@ leaves the org behind and archives the app, so it runs only when asked to.
 `test/e2e/game-kit.test.mjs` does the same for the Game Kit: the throwaway owner composes the
 starter hubs with `kit.topology`, builds and deploys them, and two players play them (on dev and
 test it also needs `CROWDY_PROVISIONING_TOKEN`, which their staff-only sign-up asks for).
+
+`test/e2e/teen-safety.test.mjs` runs the teen safety calls (18.24.0, 18.25.0). With
+`CROWDY_SAFETY_APP_ID` (an app whose default tier admits any player) and
+`CROWDY_PROVISIONING_TOKEN` on dev and test, two new players sign up with a birth date and a
+country, read `me`, change their voice and video settings, ask, accept and remove a contact,
+block and unblock, and delete their accounts; a sign-up declaring a blocked country is refused
+before any account exists. That test registers two accounts, and a tier's sign-ups are limited
+and shared, so run it deliberately (`--test-name-pattern` selects the others). With
+`CROWDY_OWNER_EMAIL` / `_PASSWORD` (an admin of that app's org) one player also reports the
+other and the admin lists and resolves the report; without them no report is filed. With those
+and `CROWDY_PLAYER_EMAIL` / `_PASSWORD` (an existing player outside that org), existing accounts
+read `hasSafetyModerator`, the player's own input-log sessions and the territory regions, with no
+sign-up. With `CROWDY_ORG_TOKEN` (`players:mint` and `players:manage`) and
+`CROWDY_MANAGED_APP_ID`, an organization's server signs a managed player in with `ageYears` and
+`country`, a blocked country, a blocked region, a missing region and an age under 13 are
+refused, and the players are deleted. `CROWDY_E2E_UNDER13_SIGNUP=1` also signs up under 13; since
+ck-api v2.61.0 that blocks every sign-up from the machine's address and user agent for 24 hours,
+so do not set it on a shared builder.
 
 ## Maintainers: schema artifacts and fixtures
 

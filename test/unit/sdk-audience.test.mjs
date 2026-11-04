@@ -86,6 +86,16 @@ const PLATFORM_ONLY = [
   'legalHolds',
   'setLegalHold',
   'releaseLegalHold',
+  // teen safety (ck-api v2.60.0): an operator sets a country's policy and exports a player's
+  // data. territoryPolicies is public and wrapped; safetyReports and its two decisions take
+  // moderate_safety, an org role, and are wrapped (client.moderation).
+  'setTerritoryPolicy',
+  'exportPlayerData',
+  // ck-api v2.61.0: CK's child-safety queue across apps, an operator's account erasure (a
+  // parent's request), and a parent's emailed withdrawal of consent.
+  'childSafetyReports',
+  'eraseAccount',
+  'recordParentalConsentWithdrawal',
 ];
 
 /** How the schema's descriptions say a field is for super-admins or operators only. */
@@ -144,11 +154,30 @@ test('the description rule sees the platform-only fields and not the org-admin o
     assert.ok(field, `${name} is in the schema`);
     return PLATFORM_ONLY_DESCRIPTION.test((field.description ?? '').replace(/\s+/g, ' '));
   };
-  for (const name of ['setOrgStatus', 'retireOrganization', 'emailDeliverability', 'allHostedGames', 'checkouts']) {
+  for (const name of [
+    'setOrgStatus',
+    'retireOrganization',
+    'emailDeliverability',
+    'allHostedGames',
+    'checkouts',
+    'setTerritoryPolicy',
+    'exportPlayerData',
+    'childSafetyReports',
+    'recordParentalConsentWithdrawal',
+  ]) {
     assert.equal(describedAs(name), true, name);
   }
   // Org-admin fields whose descriptions mention super admins only as a bypass.
-  for (const name of ['orgMembers', 'inviteOrgMember', 'createApp', 'myCheckouts']) {
+  for (const name of [
+    'orgMembers',
+    'inviteOrgMember',
+    'createApp',
+    'myCheckouts',
+    'safetyReports',
+    'resolveSafetyReport',
+    'escalateSafetyReport',
+    'setAppRequiredDocuments',
+  ]) {
     assert.equal(describedAs(name), false, name);
   }
 });

@@ -140,7 +140,20 @@ test('client exposes the full management + game sub-client surface', async () =>
   assertMethods(client.apps, 'apps', [
     'codeAdmissionMode', 'codeAdmissions', 'setCodeAdmissionMode', 'admitCode',
     'revokeCodeAdmission',
+    // The teen safety program (18.24.0): the notice and indicator, and an app's documents.
+    'recording', 'setRequiredDocuments',
   ]);
+  // The teen safety program (18.24.0): a player's own controls on the game client, and the
+  // moderators' reports. No operator's field (setTerritoryPolicy, exportPlayerData).
+  assertMethods(client.safety, 'safety', [
+    'commSettings', 'setCommSettings', 'requestParentalConsent',
+    'contacts', 'contactRequests', 'requestContact', 'acceptContact', 'removeContact',
+    'blocks', 'block', 'unblock', 'fileReport',
+  ]);
+  assertMethods(client.moderation, 'moderation', ['reports', 'resolveReport', 'escalateReport']);
+  assert.equal(client.admin.moderation, client.moderation, 'admin.moderation aliases client.moderation');
+  assertMethods(client.platform, 'platform', ['config', 'territoryPolicies']);
+  assert.equal(client.platform.setTerritoryPolicy, undefined, 'an operator sets territory policy, not the SDK');
 
   // Auth surface: email+password alongside magic link and social, and the four
   // password-management mutations.
@@ -167,6 +180,10 @@ test('client exposes the full management + game sub-client surface', async () =>
     'setInitialPassword',
     'myIdentities', 'linkIdentity', 'unlinkIdentity', 'logout',
     'logoutAllDevices', 'setToken', 'getToken',
+    // The terms, the age and the documents (18.4.0, 18.24.0).
+    'recordPlayerConsents', 'playerLegalAcceptance', 'recordPlayerAge',
+    'playerLegalDocuments', 'appRequiredDocuments',
+    'developerLegalDocuments', 'developerLegalAcceptance', 'recordDeveloperConsents',
   ]);
   // ONE name, and its reason is specific to it: `devLogin` is removed from the
   // SERVER on every tier, so a wrapper could only ever produce a validation
@@ -187,6 +204,8 @@ test('client exposes the full management + game sub-client surface', async () =>
     'signIn', 'handleSignInCallback',
     'getConsent', 'authorizeApp', 'revokeAppAuthorization',
     'myAuthorizedApps', 'setAppClientSettings',
+    // Crowded Kingdoms' own apps only (18.24.0).
+    'minecraftChallenge', 'signInWithMinecraft',
   ]);
 
   // Game Kit: the social helpers, and since 18.11.0 typed clients for the ck-exec starter hubs.

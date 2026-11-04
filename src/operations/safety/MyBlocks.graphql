@@ -1,0 +1,6 @@
+query MyBlocks($appId: BigInt!) {
+  myBlocks(appId: $appId) {
+    userId
+    createdAt
+  }
+}

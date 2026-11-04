@@ -1,0 +1,5 @@
+mutation SetMyCommSettings($appId: BigInt!, $input: SetCommSettingsInput!) {
+  setMyCommSettings(appId: $appId, input: $input) {
+    ...CommSettingsFields
+  }
+}
