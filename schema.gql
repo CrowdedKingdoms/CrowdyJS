@@ -1825,7 +1825,7 @@ type OrgManagedPlayerSettings {
   """Where the current addendum is published."""
   termsUrl: String!
   """
-  Whether the organization has accepted the current version. Until it has, its managed players are neither created nor signed in and their app tokens do not refresh (ORG_LEGAL_ACCEPTANCE_REQUIRED).
+  Whether the organization has accepted the current version. Until it has, its managed players are neither created nor signed in (ORG_LEGAL_ACCEPTANCE_REQUIRED); a player signed in under an earlier acceptance keeps playing until its session expires.
   """
   termsAccepted: Boolean!
   """
@@ -2369,7 +2369,7 @@ type SetAppReservedThroughputResult {
 }
 
 """
-Result of publishing an app to the shared environment. All paths publish immediately. Usage above the free allowances is wallet-billed: each app has a per-dimension hourly allowance and, for client egress, 5 decimal GB per calendar month. An unfunded free app is also shaped to roughly 1 MB/s; funding the org wallet or enabling auto-billing lifts that.
+Result of publishing an app to the shared environment. All paths publish immediately. Usage above the free allowances is wallet-billed: each app has a per-dimension hourly allowance and, for client egress, 5 decimal GB per calendar month.
 """
 type PublishAppResult {
   appId: BigInt!
@@ -9518,7 +9518,7 @@ type Mutation {
     method: LegalAcceptanceMethod
   ): Boolean!
   """
-  Record the signed-in player's birth date and country, and under 18 that a parent or guardian agreed, for an account whose age is not known yet (me.ageBracket is 'unknown'). Only the year and month are kept. Refused with CONFLICT when the account already has an age, TERRITORY_NOT_SUPPORTED where Crowded Kingdoms does not serve (the declared country, or the network's country or region; not for Crowded Kingdoms staff), and AGE_REQUIREMENT_NOT_MET under 13, in which case the account is deleted and erased as deleteMyAccount does. That refusal names no age, and for 24 hours afterwards the same client (address and user agent) is refused AGE_REQUIREMENT_NOT_MET here and at register whatever it sends. Whether the player may play a given app (its minimum age, the country's) is decided at the mint. Returns the account; read ageBracket and country. Requires a session token.
+  Record the signed-in player's birth date and country, and under 18 that a parent or guardian agreed, for an account whose age is not known yet (me.ageBracket is 'unknown'). Only the year and month are kept. Refused with CONFLICT when the account already has an age, TERRITORY_NOT_SUPPORTED where Crowded Kingdoms does not serve (the declared country, or the network's country or region; not for Crowded Kingdoms staff), and AGE_REQUIREMENT_NOT_MET under 13, in which case the account is deleted and erased as deleteMyAccount does. That refusal names no age, and afterwards the same client is refused AGE_REQUIREMENT_NOT_MET here and at register whatever it sends: for 24 hours a device that sent the x-ck-device-id header (an opaque random id the client keeps), else for an hour the same address and user agent. Whether the player may play a given app (its minimum age, the country's) is decided at the mint. Returns the account; read ageBracket and country. Requires a session token.
   """
   recordPlayerAge(input: RecordPlayerAgeInput!): User!
   """
@@ -9833,7 +9833,7 @@ type Mutation {
   """
   mintAppToken(input: MintAppTokenInput!): AppTokenResponse!
   """
-  Create a one-time, PKCE-bound portal authorization code (browser handoff). The Overworld identity origin (holding the SESSION token) calls this; redirect the player to the destination game carrying the code, which the game exchanges via exchangePortalCode. Requires a SESSION token.
+  Create a one-time, PKCE-bound portal authorization code (browser handoff). The Overworld identity origin (holding the SESSION token) calls this; redirect the player to the destination game carrying the code, which the game exchanges via exchangePortalCode. Refused like mintAppToken before any code exists: TERRITORY_NOT_SUPPORTED, AGE_REQUIRED, AGE_REQUIREMENT_NOT_MET and LEGAL_ACCEPTANCE_REQUIRED, and for a player under 18 SAFETY_LOG_REQUIRED (the app keeps no safety log) then SAFETY_MODERATOR_REQUIRED (its organization has no safety moderator), with the same neutral messages. Requires a SESSION token.
   """
   createPortalAuthorizationCode(input: CreatePortalAuthorizationCodeInput!): PortalAuthorizationCode!
   """
@@ -9985,7 +9985,7 @@ type Mutation {
     input: SetCommSettingsInput!
   ): CommSettings!
   """
-  For a player under 18: ask a parent, through the consent service (Kids Web Services), to allow one medium (VOICE or VIDEO) in this app. The service emails parentEmail; once the parent consents, the medium opens up to CONTACTS (see myCommSettings). The address goes to the service and is not stored by Crowded Kingdoms. NOT_REQUIRED for a player 18 or over, ALREADY_GRANTED if a parent has consented. Errors: PARENTAL_CONSENT_UNAVAILABLE while the service is not configured on this deployment; RATE_LIMITED after three requests in an hour. Game plane: send the app-scoped token for this app to the app’s datacenter.
+  For a player under 18: ask a parent, through the consent service (Kids Web Services), to allow one medium (VOICE or VIDEO) in this app. The service emails parentEmail; once the parent consents, the medium opens up to CONTACTS (see myCommSettings). The address goes to the service and is not stored by Crowded Kingdoms. NOT_REQUIRED for a player 18 or over, ALREADY_GRANTED if a parent has consented. Errors: PARENTAL_CONSENT_UNAVAILABLE, nothing sent, with extensions.reason not_configured (no consent service on this deployment), provider_refused (the service refused the request, such as an address it does not accept; do not retry it as it is) or provider_unavailable (the service did not answer; retryable); RATE_LIMITED after three requests in an hour. Game plane: send the app-scoped token for this app to the app’s datacenter.
   """
   requestParentalConsent(
     """The app."""
@@ -10220,7 +10220,7 @@ type Mutation {
     idempotencyKey: String
   ): AppSharedSubscription!
   """
-  Reserve capacity for a shared app. A reservation is a FLOOR, not a ceiling: the platform provisions and holds a minimum for you and does not limit what you may use beyond it. Billed monthly from the org wallet whether or not it is used; upgrades are prorated for the current month. Note that the ~1 MB/s free-tier shaping is lifted by funding a wallet, not by reserving. Requires 'manage_billing' on the app's org.
+  Reserve capacity for a shared app. A reservation is a FLOOR, not a ceiling: the platform provisions and holds a minimum for you and does not limit what you may use beyond it. Billed monthly from the org wallet whether or not it is used; upgrades are prorated for the current month. Requires 'manage_billing' on the app's org.
   """
   setAppReservedThroughput(
     """Org, app, and desired reserved throughput in bytes/s."""
@@ -11778,7 +11778,7 @@ input RegisterUserInput {
   """
   attestAgeOfMajority: Boolean
   """
-  Birth date, YYYY-MM-DD (YYYY-MM is accepted too); only the year and month are kept, and the age is counted from the last day of that month. Sent with country. Required on a browser signup once the platform admits players under 18 (AGE_REQUIRED without it); a request with no Origin may omit it and gives it later with recordPlayerAge. Under 13, or under the minimum age where the player is, the signup is refused with AGE_REQUIREMENT_NOT_MET (it names no age) and no account is made; for 24 hours afterwards the same client (address and user agent) is refused AGE_REQUIREMENT_NOT_MET whatever it sends.
+  Birth date, YYYY-MM-DD (YYYY-MM is accepted too); only the year and month are kept, and the age is counted from the last day of that month. Sent with country. Required on a browser signup once the platform admits players under 18 (AGE_REQUIRED without it); a request with no Origin may omit it and gives it later with recordPlayerAge. Under 13, or under the minimum age where the player is, the signup is refused with AGE_REQUIREMENT_NOT_MET (it names no age) and no account is made; afterwards the same client is refused AGE_REQUIREMENT_NOT_MET whatever it sends: for 24 hours a device that sent the x-ck-device-id header (an opaque random id the client keeps), else for an hour the same address and user agent.
   """
   birthDate: String
   """
@@ -12428,7 +12428,7 @@ input SetAppReservedThroughputInput {
   """App to configure reserved realtime (UDP) capacity for."""
   appId: BigInt!
   """
-  Reserved sustained realtime capacity in bytes/s (decimal MB/s: 1_000_000 = 1 MB/s). 0 clears the reservation, which releases the provisioned floor and stops the monthly fee; it does not change how the app is shaped, because the ~1 MB/s free-tier cap is decided by whether the org can be charged rather than by whether it holds a reservation. A reservation buys capacity, not volume: the fee is charged in addition to metered usage and includes no data allowance.
+  Reserved sustained realtime capacity in bytes/s (decimal MB/s: 1_000_000 = 1 MB/s). 0 clears the reservation, which releases the provisioned floor and stops the monthly fee. A reservation buys capacity, not volume: the fee is charged in addition to metered usage and includes no data allowance.
   """
   reservedBytesPerSec: BigInt!
 }
