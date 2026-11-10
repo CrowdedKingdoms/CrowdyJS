@@ -29,7 +29,8 @@
  *   node --test test/e2e/teen-safety.test.mjs
  *
  * Without the owner pair the report is not filed (an unresolved report would hold the reported
- * account). The country refusals assume the territory list blocks DE (seeded on every tier).
+ * account). The country refusals assume the territory list blocks CU (OFAC-sanctioned, blocked on
+ * every tier).
  * CROWDY_E2E_UNDER13_SIGNUP=1 also checks that a sign-up under 13 is refused; since ck-api
  * v2.61.0 that refusal blocks every sign-up from the same address and user agent for 24 hours,
  * so never set it on a machine others register from.
@@ -154,11 +155,11 @@ test(
       assert.equal(again?.code, 'CONFLICT', `recordPlayerAge on an account with an age: ${again?.message}`);
 
       // Refused before any account exists: a blocked country (and, opt-in, an age under 13).
-      const blocked = await signUp(createCrowdyClient, 'de', { birthDate: '1990-05-15', country: 'DE' }).then(
-        () => assert.fail('a sign-up declaring DE was admitted'),
+      const blocked = await signUp(createCrowdyClient, 'cu', { birthDate: '1990-05-15', country: 'CU' }).then(
+        () => assert.fail('a sign-up declaring CU was admitted'),
         (e) => e,
       );
-      assert.deepEqual(sdk.territoryNotSupportedOf(blocked), { country: 'DE' }, blocked.message);
+      assert.deepEqual(sdk.territoryNotSupportedOf(blocked), { country: 'CU' }, blocked.message);
       if (process.env.CROWDY_E2E_UNDER13_SIGNUP === '1') {
         const child = await signUp(createCrowdyClient, 'child', { birthDate: '2018-02-01', country: 'US' }).then(
           () => assert.fail('a sign-up under 13 was admitted'),
@@ -358,9 +359,9 @@ test(
       assert.equal((await device.safety.commSettings(appId)).isMinor, false);
 
       // Refused before a player exists: a blocked country, and an age under the youngest admitted.
-      const refused = ['de', 'young'];
-      const blocked = await orgServerMint({ appId, externalId: id('de'), ageYears: 30, country: 'DE' });
-      assert.deepEqual(sdk.territoryNotSupportedOf(blocked.error), { country: 'DE' }, blocked.error?.message);
+      const refused = ['cu', 'young'];
+      const blocked = await orgServerMint({ appId, externalId: id('cu'), ageYears: 30, country: 'CU' });
+      assert.deepEqual(sdk.territoryNotSupportedOf(blocked.error), { country: 'CU' }, blocked.error?.message);
       const young = await orgServerMint({ appId, externalId: id('young'), ageYears: 12, country: 'US' });
       assert.equal(sdk.ageRequirementNotMetOf(young.error), true, young.error?.message);
 
