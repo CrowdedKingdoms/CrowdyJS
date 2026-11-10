@@ -19,6 +19,8 @@ query App($appId: BigInt!) {
     }
     minPlayerAge
     effectiveMinPlayerAge
+    idleTimeoutSeconds
+    effectiveIdleTimeoutSeconds
     hasSafetyModerator
     claimOwnerKeys
     splitMode

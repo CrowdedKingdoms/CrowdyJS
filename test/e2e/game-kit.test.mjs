@@ -81,8 +81,10 @@ test('the kit composes, deploys and plays the starter pack on a tier', { skip, t
     return { client, userId: String(account.userId) };
   };
 
-  // The owner's org and app.
+  // The owner's org and app. An account accepts the current developer terms before it creates
+  // or administers an org.
   const owner = await identity();
+  await owner.client.auth.recordDeveloperConsents({ acceptDeveloperTerms: true });
   const tag = rid();
   const org = await owner.client.organizations.create({ name: `e2e game kit ${tag}`, slug: `e2e-game-kit-${tag}` });
   const placeable = await owner.client.apps.placeableDatacenters();

@@ -163,6 +163,15 @@ function requiredPassword(varName) {
 }
 
 /** Create a brand-new account and return its session. */
+/**
+ * The age and country every throwaway account declares at sign-up: an adult in the US. Since the
+ * platform admits players from 13 (2026-11-04), a player who has declared no age is refused a
+ * gameplay token (mintAppToken: AGE_REQUIRED), even though a sign-up without an Origin header
+ * succeeds without one. Only the year and month are kept. Tests about minors pass their own.
+ */
+export const E2E_BIRTH_DATE = '1990-01';
+export const E2E_COUNTRY = 'US';
+
 async function registerAccount(email, password) {
   // ck-api v2.35.0+ refuses a gameplay token (mintAppToken: LEGAL_ACCEPTANCE_REQUIRED) until the
   // player's consents are stored, so a throwaway test player agrees at registration.
@@ -173,7 +182,7 @@ async function registerAccount(email, password) {
     `mutation Register($i: RegisterUserInput!) {
        register(registerUserInput: $i) { token gameTokenId user { userId email } }
      }`,
-    { i: { email, password, acceptLegal: true, attestAgeOfMajority: true } },
+    { i: { email, password, acceptLegal: true, attestAgeOfMajority: true, birthDate: E2E_BIRTH_DATE, country: E2E_COUNTRY } },
     undefined,
     provisioning ? { 'x-ck-provisioning-token': provisioning } : {},
   );

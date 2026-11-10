@@ -30,6 +30,7 @@ so it needs that Game API or newer; promote the Game API before the SDK on each 
 
 | CrowdyJS | Needs the Game API (ck-api) |
 | --- | --- |
+| 18.26.0 | v2.64.0 or later (app reads and `apps.update` select `idleTimeoutSeconds` and `effectiveIdleTimeoutSeconds`) |
 | 18.25.0 | v2.61.0 or later (app reads and `apps.update` select `hasSafetyModerator`; `platform.territoryPolicies` selects `regionCode`) |
 | 18.24.0 | v2.60.0 or later (`users.me` selects `ageBracket` and `country`; app reads and `apps.update` select the safety log and age fields; the teen safety calls). `auth.recordPlayerConsents` with both flags and `auth.playerLegalAcceptance()` without an app work against older releases |
 | 18.22.0 | v2.58.0 or later (`ExecInstance.orphaned`) |
@@ -583,6 +584,23 @@ flag: `UDP_PROXY_CONNECTION_FAILED` is transient (back off and resubscribe),
 while `AUTH_REQUIRED` / `APP_ID_REQUIRED` must be fixed by the caller first.
 Unsubscribing stops delivery only; call `client.udp.disconnect()` to close the
 UDP proxy session.
+
+**A session that goes 15 minutes without gameplay input ends, and the SDK does not
+reconnect it** (18.26.0). The replication server releases a player who sends no movement,
+edits, messages, voice or video for the app's idle timeout (`effectiveIdleTimeoutSeconds`
+on the app: 900 unless the app sets its own with `apps.update({ idleTimeoutSeconds })`, and
+never when it sets 0). Keep-alives and keyframes that repeat an unchanged state do not count.
+The status becomes `inactive` on both transports (relay close `GAMEPLAY_IDLE_CLOSE_CODE`,
+4410, or the `IDLE_TIMEOUT_CODE` connection event). Reconnect on the player's next input:
+
+```ts
+client.realtime.onStatus((status) => {
+  if (status === 'inactive') showPausedOverlay(); // the player stepped away
+});
+onPlayerInput(() => {
+  if (client.realtime.status() === 'inactive') client.realtime.connect();
+});
+```
 
 `genericSpatial` receives opcode 140 (`GENERIC_SPATIAL_1`), an app-defined spatial payload the
 server fans out without reading — what `client.udp.sendGenericSpatial` and CrowdyCPP's
