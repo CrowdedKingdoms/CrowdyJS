@@ -120,6 +120,27 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.26.0: a session released for idleness is final
+
+**What it needs.** ck-api `v2.64.0` (cks-game-api #643): `apps.app()` and `apps.update()` select
+`idleTimeoutSeconds` and `effectiveIdleTimeoutSeconds`; against an older API those reads fail
+GraphQL validation. The release itself is the replication server's (reason 5 on
+`COMMAND_SESSION_RELEASED`), and needs nothing from the SDK to happen.
+
+**What changes for a game.** A realtime session that sends no gameplay input (movement, edits,
+messages, voice, video; not keep-alives, and not keyframes repeating an unchanged state) for the
+app's idle timeout is released, 15 minutes by default. Before 18.26.0 the SDK read the relay's
+close as a dropped connection and reconnected, which defeated the rule; now:
+
+- the binary relay's close 4410 (`GAMEPLAY_IDLE_CLOSE_CODE`) and the GraphQL proxy's
+  `RealtimeConnectionEvent` `IDLE_TIMEOUT` (`IDLE_TIMEOUT_CODE`, `retryable: false`) set the
+  status to the new **`inactive`** and stop the transport from reconnecting;
+- `client.realtime.connect()` reopens it; call it on the player's next input.
+
+`RealtimeStatus` gains `'inactive'`: a `switch` that must be exhaustive needs a case for it. An app
+that never wants idle players released sets `apps.update(appId, { idleTimeoutSeconds: 0 })`; one
+that wants a different period sets 60 to 86400 seconds; `null` returns it to the default.
+
 ## 18.25.0: appointed moderators, regions, and the consent refusal's reason
 
 **What it needs.** ck-api `v2.61.0` (cks-game-api #623, #624): `apps.app()` and `apps.update()`

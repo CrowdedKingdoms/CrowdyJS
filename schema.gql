@@ -1490,6 +1490,14 @@ type App {
   The youngest age the app admits now: the higher of minPlayerAge and the platform's minimum (18 until players 13 and over are admitted, then 13). A player's country can require more (territoryPolicies); younger players are refused AGE_REQUIREMENT_NOT_MET at mint.
   """
   effectiveMinPlayerAge: Int!
+  """
+  The app's own gameplay idle timeout in seconds, when it sets one: 0 turns the timeout off, otherwise 60 to 86400. null uses the platform default (effectiveIdleTimeoutSeconds). Set with updateApp (manage_apps).
+  """
+  idleTimeoutSeconds: Int
+  """
+  Seconds a realtime session may go without gameplay input (movement, messages, edits, voice; keep-alives and keyframes that repeat an unchanged state do not count) before the replication server releases it with reason idle. 900 (15 minutes) unless the app sets its own; 0 means never. A released player is not reconnected automatically: the SDKs report the session inactive and the game reconnects on the next player input.
+  """
+  effectiveIdleTimeoutSeconds: Int!
   """Timestamp when the app was created."""
   createdAt: DateTime!
   """Timestamp when the app was last updated."""
@@ -9775,7 +9783,7 @@ type Mutation {
     input: CreateAppInput!
   ): App! @requiresPermission(scope: "org", permission: "manage_apps", scopeArg: "input.orgId")
   """
-  Update mutable fields of an existing app (name, description, visibility, status, metadata, wildernessWritesOpen, claimOwnerKeys, replayLoggingEnabled, replayLoggingRecordsMedia, replayLoggingRecordsVoice, replayLoggingRecordsVideo, minPlayerAge); only fields present in the input are changed. Turning replayLoggingEnabled on is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet can spend at least the projected cost of keeping one retention period of the app's recent traffic (extensions.requiredMicrousd and spendableMicrousd say how much), or the org is billing-exempt; recordings already kept go on billing after it is turned off, until they age out. Turning it off is refused with SAFETY_LOG_REQUIRED while the app admits players under 18. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility, or restore an archived app (status back to DRAFT/LIVE). Throws if the app id does not exist.
+  Update mutable fields of an existing app (name, description, visibility, status, metadata, wildernessWritesOpen, claimOwnerKeys, replayLoggingEnabled, replayLoggingRecordsMedia, replayLoggingRecordsVoice, replayLoggingRecordsVideo, minPlayerAge, idleTimeoutSeconds); only fields present in the input are changed. Turning replayLoggingEnabled on is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet can spend at least the projected cost of keeping one retention period of the app's recent traffic (extensions.requiredMicrousd and spendableMicrousd say how much), or the org is billing-exempt; recordings already kept go on billing after it is turned off, until they age out. Turning it off is refused with SAFETY_LOG_REQUIRED while the app admits players under 18. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility, or restore an archived app (status back to DRAFT/LIVE). Throws if the app id does not exist.
   """
   updateApp(
     """Numeric id of the app to update."""
@@ -12019,6 +12027,10 @@ input UpdateAppInput {
   The youngest age the app admits, 13 to 18. It only ever raises the platform's minimum (18 until players 13 and over are admitted, then 13), never lowers it; younger players are refused AGE_REQUIREMENT_NOT_MET at their next mint or refresh. null returns the app to the platform's minimum. Omit to leave unchanged.
   """
   minPlayerAge: Int
+  """
+  Seconds a realtime session may go without gameplay input before the replication server releases it with reason idle: 60 to 86400, or 0 to turn the timeout off. null returns the app to the platform default (900 seconds). Takes effect within about 15 seconds, for sessions already open too. Omit to leave unchanged.
+  """
+  idleTimeoutSeconds: Int
 }
 
 input AdmitAppCodeInput {
@@ -14344,11 +14356,11 @@ Realtime lifecycle event delivered on the udpNotifications subscription. It is a
 """
 type RealtimeConnectionEvent {
   """
-  Lifecycle status: "failed" when the session could not be established or had to be torn down, or "draining" for the one advisory case (SERVER_DRAINING) where the stream stays open.
+  Lifecycle status: "failed" when the session could not be established or had to be torn down, "draining" for the one advisory case (SERVER_DRAINING) where the stream stays open, or "inactive" when the replication server released an idle session (IDLE_TIMEOUT).
   """
   status: String!
   """
-  Machine-readable failure reason. Branch on this (not on `message`). Known values: AUTH_REQUIRED — no valid bearer game token was presented on the WS connection_init / request; authenticate via the Management API and resubscribe (not retryable as-is). APP_ID_REQUIRED — the subscription was opened without an appId scope; udpNotifications must be app-scoped (game tokens are app-agnostic and one socket is shared across apps), so pass the app you are playing and resubscribe (not retryable as-is). UDP_PROXY_CONNECTION_FAILED — the proxy could not open or keep a UDP socket to the selected game server (transient/infrastructure); back off and resubscribe (retryable). `message` carries the specific underlying detail for this case. SERVER_DRAINING — this API instance is being taken out of service; the stream KEEPS WORKING, but you should re-run discovery (gameClientBootstrap or mintAppToken) and move your HTTP calls and your socket together to the instance it returns before this one stops. Reaches every client of the instance, including one behind the load balancer: a draining instance stops naming itself in discovery and expires the affinity cookie the balancer set, so the move lands elsewhere.
+  Machine-readable failure reason. Branch on this (not on `message`). Known values: AUTH_REQUIRED — no valid bearer game token was presented on the WS connection_init / request; authenticate via the Management API and resubscribe (not retryable as-is). APP_ID_REQUIRED — the subscription was opened without an appId scope; udpNotifications must be app-scoped (game tokens are app-agnostic and one socket is shared across apps), so pass the app you are playing and resubscribe (not retryable as-is). UDP_PROXY_CONNECTION_FAILED — the proxy could not open or keep a UDP socket to the selected game server (transient/infrastructure); back off and resubscribe (retryable). `message` carries the specific underlying detail for this case. SERVER_DRAINING — this API instance is being taken out of service; the stream KEEPS WORKING, but you should re-run discovery (gameClientBootstrap or mintAppToken) and move your HTTP calls and your socket together to the instance it returns before this one stops. Reaches every client of the instance, including one behind the load balancer: a draining instance stops naming itself in discovery and expires the affinity cookie the balancer set, so the move lands elsewhere. IDLE_TIMEOUT — the replication server released the session because the player sent no gameplay input for the app's idle timeout (App.effectiveIdleTimeoutSeconds); the stream then completes. Not retryable as-is: do not resubscribe until the player acts again, then subscribe as for a new session.
   """
   code: String!
   """
