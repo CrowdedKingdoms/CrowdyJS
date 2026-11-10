@@ -344,7 +344,7 @@ test('app reads and updates select the safety log and age fields', () => {
 test('platform.territoryPolicies reads the public list, regions included', async () => {
   const gql = fakeGql(() => ({
     territoryPolicies: [
-      { countryCode: 'DE', regionCode: null, status: 'blocked', minAge: 13 },
+      { countryCode: 'CU', regionCode: null, status: 'blocked', minAge: 13 },
       { countryCode: 'UA', regionCode: 'UA-43', status: 'blocked', minAge: 13 },
     ],
   }));
@@ -456,7 +456,7 @@ test('the age refusals are booleans: no reader surfaces an age (decision 35)', (
 });
 
 test('territory, safety log, consent, social limit and Minecraft refusals read their fields', () => {
-  assert.deepEqual(errors.territoryNotSupportedOf(refusal('TERRITORY_NOT_SUPPORTED', { country: 'DE' })), { country: 'DE' });
+  assert.deepEqual(errors.territoryNotSupportedOf(refusal('TERRITORY_NOT_SUPPORTED', { country: 'CU' })), { country: 'CU' });
   assert.deepEqual(errors.territoryNotSupportedOf(refusal('TERRITORY_NOT_SUPPORTED')), { country: null });
   assert.equal(errors.territoryNotSupportedOf(refusal('AGE_REQUIRED')), null);
   assert.equal(errors.safetyLogRequiredOf(refusal('SAFETY_LOG_REQUIRED')), true);
@@ -479,9 +479,9 @@ test('territory, safety log, consent, social limit and Minecraft refusals read t
   // A later entry of a multi-error response reads too.
   const later = new errors.CrowdyGraphQLError([
     { message: 'other', extensions: { code: 'BAD_USER_INPUT' } },
-    { message: 'refused', extensions: { code: 'TERRITORY_NOT_SUPPORTED', country: 'GB' } },
+    { message: 'refused', extensions: { code: 'TERRITORY_NOT_SUPPORTED', country: 'IR' } },
   ]);
-  assert.deepEqual(errors.territoryNotSupportedOf(later), { country: 'GB' });
+  assert.deepEqual(errors.territoryNotSupportedOf(later), { country: 'IR' });
 });
 
 test('the package exports every reader and code', () => {
@@ -516,13 +516,13 @@ test('a refused mint reads as the gate refusal through the client', async () => 
     ok: true,
     status: 200,
     headers: { get: () => null, forEach: () => {} },
-    json: async () => ({ errors: [{ message: 'not available', extensions: { code: 'TERRITORY_NOT_SUPPORTED', country: 'DE' } }] }),
+    json: async () => ({ errors: [{ message: 'not available', extensions: { code: 'TERRITORY_NOT_SUPPORTED', country: 'CU' } }] }),
   });
   const client = sdk.createCrowdyClient({ httpUrl: 'https://ck.example', wsUrl: 'wss://ck.example' });
   try {
     client.setToken('session-token');
     const err = await client.portal.mintAppToken('42').catch((e) => e);
-    assert.deepEqual(sdk.territoryNotSupportedOf(err), { country: 'DE' });
+    assert.deepEqual(sdk.territoryNotSupportedOf(err), { country: 'CU' });
     assert.equal(sdk.ageRequiredOf(err), false);
   } finally {
     globalThis.fetch = original;

@@ -5549,7 +5549,7 @@ export type Mutation = {
   setAppManagedPlayerMods: Scalars['Boolean']['output'];
   /** Set the documents the app's players accept before playing, replacing the list: documents not named stop being required, and a new version of one asks every player of the app again at their next mint or refresh (LEGAL_ACCEPTANCE_REQUIRED until they accept it). At most 10; ids may not reuse the platform's. Requires the 'manage_apps' permission on the app; super admins bypass. */
   setAppRequiredDocuments: Array<LegalDocument>;
-  /** Reserve capacity for a shared app. A reservation is a FLOOR, not a ceiling: the platform provisions and holds a minimum for you and does not limit what you may use beyond it. Billed monthly from the org wallet whether or not it is used; upgrades are prorated for the current month. Note that the ~1 MB/s free-tier shaping is lifted by funding a wallet, not by reserving. Requires 'manage_billing' on the app's org. */
+  /** Reserve capacity for a shared app. A reservation is a FLOOR, not a ceiling: the platform provisions and holds a minimum for you and does not limit what you may use beyond it. Billed monthly from the org wallet whether or not it is used; upgrades are prorated for the current month. Requires 'manage_billing' on the app's org. */
   setAppReservedThroughput: SetAppReservedThroughputResult;
   /** Sets per-app hourly/daily spend caps (in cents) and returns the re-evaluated runtime state. Pass null for a limit to clear that cap. Exceeding a cap denies the app's runtime (runtimeDenialReason = spend_cap). Requires the 'manage_billing' permission on the app's org. */
   setAppSpendCaps: AppRuntimeState;
@@ -7250,7 +7250,7 @@ export type OrgManagedPlayerSettings = {
   orgId: Scalars['BigInt']['output'];
   /** How many managed players it holds now. */
   playerCount: Scalars['BigInt']['output'];
-  /** Whether the organization has accepted the current version. Until it has, its managed players are neither created nor signed in and their app tokens do not refresh (ORG_LEGAL_ACCEPTANCE_REQUIRED). */
+  /** Whether the organization has accepted the current version. Until it has, its managed players are neither created nor signed in (ORG_LEGAL_ACCEPTANCE_REQUIRED); a player signed in under an earlier acceptance keeps playing until its session expires. */
   termsAccepted: Scalars['Boolean']['output'];
   /** When it accepted that version. */
   termsAcceptedAt: Maybe<Scalars['DateTime']['output']>;
@@ -8111,7 +8111,7 @@ export type PublicRateCardEntryType = {
   unitQuantity: Scalars['BigInt']['output'];
 };
 
-/** Result of publishing an app to the shared environment. All paths publish immediately. Usage above the free allowances is wallet-billed: each app has a per-dimension hourly allowance and, for client egress, 5 decimal GB per calendar month. An unfunded free app is also shaped to roughly 1 MB/s; funding the org wallet or enabling auto-billing lifts that. */
+/** Result of publishing an app to the shared environment. All paths publish immediately. Usage above the free allowances is wallet-billed: each app has a per-dimension hourly allowance and, for client egress, 5 decimal GB per calendar month. */
 export type PublishAppResult = {
   __typename?: 'PublishAppResult';
   appId: Scalars['BigInt']['output'];
@@ -10200,7 +10200,7 @@ export type SetAppReservedThroughputInput = {
   appId: Scalars['BigInt']['input'];
   /** Organization that owns the app. */
   orgId: Scalars['BigInt']['input'];
-  /** Reserved sustained realtime capacity in bytes/s (decimal MB/s: 1_000_000 = 1 MB/s). 0 clears the reservation, which releases the provisioned floor and stops the monthly fee; it does not change how the app is shaped, because the ~1 MB/s free-tier cap is decided by whether the org can be charged rather than by whether it holds a reservation. A reservation buys capacity, not volume: the fee is charged in addition to metered usage and includes no data allowance. */
+  /** Reserved sustained realtime capacity in bytes/s (decimal MB/s: 1_000_000 = 1 MB/s). 0 clears the reservation, which releases the provisioned floor and stops the monthly fee. A reservation buys capacity, not volume: the fee is charged in addition to metered usage and includes no data allowance. */
   reservedBytesPerSec: Scalars['BigInt']['input'];
 };
 

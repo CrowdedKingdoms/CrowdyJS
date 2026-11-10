@@ -217,12 +217,6 @@ export class SharedEnvironmentAPI {
    * byte is metered from the first one whether or not you hold a reservation:
    * reserving 5 MB/s does not make the first 5 MB/s free.
    *
-   * **It is not how you lift the free-tier cap.** Unfunded free apps are shaped
-   * at roughly 1 MB/s. That shaping is lifted by funding the org wallet or
-   * enabling auto-billing ({@link setAutoBilling}), not by reserving — before
-   * 2026-09-01 a reservation did double duty as a rate-limit bypass and no longer
-   * does.
-   *
    * Billed monthly whether or not the capacity is used; upgrades are prorated for
    * the current month, and lowering or clearing a reservation charges nothing.
    *
