@@ -4,7 +4,10 @@
  * credential of anyone's and never signs in as an existing account.
  *
  *   CROWDY_HTTP_URL=https://ck.dev.crowdedkingdoms.com CROWDY_E2E_THROWAWAY_OWNER=1 \
- *   node --test test/e2e/open-grid-and-exec-gateway.test.mjs
+ *   CROWDY_PROVISIONING_TOKEN=... node --test test/e2e/open-grid-and-exec-gateway.test.mjs
+ *
+ * Dev and test are staff-only, so there it also needs CROWDY_PROVISIONING_TOKEN, which its
+ * sign-ups send.
  *
  * It registers two accounts per run and leaves an org behind (orgs are not deleted; the app is
  * archived), so it runs only when asked to.
@@ -20,6 +23,7 @@ import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { WebSocket } from 'ws';
 import { entryClientConfig, gameClientConfig, sleep } from '../helpers.mjs';
+import { registerUser } from '../provision.mjs';
 
 const skip =
   !process.env.CROWDY_HTTP_URL || process.env.CROWDY_E2E_THROWAWAY_OWNER !== '1'
@@ -47,14 +51,17 @@ let world = null;
 async function throwawayWorld() {
   if (world) return world;
   const { createCrowdyClient } = await import('../../dist/index.js');
+  // provision.mjs's sign-up: it sends the provisioning token (dev and test are staff-only) and
+  // declares an adult's age, without which the player's mint is refused AGE_REQUIRED.
   const account = async (kind) => {
     const client = createCrowdyClient(entryClientConfig());
-    const email = `crowdy-e2e-${kind}-${rid()}@test.invalid`;
-    const password = `Aa1!e2e-${rid()}${rid()}`;
-    const session = await patiently(() => client.auth.register({ email, password }));
-    return { client, userId: String(session.user.userId) };
+    const session = await patiently(() => registerUser({ email: `crowdy-e2e-${kind}-${rid()}@test.invalid` }));
+    client.setToken(session.token);
+    return { client, userId: String(session.userId) };
   };
   const owner = await account('owner');
+  // An account accepts the current developer terms before it creates or administers an org.
+  await owner.client.auth.recordDeveloperConsents({ acceptDeveloperTerms: true });
   const tag = rid();
   const org = await owner.client.organizations.create({ name: `e2e open grids ${tag}`, slug: `e2e-open-grids-${tag}` });
   const placeable = await owner.client.apps.placeableDatacenters();

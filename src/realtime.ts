@@ -35,6 +35,11 @@ import type { ChannelAudioNotification, GenericSpatialNotification } from './typ
  * - `failed` — a fatal, non-retryable error (e.g. not authenticated, or a
  *   non-retryable `RealtimeConnectionEvent` such as `APP_ID_REQUIRED`); it will
  *   not reconnect on its own.
+ * - `inactive` — the replication server released the session because the player
+ *   sent no gameplay input for the app's idle timeout
+ *   (`App.effectiveIdleTimeoutSeconds`, 15 minutes unless the app sets its own).
+ *   It will not reconnect on its own: call {@link RealtimeClient.connect} on the
+ *   player's next input.
  */
 export type RealtimeStatus =
   | 'idle'
@@ -42,7 +47,8 @@ export type RealtimeStatus =
   | 'connected'
   | 'reconnecting'
   | 'disconnected'
-  | 'failed';
+  | 'failed'
+  | 'inactive';
 
 /**
  * Any single message delivered on the `udpNotifications` subscription — the
@@ -485,8 +491,9 @@ export class RealtimeClient {
   /**
    * Mark the connection as desired and open the subscription if it isn't
    * already open. You usually don't call this directly — {@link subscribe}
-   * calls it for you; use it (or `client.realtime.connect()`) only to pre-warm
-   * the socket.
+   * calls it for you; use it (or `client.realtime.connect()`) to pre-warm the
+   * socket, and to come back after the status is `inactive` (the session was
+   * released for idleness) once the player acts again.
    *
    * @throws {CrowdyRealtimeError} `AUTH_REQUIRED` if there is no session token.
    */
@@ -1055,6 +1062,7 @@ export class RealtimeClient {
           onNotification: (notification) => this.dispatch(notification),
           onError: (error) => this.dispatchError(error),
           onStatus: (status) => {
+            if (status === 'inactive') this.desired = false;
             if (status === 'disconnected' && this.desired) return;
             this.setStatus(status);
           },
@@ -1337,12 +1345,15 @@ export class RealtimeClient {
     // means the server completed the subscription and resubscribing would just
     // be rejected again. Stop wanting the connection so the `complete` handler
     // doesn't immediately reopen it (lazy graphql-ws then closes the socket).
+    // IDLE_TIMEOUT is final too, but not a failure: the player stopped playing.
     if (
       notification.__typename === 'RealtimeConnectionEvent' &&
       notification.retryable === false
     ) {
       this.desired = false;
-      this.setStatus('failed');
+      this.setStatus(
+        notification.code === IDLE_TIMEOUT_CODE ? 'inactive' : 'failed',
+      );
     }
 
     for (const handlers of [...this.subscribers.values()]) {
@@ -1493,6 +1504,13 @@ function notificationKind(typename: string | undefined): string {
  * off before it stops, instead of dropping them and letting them find out.
  */
 export const SERVER_DRAINING_CODE = 'SERVER_DRAINING';
+
+/**
+ * `RealtimeConnectionEvent.code` for a session the replication server released
+ * because the player sent no gameplay input for the app's idle timeout. Not
+ * retryable: the status becomes `inactive` and nothing reconnects on its own.
+ */
+export const IDLE_TIMEOUT_CODE = 'IDLE_TIMEOUT';
 
 /**
  * The websocket form of an http(s) URL, keeping its path.

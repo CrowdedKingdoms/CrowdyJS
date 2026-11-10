@@ -47,7 +47,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '18.25.0';
+export const VERSION = '18.26.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -77,6 +77,7 @@ export {
   type GraphQLClientConfig,
 } from './client.js';
 export {
+  IDLE_TIMEOUT_CODE,
   RealtimeClient,
   type RealtimeConfig,
   type RealtimeStatus,
@@ -86,6 +87,7 @@ export {
 } from './realtime.js';
 export {
   BinaryRelayTransport,
+  GAMEPLAY_IDLE_CLOSE_CODE,
   RELAY_SUBPROTOCOL,
   type BinaryRelayCallbacks,
   type BinaryRelayConfig,
