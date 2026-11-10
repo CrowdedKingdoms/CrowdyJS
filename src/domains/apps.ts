@@ -448,6 +448,12 @@ export class AppsAPI {
    * it to the platform's, and `effectiveMinPlayerAge` reads the result. Younger players
    * are refused `AGE_REQUIREMENT_NOT_MET` at their next mint or refresh.
    *
+   * `idleTimeoutSeconds` (ck-api v2.64.0) is how long a realtime session may go without
+   * gameplay input before the replication server releases it: 60 to 86400, `0` for never,
+   * `null` for the platform default (900); `effectiveIdleTimeoutSeconds` reads the result. A
+   * released player's realtime status becomes `inactive` and nothing reconnects until the
+   * game calls `client.realtime.connect()`. Takes effect within about 15 seconds.
+   *
    * App reads and this update also return `hasSafetyModerator` (ck-api v2.61.0): whether the
    * organization has appointed a safety moderator, a member whose own role grants
    * `moderate_safety` (an admin alone does not count). An app that admits players under 18
