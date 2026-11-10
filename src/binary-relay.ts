@@ -32,6 +32,13 @@ import {
 export const RELAY_SUBPROTOCOL = 'crowdy-relay-v1';
 const BEARER_PREFIX = 'bearer.';
 
+/**
+ * The relay's close code for a session the replication server released because
+ * the player sent no gameplay input for the app's idle timeout
+ * (`App.effectiveIdleTimeoutSeconds`). Final: the transport does not reconnect.
+ */
+export const GAMEPLAY_IDLE_CLOSE_CODE = 4410;
+
 /** Consecutive pre-ready failures before we declare the relay unavailable. */
 const UNAVAILABLE_AFTER_FAILURES = 2;
 
@@ -50,7 +57,12 @@ export interface BinaryRelayCallbacks {
   onNotification(notification: UdpNotification): void;
   onError(error: CrowdyRealtimeError): void;
   onStatus(
-    status: 'connecting' | 'connected' | 'reconnecting' | 'disconnected',
+    status:
+      | 'connecting'
+      | 'connected'
+      | 'reconnecting'
+      | 'disconnected'
+      | 'inactive',
   ): void;
   /**
    * The relay endpoint looks permanently unavailable (older server, blocked
@@ -446,6 +458,15 @@ export class BinaryRelayTransport {
 
       if (!this.desired) {
         this.callbacks.onStatus('disconnected');
+        return;
+      }
+
+      // Released for idleness: the player stopped playing. Final by decision
+      // (2026-11-10), because reconnecting would hold the session the timeout
+      // ended; the game calls connect() again on the player's next input.
+      if (event.code === GAMEPLAY_IDLE_CLOSE_CODE) {
+        this.desired = false;
+        this.callbacks.onStatus('inactive');
         return;
       }
 
