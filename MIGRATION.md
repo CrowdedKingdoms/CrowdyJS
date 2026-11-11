@@ -120,6 +120,32 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.28.0: region reads take a box, a `since` and stable pages
+
+**What it needs.** ck-api `v2.67.0` (cks-game-api #652): `gameApps.nearbyGrids` selects
+`permissionKeys`, which older releases refuse as a whole query. The other changes are inputs.
+
+**What changes for a game.**
+
+- `chunks.byDistance` and `voxels.listByDistance` take a box, `lowChunk` and `highChunk`
+  (inclusive, either order, at most 4,913 chunks), instead of `centerCoordinate` and
+  `maxDistance`: a client streaming the world as the player walks reads only the slab a step
+  uncovers. Give one region or the other; both is `BAD_USER_INPUT`.
+- Pages are stable: a cube comes nearest first and then by x, y, z, a box by x, y, z, so each
+  chunk is on exactly one page. `limit` and `skip` in the answer are the values applied (1000
+  and 0 by default), not `null`.
+- `chunks.byDistance` takes `since`: only chunks whose stored row was written at or after it
+  (`updateChunk`, `updateChunkState`, `updateChunkLods`). Single voxel edits do not move it; read
+  those with `voxels.listByDistance`'s `since`.
+- `voxels.list` pages: `limit` (1-65,536, the default) and `skip`, ordered by position. It was
+  newest first and unbounded; `chunks.voxelList` is its first page.
+- `gameApps.nearbyGrids` returns each grid's `permissionKeys` for the caller, so a game can grey
+  out a build tool or draw claim borders before an edit is refused. The grid that decides a voxel
+  edit is the smallest one covering its chunk (the lower `gridId` on a tie), and the edit needs
+  `update_voxel_data` there.
+- `voxels.listByDistance` reads the edit log alone, so it returns edits in chunks whose grid was
+  never stored.
+
 ## 18.27.0: a new account confirms its email before it plays
 
 **What it needs.** Nothing new: the release selects nothing ck-api `v2.64.0` lacks.
