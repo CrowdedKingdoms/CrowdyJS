@@ -118,6 +118,9 @@ export const WireMessageType = {
   CLIENT_VIDEO_PACKET_2: 143,
   CLIENT_VIDEO_NOTIFICATION_2: 144,
   ACTOR_LEFT_NOTIFICATION_2: 145,
+  // Buddy v0.45.0, server-only: a chunk was replaced as a whole (`world.set_chunk`); read it
+  // again. Payload [i64 updatedAt ms LE].
+  CHUNK_CHANGED_NOTIFICATION: 146,
 } as const;
 
 const SPATIAL_HEADER_SIZE = 68;
@@ -919,6 +922,18 @@ function parseOne(bytes: Uint8Array): UdpNotification | null {
         __typename: 'ActorLeftNotification',
         ...rest,
         leftReason: p.payload.length >= 1 && p.payload[0] === 1 ? 1 : 0,
+      } as UdpNotification;
+    }
+    case WireMessageType.CHUNK_CHANGED_NOTIFICATION: {
+      const { decayRate: _r, uuid: _u, epochMillis: _e, ...rest } = spatialCommon(p);
+      const updatedAtMs =
+        p.payload.length >= 8
+          ? new DataView(p.payload.buffer, p.payload.byteOffset, 8).getBigInt64(0, true).toString()
+          : '0';
+      return {
+        __typename: 'ChunkChangedNotification',
+        ...rest,
+        updatedAtMs,
       } as UdpNotification;
     }
     case WireMessageType.CLIENT_TEXT_NOTIFICATION_2:

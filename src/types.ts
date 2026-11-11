@@ -642,6 +642,30 @@ export interface ActorLeftNotification {
 }
 
 /**
+ * A chunk near you was replaced as a whole (a hub's or mod's `world.set_chunk`; Buddy v0.45.0,
+ * ck-api v2.68.0): read it again (`chunks.get`, or `chunks.byDistance` with `since`). It comes
+ * instead of a voxel update per voxel; the World Stores re-read the chunk on receipt.
+ */
+export interface ChunkChangedNotification {
+  /** Discriminator. */
+  __typename: 'ChunkChangedNotification';
+  /** Id of the app the chunk is in ({@link BigInt} decimal string). */
+  appId: string;
+  /** X coordinate of the replaced chunk ({@link BigInt} int64 decimal string). */
+  chunkX: string;
+  /** Y coordinate of the replaced chunk ({@link BigInt} int64 decimal string). */
+  chunkY: string;
+  /** Z coordinate of the replaced chunk ({@link BigInt} int64 decimal string). */
+  chunkZ: string;
+  /** Replication distance (0–8) the notification was fanned out over. */
+  distance: number;
+  /** The stored chunk's new `updatedAt`, epoch ms ({@link BigInt} decimal string): a copy at least this new is current. */
+  updatedAtMs: string;
+  /** Correlation byte from the datagram tail (always 0 today). */
+  sequenceNumber: number;
+}
+
+/**
  * Fan-out notification carrying a nearby client's text/chat message.
  * Delivered on the `udpNotifications` subscription.
  */
@@ -838,6 +862,7 @@ export type UdpNotification =
   | ClientAudioNotification
   | ClientVideoNotification
   | ActorLeftNotification
+  | ChunkChangedNotification
   | ClientTextNotification
   | ClientEventNotification
   | ServerEventNotification
@@ -883,6 +908,8 @@ export type ClientAudioHandler = (notification: ClientAudioNotification) => void
 export type ClientVideoHandler = (notification: ClientVideoNotification) => void;
 /** Callback for an {@link ActorLeftNotification} (an actor stopped being present). */
 export type ActorLeftHandler = (notification: ActorLeftNotification) => void;
+/** Callback for a {@link ChunkChangedNotification} (a nearby chunk was replaced; read it again). */
+export type ChunkChangedHandler = (notification: ChunkChangedNotification) => void;
 /** Callback for a {@link ClientTextNotification} (nearby text/chat message). */
 export type ClientTextHandler = (notification: ClientTextNotification) => void;
 /** Callback for a {@link ClientEventNotification} (nearby custom client event). */

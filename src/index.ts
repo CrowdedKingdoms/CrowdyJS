@@ -47,7 +47,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '18.28.0';
+export const VERSION = '18.29.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -276,6 +276,7 @@ export type {
   ClientAudioNotification,
   ClientVideoNotification,
   ActorLeftNotification,
+  ChunkChangedNotification,
   ClientTextNotification,
   ClientEventNotification,
   ServerEventNotification,
@@ -290,6 +291,7 @@ export type {
   ClientAudioHandler,
   ClientVideoHandler,
   ActorLeftHandler,
+  ChunkChangedHandler,
   ClientTextHandler,
   ClientEventHandler,
   ServerEventHandler,

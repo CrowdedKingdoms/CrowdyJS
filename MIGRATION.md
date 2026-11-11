@@ -120,6 +120,21 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.29.0: a replaced chunk says so
+
+**What it needs.** ck-api `v2.68.0` (cks-game-api #654) for the GraphQL proxy: the
+`udpNotifications` document selects `ChunkChangedNotification`, which an older Game API refuses as
+a whole subscription. The binary relay needs nothing new. The notification itself comes from the
+realtime servers' `v0.45.0`.
+
+**What changes for a game.**
+
+- `chunkChanged` (a handler, a World Stores bus key, `ChunkChangedNotification`) fires when a chunk
+  near the player was replaced as a whole by a hub's or mod's `world.set_chunk`. It carries the
+  chunk and its new `updatedAtMs`: read the chunk again (`chunks.get`, or `chunks.byDistance` with
+  `since`). It comes instead of a voxel update per voxel, so a game that ignores it sees the
+  change only on its next read.
+
 ## 18.28.0: region reads take a box, a `since` and stable pages
 
 **What it needs.** ck-api `v2.67.0` (cks-game-api #652): `gameApps.nearbyGrids` selects

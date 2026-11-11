@@ -30,6 +30,13 @@ directly. So, before adding a wrapper:
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
 
+**18.29.0: chunk-changed notifications (2026-11-11).** The realtime servers' `v0.45.0` send
+`CHUNK_CHANGED_NOTIFICATION` (146, `[i64 updatedAt ms]`) for a hub's or mod's `world.set_chunk`
+(ck-api `v2.68.0`, cks-game-api #654). `binary-wire.ts` decodes it, the `udpNotifications` document
+selects `ChunkChangedNotification`, and it dispatches as `chunkChanged` (handler and bus key).
+`schema.gql` is #654's. The embedded browser authoring index is compute-toolchain v1.17.0's
+(ckx-sdk 0.14.0, cks-game-api #657). CrowdyCPP's `Handlers::chunkChanged` is the same event.
+
 **18.28.0: region reads (2026-11-11).** ck-api `v2.67.0` (cks-game-api #652): `chunks.byDistance`
 and `voxels.listByDistance` take a box (`lowChunk` / `highChunk`), pages are stable and answer
 the paging applied, `chunks.byDistance` takes `since`, `voxels.list` pages (`limit` / `skip`) and

@@ -14019,7 +14019,7 @@ type Subscription {
 """
 All game-server messages delivered over the UDP proxy as GraphQL payloads. Subscribe to udpNotifications before or with sending mutations so responses and GenericErrorResponse (correlate via sequenceNumber) are not missed. NOTE: the ActorUpdateResponse and VoxelUpdateResponse members are LEGACY and never emitted (applied updates arrive as your own *Notification self-echo; failures as GenericErrorResponse) — they remain in the union for backward compatibility and will be removed in a future major version.
 """
-union UdpNotification = ActorUpdateResponse | ActorUpdateNotification | VoxelUpdateResponse | VoxelUpdateNotification | ClientAudioNotification | ClientVideoNotification | ActorLeftNotification | ClientTextNotification | ClientEventNotification | ServerEventNotification | SingleActorMessageNotification | ChannelMessageNotification | ChannelAudioNotification | GenericErrorResponse | RealtimeConnectionEvent
+union UdpNotification = ActorUpdateResponse | ActorUpdateNotification | VoxelUpdateResponse | VoxelUpdateNotification | ClientAudioNotification | ClientVideoNotification | ActorLeftNotification | ChunkChangedNotification | ClientTextNotification | ClientEventNotification | ServerEventNotification | SingleActorMessageNotification | ChannelMessageNotification | ChannelAudioNotification | GenericErrorResponse | RealtimeConnectionEvent
 
 """
 LEGACY — never emitted. The game server retired the dedicated actor-update response opcode (129); an applied update now arrives as your own ActorUpdateNotification (the sender is included in the chunk fan-out) and failures arrive as GenericErrorResponse. This type remains in the UdpNotification union for backward compatibility only — do not select it in new code; it will be removed in a future major version.
@@ -14217,6 +14217,28 @@ type ActorLeftNotification {
   sequenceNumber: Int!
   """Server-generated epoch milliseconds timestamp."""
   epochMillis: BigInt!
+}
+
+"""
+A chunk near you was replaced as a whole (a hub's or mod's world.set_chunk; Buddy v0.45.0): read it again with getChunk, or getChunksByDistance with since. It comes instead of a voxel update per voxel. Received via the udpNotifications subscription.
+"""
+type ChunkChangedNotification {
+  """The ID of the app the chunk is in."""
+  appId: BigInt!
+  """The X coordinate of the replaced chunk."""
+  chunkX: BigInt!
+  """The Y coordinate of the replaced chunk."""
+  chunkY: BigInt!
+  """The Z coordinate of the replaced chunk."""
+  chunkZ: BigInt!
+  """Chunk replication distance (0-8) the notification was fanned out over."""
+  distance: Int!
+  """
+  The stored chunk's new updatedAt, in epoch milliseconds: a copy at least this new is current.
+  """
+  updatedAtMs: BigInt!
+  """Correlation byte from the datagram tail (always 0 today)."""
+  sequenceNumber: Int!
 }
 
 """

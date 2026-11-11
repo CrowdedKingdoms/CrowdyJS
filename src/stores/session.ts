@@ -101,6 +101,7 @@ const BUS_KEYS: BusKey[] = [
   'audio',
   'video',
   'actorLeft',
+  'chunkChanged',
   'text',
   'clientEvent',
   'serverEvent',
