@@ -17,11 +17,11 @@
  *   CROWDY_OWNER_EMAIL='owner@example.com' \
  *   npm test
  */
-import test from 'node:test';
+import test, { beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { Buffer } from 'node:buffer';
-import { provisionClients, mintAppAccess } from '../provision.mjs';
+import { provisionClients, mintAppAccess, freshActorUuid } from '../provision.mjs';
 import { gameClientConfig } from '../helpers.mjs';
 
 globalThis.WebSocket = WebSocket;
@@ -41,9 +41,16 @@ const skipReason =
 const NOTIFY_WAIT_MS = Number(process.env.CROWDY_TEST_NOTIFY_WAIT_MS ?? 3000);
 const SESSION_WAIT_MS = Number(process.env.CROWDY_TEST_SESSION_WAIT_MS ?? 2500);
 const CHUNK = { x: '0', y: '0', z: '0' };
-const TEST_UUID_A = 'aaaaaaaabbbbccccddddeeeeeeeeeeee';
-const TEST_UUID_B = 'bbbbbbbbccccddddeeeeeeeeeeeeeeee';
-const TEST_UUID_C = 'ccccccccddddeeeeffff000011112222';
+let TEST_UUID_A = freshActorUuid();
+let TEST_UUID_B = freshActorUuid();
+let TEST_UUID_C = freshActorUuid();
+// A fresh actor per test: each test signs up new players, and a send under an actor
+// another player still holds is refused UNAUTHORIZED.
+beforeEach(() => {
+  TEST_UUID_A = freshActorUuid();
+  TEST_UUID_B = freshActorUuid();
+  TEST_UUID_C = freshActorUuid();
+});
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));

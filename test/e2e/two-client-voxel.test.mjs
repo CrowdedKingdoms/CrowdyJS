@@ -14,7 +14,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { Buffer } from 'node:buffer';
-import { provisionClients } from '../provision.mjs';
+import { provisionClients, freshActorUuid } from '../provision.mjs';
 
 globalThis.WebSocket = WebSocket;
 
@@ -35,8 +35,8 @@ const NOTIFY_WAIT_MS = Number(process.env.CROWDY_TEST_NOTIFY_WAIT_MS ?? 3000);
 const CHUNK = { x: '0', y: '0', z: '0' };
 const VOXEL = { x: 5, y: 5, z: 5 };
 const VOXEL_TYPE = 42;
-const TEST_UUID_A = 'aaaaaaaabbbbccccddddeeeeeeeeeeee';
-const TEST_UUID_B = 'bbbbbbbbccccddddeeeeeeeeeeeeeeee';
+const TEST_UUID_A = freshActorUuid();
+const TEST_UUID_B = freshActorUuid();
 const VOXEL_UUID = 'voxel-aaaa-bbbb-cccc-dddd-eeeeee';
 
 function randomBase64(byteCount = 8) {

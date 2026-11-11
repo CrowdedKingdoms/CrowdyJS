@@ -24,7 +24,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
-import { provisionAppWithPlayers, mintAppAccess } from '../provision.mjs';
+import { provisionAppWithPlayers, mintAppAccess, freshActorUuid } from '../provision.mjs';
 import { gameClientConfig } from '../helpers.mjs';
 
 globalThis.WebSocket = WebSocket;
@@ -43,7 +43,7 @@ const skipReason =
 
 const SYNC_WAIT_MS = Number(process.env.CROWDY_TEST_SYNC_WAIT_MS ?? 3000);
 const CHUNK = { x: '0', y: '0', z: '0' };
-const TEST_UUID = 'aaaaaaaabbbbccccddddeeeeeeeeeeee';
+const TEST_UUID = freshActorUuid();
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));

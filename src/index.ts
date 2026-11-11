@@ -47,7 +47,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '18.26.0';
+export const VERSION = '18.27.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -348,6 +348,7 @@ export {
   defaultHostedSignInUrl,
   isHostedSignInRequiredError,
   isLegalAcceptanceRequiredError,
+  isEmailConfirmationRequiredError,
   type AppRuntimeGate,
   type AppTokenResponse,
   type CurrentServer,

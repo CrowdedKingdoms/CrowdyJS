@@ -120,6 +120,26 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.27.0: a new account confirms its email before it plays
+
+**What it needs.** Nothing new: the release selects nothing ck-api `v2.64.0` lacks.
+`isEmailConfirmationRequiredError` reads a code that ck-api `v2.65.0` (cks-game-api #648)
+starts to send.
+
+**What changes for a game.** A password account made since 2026-11-11 gets no gameplay token
+until it confirms its email address: `portal.mintAppToken`, `portal.createAuthorizationCode`
+and `portal.refresh` answer `EMAIL_CONFIRMATION_REQUIRED`, the player gate's last check.
+Accounts made before then, managed players (an organization's own, and Minecraft sign-ins),
+staff, and dev or test accounts made with a provisioning token are not asked.
+
+- A browser game needs no change: Studio's hosted `/authorize` tells the player and resends
+  the link.
+- A native client that signs players up with `auth.register` checks
+  `isEmailConfirmationRequiredError(err)` at the mint, tells the player to open the emailed link,
+  and offers `client.auth.resendConfirmationEmail(email)` (new; it always resolves `true`). Then
+  it mints again.
+- `client.auth.confirmEmail(token)` is new too, for a client that serves the link's page itself.
+
 ## 18.26.0: a session released for idleness is final
 
 **What it needs.** ck-api `v2.64.0` (cks-game-api #643): `apps.app()` and `apps.update()` select
