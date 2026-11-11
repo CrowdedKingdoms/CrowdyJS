@@ -34,6 +34,7 @@ so it needs that Game API or newer; promote the Game API before the SDK on each 
 
 | CrowdyJS | Needs the Game API (ck-api) |
 | --- | --- |
+| 18.28.0 | v2.67.0 or later (`gameApps.nearbyGrids` selects `permissionKeys`) |
 | 18.27.0 | v2.64.0 or later (`isEmailConfirmationRequiredError` reads a code v2.65.0 sends) |
 | 18.26.0 | v2.64.0 or later (app reads and `apps.update` select `idleTimeoutSeconds` and `effectiveIdleTimeoutSeconds`) |
 | 18.25.0 | v2.61.0 or later (app reads and `apps.update` select `hasSafetyModerator`; `platform.territoryPolicies` selects `regionCode`) |

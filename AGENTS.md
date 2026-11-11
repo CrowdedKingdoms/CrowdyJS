@@ -30,6 +30,12 @@ directly. So, before adding a wrapper:
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
 
+**18.28.0: region reads (2026-11-11).** ck-api `v2.67.0` (cks-game-api #652): `chunks.byDistance`
+and `voxels.listByDistance` take a box (`lowChunk` / `highChunk`), pages are stable and answer
+the paging applied, `chunks.byDistance` takes `since`, `voxels.list` pages (`limit` / `skip`) and
+`gameApps.nearbyGrids` selects the caller's `permissionKeys`. The wrappers pass inputs through;
+`schema.gql` is #652's (`schema:sync:local`). CrowdyCPP and CrowdyPy carry the same reads.
+
 **18.27.0: a new account confirms its email (2026-11-11).** ck-api `v2.65.0` (cks-game-api #648)
 refuses a gameplay token with `EMAIL_CONFIRMATION_REQUIRED` to a password account made since
 2026-11-11 until it confirms (operator decision D1(b), OI-2026-11-10-008).
