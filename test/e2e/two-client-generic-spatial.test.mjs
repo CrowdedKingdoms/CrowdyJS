@@ -11,7 +11,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { Buffer } from 'node:buffer';
-import { provisionClients } from '../provision.mjs';
+import { provisionClients, freshActorUuid } from '../provision.mjs';
 
 globalThis.WebSocket = WebSocket;
 
@@ -23,8 +23,8 @@ const skipReason =
     : undefined;
 
 const NOTIFY_WAIT_MS = Number(process.env.CROWDY_TEST_NOTIFY_WAIT_MS ?? 3000);
-const UUID_A = 'aaaaaaaa1400ccccddddeeeeeeeeeeee';
-const UUID_B = 'bbbbbbbb1400ddddeeeeeeeeeeeeeeee';
+const UUID_A = freshActorUuid();
+const UUID_B = freshActorUuid();
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));

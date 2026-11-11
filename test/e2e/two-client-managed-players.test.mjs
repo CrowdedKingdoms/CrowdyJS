@@ -32,6 +32,7 @@ import WebSocket from 'ws';
 import { Buffer } from 'node:buffer';
 import { randomBytes } from 'node:crypto';
 import { gameClientConfig, entryHttpUrl } from '../helpers.mjs';
+import { freshActorUuid } from '../provision.mjs';
 
 globalThis.WebSocket = WebSocket;
 
@@ -45,8 +46,8 @@ const RECORDS = process.env.CROWDY_MANAGED_APP_RECORDS === '1';
 const SEND_COUNT = Number(process.env.CROWDY_TEST_SEND_COUNT ?? 5);
 const NOTIFY_WAIT_MS = Number(process.env.CROWDY_TEST_NOTIFY_WAIT_MS ?? 3000);
 const CHUNK = { x: '0', y: '0', z: '0' };
-const UUID_A = 'aaaaaaaa1111cccc2222eeeeeeeeeeee';
-const UUID_B = 'bbbbbbbb3333dddd4444eeeeeeeeeeee';
+const UUID_A = freshActorUuid();
+const UUID_B = freshActorUuid();
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

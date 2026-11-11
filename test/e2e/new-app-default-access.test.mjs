@@ -21,11 +21,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { Buffer } from 'node:buffer';
-import {
-  provisionNewAppWithPlayers,
-  mintAppAccess,
-  archiveAppQuietly,
-} from '../provision.mjs';
+import { provisionNewAppWithPlayers, mintAppAccess, archiveAppQuietly, freshActorUuid } from '../provision.mjs';
 import { gameClientConfig } from '../helpers.mjs';
 
 globalThis.WebSocket = WebSocket;
@@ -47,8 +43,8 @@ const NOTIFY_WAIT_MS = Number(process.env.CROWDY_TEST_NOTIFY_WAIT_MS ?? 3000);
 // longer than the already-entitled flow.
 const ACCESS_TIMEOUT_MS = Number(process.env.CROWDY_TEST_SYNC_TIMEOUT_MS ?? 25000);
 const CHUNK = { x: '0', y: '0', z: '0' };
-const TEST_UUID_A = 'aaaaaaaabbbbccccddddeeeeeeeeeeee';
-const TEST_UUID_B = 'bbbbbbbbccccddddeeeeeeeeeeeeeeee';
+const TEST_UUID_A = freshActorUuid();
+const TEST_UUID_B = freshActorUuid();
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

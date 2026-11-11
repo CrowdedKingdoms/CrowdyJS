@@ -438,6 +438,36 @@ export function isLegalAcceptanceRequiredError(error: unknown): boolean {
   );
 }
 
+/**
+ * `EMAIL_CONFIRMATION_REQUIRED`: a password account made since 2026-11-11 has not
+ * confirmed its email address, so no gameplay token is issued
+ * ({@link PortalAPI.mintAppToken}, {@link PortalAPI.createAuthorizationCode},
+ * {@link PortalAPI.refresh}). Retrying cannot succeed: ask the player to open the
+ * emailed link, and offer `auth.resendConfirmationEmail(email)`. A browser game
+ * never sees it, because Studio's hosted `/authorize` asks. Older accounts, managed
+ * players, staff and dev or test accounts made with a provisioning token are not
+ * asked. ck-api v2.65.0.
+ */
+export function isEmailConfirmationRequiredError(error: unknown): boolean {
+  const e = error as {
+    code?: unknown;
+    extensions?: { code?: unknown };
+    graphQLErrors?: Array<{ extensions?: { code?: unknown } }>;
+    graphqlErrors?: Array<{ extensions?: { code?: unknown } }>;
+    message?: unknown;
+  } | null;
+  const codes = [
+    e?.code,
+    e?.extensions?.code,
+    ...(e?.graphQLErrors ?? []).map((g) => g.extensions?.code),
+    ...(e?.graphqlErrors ?? []).map((g) => g.extensions?.code),
+  ];
+  if (codes.includes('EMAIL_CONFIRMATION_REQUIRED')) return true;
+  return /EMAIL_CONFIRMATION_REQUIRED/.test(
+    typeof e?.message === 'string' ? e.message : '',
+  );
+}
+
 export class PortalAPI {
   constructor(
     private readonly api: GraphQLClient,
@@ -474,6 +504,11 @@ export class PortalAPI {
    * then `SAFETY_MODERATOR_REQUIRED` (`safetyModeratorRequiredOf`, ck-api v2.61.0) in
    * one whose organization has appointed no safety moderator. None of them is fixed
    * by retrying, and no refusal names an age.
+   *
+   * Last, since ck-api v2.65.0, `EMAIL_CONFIRMATION_REQUIRED`
+   * ({@link isEmailConfirmationRequiredError}) for a password account made since
+   * 2026-11-11 that has not confirmed its email: show "check your inbox" and offer
+   * `auth.resendConfirmationEmail`.
    */
   async mintAppToken(appId: string): Promise<AppTokenResponse> {
     const data = await this.api.request(MintAppTokenDocument, {
@@ -486,7 +521,9 @@ export class PortalAPI {
    * Overworld/identity side: mint a one-time authorization code for a target
    * app, bound to the destination game's PKCE challenge + redirect URI.
    * Requires the identity session token. Refused with `LEGAL_ACCEPTANCE_REQUIRED`
-   * until the player's consents are stored (ck-api v2.35.0).
+   * until the player's consents are stored (ck-api v2.35.0), and with the player
+   * gate's other refusals, `EMAIL_CONFIRMATION_REQUIRED` among them
+   * ({@link mintAppToken}).
    */
   async createAuthorizationCode(params: {
     appId: string;

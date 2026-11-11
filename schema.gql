@@ -9555,7 +9555,7 @@ type Mutation {
     loginUserInput: LoginUserInput!
   ): AuthResponse!
   """
-  Registers a new email + password account: creates the (initially unconfirmed) account, emails a confirmation link, and returns an AuthResponse with a session `token` for immediate use (send as `Authorization: Bearer <token>`). If an account already exists for the email it is refused with extensions.code EMAIL_ALREADY_REGISTERED (409) and no session is returned: an account that already has a password is left exactly as it was (sign in, or use the emailed reset), and only a password-less account (created via magic link/social) gets the password attached pending email confirmation. It is a routine outcome rather than a fault, and it reached clients as INTERNAL_SERVER_ERROR before v1.60.0, which is why several of them match it by its message text. A browser request (Origin header present) must send acceptLegal and attestAgeOfMajority both true or it is refused with LEGAL_ACCEPTANCE_REQUIRED before an account is created; a request with no Origin may omit them, and gameplay tokens stay refused until the documents are stored. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited.
+  Registers a new email + password account: creates the (initially unconfirmed) account, emails a confirmation link, and returns an AuthResponse with a session `token` for immediate use (send as `Authorization: Bearer <token>`). Since 2026-11-11 a gameplay token (mintAppToken, the hosted sign-in) is refused with EMAIL_CONFIRMATION_REQUIRED until the account confirms its address (confirmEmail with the emailed link); dev and test accounts made with a provisioning token are not asked. If an account already exists for the email it is refused with extensions.code EMAIL_ALREADY_REGISTERED (409) and no session is returned: an account that already has a password is left exactly as it was (sign in, or use the emailed reset), and only a password-less account (created via magic link/social) gets the password attached pending email confirmation. It is a routine outcome rather than a fault, and it reached clients as INTERNAL_SERVER_ERROR before v1.60.0, which is why several of them match it by its message text. A browser request (Origin header present) must send acceptLegal and attestAgeOfMajority both true or it is refused with LEGAL_ACCEPTANCE_REQUIRED before an account is created; a request with no Origin may omit them, and gameplay tokens stay refused until the documents are stored. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited.
   """
   register(
     """
@@ -9585,7 +9585,7 @@ type Mutation {
     resetPasswordInput: ResetPasswordInput!
   ): Boolean!
   """
-  Re-sends the email-confirmation link. Always returns true regardless of whether the account exists or is already confirmed (prevents enumeration); the email is only sent for existing unconfirmed accounts. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited.
+  Re-sends the email-confirmation link. Always returns true regardless of whether the account exists or is already confirmed (prevents enumeration); the email is only sent for existing unconfirmed accounts. The remedy for EMAIL_CONFIRMATION_REQUIRED. Public; first-party origins and clients that send no Origin (native games) only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited.
   """
   resendConfirmationEmail(
     """Email address of the account to re-send confirmation to."""
@@ -9837,11 +9837,11 @@ type Mutation {
     admissionId: String!
   ): AppCodeAdmission! @requiresPermission(scope: "app", permission: "manage_compute", scopeArg: "appId")
   """
-  Mint a short-lived, app-scoped gameplay token for the calling user (native/direct path; no browser redirect). Requires an identity SESSION token (app tokens cannot mint). Free/open apps auto-grant access; paid apps require an existing entitlement (else FORBIDDEN). Side effect: may create an app_user_access row on the app's free default tier.
+  Mint a short-lived, app-scoped gameplay token for the calling user (native/direct path; no browser redirect). Requires an identity SESSION token (app tokens cannot mint). Free/open apps auto-grant access; paid apps require an existing entitlement (else FORBIDDEN). A Crowded Kingdoms account created on or after 2026-11-11 must confirm its email first (EMAIL_CONFIRMATION_REQUIRED; resendConfirmationEmail sends another link). Side effect: may create an app_user_access row on the app's free default tier.
   """
   mintAppToken(input: MintAppTokenInput!): AppTokenResponse!
   """
-  Create a one-time, PKCE-bound portal authorization code (browser handoff). The Overworld identity origin (holding the SESSION token) calls this; redirect the player to the destination game carrying the code, which the game exchanges via exchangePortalCode. Refused like mintAppToken before any code exists: TERRITORY_NOT_SUPPORTED, AGE_REQUIRED, AGE_REQUIREMENT_NOT_MET and LEGAL_ACCEPTANCE_REQUIRED, and for a player under 18 SAFETY_LOG_REQUIRED (the app keeps no safety log) then SAFETY_MODERATOR_REQUIRED (its organization has no safety moderator), with the same neutral messages. Requires a SESSION token.
+  Create a one-time, PKCE-bound portal authorization code (browser handoff). The Overworld identity origin (holding the SESSION token) calls this; redirect the player to the destination game carrying the code, which the game exchanges via exchangePortalCode. Refused like mintAppToken before any code exists: TERRITORY_NOT_SUPPORTED, AGE_REQUIRED, AGE_REQUIREMENT_NOT_MET, LEGAL_ACCEPTANCE_REQUIRED and EMAIL_CONFIRMATION_REQUIRED, and for a player under 18 SAFETY_LOG_REQUIRED (the app keeps no safety log) then SAFETY_MODERATOR_REQUIRED (its organization has no safety moderator), with the same neutral messages. Requires a SESSION token.
   """
   createPortalAuthorizationCode(input: CreatePortalAuthorizationCodeInput!): PortalAuthorizationCode!
   """
