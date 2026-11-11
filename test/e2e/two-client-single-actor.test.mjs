@@ -20,7 +20,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { Buffer } from 'node:buffer';
-import { provisionClients } from '../provision.mjs';
+import { provisionClients, freshActorUuid } from '../provision.mjs';
 
 globalThis.WebSocket = WebSocket;
 
@@ -38,9 +38,9 @@ const skipReason =
 
 const NOTIFY_WAIT_MS = Number(process.env.CROWDY_TEST_NOTIFY_WAIT_MS ?? 3000);
 const CHUNK = { x: '7', y: '1', z: '2' };
-const TEST_UUID_A = 'aaaaaaaabbbbccccddddeeeeeeeeeeee';
-const TEST_UUID_B = 'bbbbbbbbccccddddeeeeeeeeeeeeeeee';
-const TEST_UUID_C = 'ccccccccddddeeeeffff000011112222';
+const TEST_UUID_A = freshActorUuid();
+const TEST_UUID_B = freshActorUuid();
+const TEST_UUID_C = freshActorUuid();
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));

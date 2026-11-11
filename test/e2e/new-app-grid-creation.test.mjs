@@ -24,11 +24,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
-import {
-  provisionNewAppWithPlayers,
-  mintAppAccess,
-  archiveAppQuietly,
-} from '../provision.mjs';
+import { provisionNewAppWithPlayers, mintAppAccess, archiveAppQuietly, freshActorUuid } from '../provision.mjs';
 import { gameClientConfig } from '../helpers.mjs';
 
 globalThis.WebSocket = WebSocket;
@@ -48,7 +44,7 @@ const skipReason =
 const PROVISION_TIMEOUT_MS = Number(process.env.CROWDY_TEST_SYNC_TIMEOUT_MS ?? 25000);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const chunk = (x, y, z) => ({ x: String(x), y: String(y), z: String(z) });
-const TEST_UUID = 'aaaaaaaabbbbccccddddeeeeeeeeeeee';
+const TEST_UUID = freshActorUuid();
 
 
 test(

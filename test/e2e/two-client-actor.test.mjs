@@ -25,7 +25,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { Buffer } from 'node:buffer';
-import { provisionAppWithPlayers, mintAppAccess } from '../provision.mjs';
+import { provisionAppWithPlayers, mintAppAccess, freshActorUuid } from '../provision.mjs';
 import { gameClientConfig } from '../helpers.mjs';
 
 // CrowdyJS realtime depends on a global `WebSocket`; node doesn't have one.
@@ -50,8 +50,8 @@ const NOTIFY_WAIT_MS = Number(process.env.CROWDY_TEST_NOTIFY_WAIT_MS ?? 3000);
 // Time for the management->game-api replica-sync to mirror access + grid grants.
 const SYNC_WAIT_MS = Number(process.env.CROWDY_TEST_SYNC_WAIT_MS ?? 3000);
 const CHUNK = { x: '0', y: '0', z: '0' };
-const TEST_UUID_A = 'aaaaaaaabbbbccccddddeeeeeeeeeeee';
-const TEST_UUID_B = 'bbbbbbbbccccddddeeeeeeeeeeeeeeee';
+const TEST_UUID_A = freshActorUuid();
+const TEST_UUID_B = freshActorUuid();
 
 function randomBase64ActorState(byteCount = 96) {
   const buf = new Uint8Array(byteCount);

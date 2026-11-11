@@ -69,10 +69,21 @@
  */
 import { randomBytes } from 'node:crypto';
 import { gameClientConfig } from './helpers.mjs';
+import { randomUUID } from 'node:crypto';
 
 const DEFAULT_PERMISSION_KEYS = ['access', 'teleport', 'update_voxel_data', 'use_voice_chat'];
 
 export const OWNER_ENV = ['CROWDY_HTTP_URL', 'CROWDY_OWNER_EMAIL', 'CROWDY_OWNER_PASSWORD'];
+
+/**
+ * A fresh actor uuid (32 hex characters) for one test run. Since the realtime server's
+ * v0.43.0 a send under an actor another player holds is refused UNAUTHORIZED, and every
+ * run signs up new players, so a constant uuid shared by tests and runs was refused
+ * whenever an earlier test's player still held it.
+ */
+export function freshActorUuid() {
+  return randomUUID().replace(/-/g, '');
+}
 
 export function ownerEnvReady() {
   return OWNER_ENV.every((k) => !!process.env[k]);
