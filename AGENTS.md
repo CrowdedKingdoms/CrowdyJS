@@ -30,6 +30,17 @@ directly. So, before adding a wrapper:
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
 
+**18.27.0: a new account confirms its email (2026-11-11).** ck-api `v2.65.0` (cks-game-api #648)
+refuses a gameplay token with `EMAIL_CONFIRMATION_REQUIRED` to a password account made since
+2026-11-11 until it confirms (operator decision D1(b), OI-2026-11-10-008).
+`isEmailConfirmationRequiredError` reads it, and `auth.resendConfirmationEmail` / `confirmEmail`
+wrap the two existing mutations. `schema.gql` is cks-game-api's at #648 (descriptions only).
+CrowdyCPP and CrowdyPy carry the same predicate.
+
+**18.26.0: a session released for idleness is final (2026-11-10).** ck-api `v2.64.0`: the status
+`inactive`, `GAMEPLAY_IDLE_CLOSE_CODE` / `IDLE_TIMEOUT_CODE`, and the app's idle timeout fields
+(MIGRATION.md).
+
 **18.25.0: appointed moderators and regions (2026-11-02).** `schema.gql` is cks-game-api's at
 `dev/v2.61.0` (#623, #624; dev now admits players from 13). New: `safetyModeratorRequiredOf` /
 `SAFETY_MODERATOR_REQUIRED_CODE` (decision 52: only an appointed `moderate_safety` holder counts,
