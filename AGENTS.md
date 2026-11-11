@@ -30,6 +30,19 @@ directly. So, before adding a wrapper:
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
 
+**18.30.0: the ChunkStore rework (2026-11-11, the Unreal team's C3-C5 in CrowdyJS first).**
+`ensureAround` reads only untracked chunks, as boxes (`coverWithBoxes`: cut where the halves'
+boxes are smallest; more than 8 boxes reads the bounding box), each paged by the `limit` the server
+echoes, counting a repeated chunk in `duplicatePageChunks`. `setVoxel` queues and paces sends
+(`maxEditsInFlight` 128, `maxEditsPerSecond` 250 with a quarter second's burst, on the session
+ticker every 50 ms); a `genericError` whose sequence number is an in-flight edit, a `false` or a
+throw from the transport, or no echo within `editTimeoutMs` undoes it (`undoEdit`: restore
+`previous` unless a newer edit shows; a newer edit inherits `previous`) and reports it on
+`onEditRefused`. `chunkChanged` reloads (deduped, `storedAt` skips one already applied) and drops a
+seed's write-back; `realtime.onStatus` connected-after-down runs `catchUp` (chunks `since`, then
+`voxels.listByDistance` `since`). `hydrate` clears states and overlay before applying the stored
+copy, then `reapplyPendingEdits`. Tests: `test/unit/chunk-store-region.test.mjs`.
+
 **18.29.0: chunk-changed notifications (2026-11-11).** The realtime servers' `v0.45.0` send
 `CHUNK_CHANGED_NOTIFICATION` (146, `[i64 updatedAt ms]`) for a hub's or mod's `world.set_chunk`
 (ck-api `v2.68.0`, cks-game-api #654). `binary-wire.ts` decodes it, the `udpNotifications` document
@@ -331,7 +344,8 @@ added it to `udpNotifications`); `UdpNotifications.graphql` selects it, so the G
 reaches the same `channelAudio` handler and the subscription needs a game API that has it. UDP
 error 33 is `APP_PAUSED`.
 `assertVoxelEdit` is the one int16 / 1,024-byte state check for `sendVoxelUpdate` and
-`ChunkStore.setVoxel`. `ChunkStore` keeps pending local edits per voxel for 10 s and applies an
+`ChunkStore.setVoxel`. `ChunkStore` keeps pending local edits per voxel until echoed, refused or
+timed out (10 s; undone since 18.30.0) and applies an
 echo of one only when a foreign edit came in between and no newer local edit is pending
 (`test/unit/chunk-store-echo.test.mjs`). `errors.ts` adds `actorExistsOf`, `accessRefusalOf`,
 `appPausedOf`, `isAppPaused`; `portal.ts` selects `runtimeGate` (identity path: security review
