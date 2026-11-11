@@ -4,7 +4,7 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
   "rustVersion": "1.97.1",
   "sdkVersion": "0.1.0",
   "abiVersion": 0,
-  "contentHash": "a9f43b0474361a326b6620437ba3613e16745722f44930c901db9de68a10e867",
+  "contentHash": "3664277698c5c9e5fded80eecb14d32f5fa605991e9d72c8fb4f6990a20156ae",
   "crates": [
     {
       "name": "alloc",
@@ -13,8 +13,8 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "name": "ckx-sdk",
-      "version": "0.13.0",
-      "sourceHash": "b7137dee863c90ec7ffc232b8c13d2ace102de796efff1188835868310941963"
+      "version": "0.14.0",
+      "sourceHash": "e5a2ac34a7ea75dd4bbc37310767fcbec007739f1551697cb2469435cb6f2590"
     },
     {
       "name": "core",
@@ -7121,9 +7121,9 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "ckx_sdk::limits",
-      "name": "crate::node::{MAX_CHUNK_STATE, MAX_VOXEL_STATE, MAX_VOXEL_WRITES}",
+      "name": "crate::node::{CHUNK_GRID_BYTES, MAX_CHUNK_STATE, MAX_CHUNK_STATES, MAX_VOXEL_STATE, MAX_VOXEL_WRITE_BYTES, MAX_VOXEL_WRITES}",
       "kind": "reexport",
-      "signature": "pub use crate::node::{MAX_CHUNK_STATE, MAX_VOXEL_STATE, MAX_VOXEL_WRITES};",
+      "signature": "pub use crate::node::{CHUNK_GRID_BYTES, MAX_CHUNK_STATE, MAX_CHUNK_STATES, MAX_VOXEL_STATE, MAX_VOXEL_WRITE_BYTES, MAX_VOXEL_WRITES};",
       "docs": ""
     },
     {
@@ -7146,6 +7146,13 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "kind": "module",
       "signature": "pub mod mods",
       "docs": "What the platform gives every mod, in place of a manifest's limits."
+    },
+    {
+      "module": "ckx_sdk::limits",
+      "name": "node",
+      "kind": "module",
+      "signature": "pub mod node",
+      "docs": "What the game API's node API allows an app on each of its replicas. An app's own code and its players' mods draw on separate buckets, so no player's mod can spend the app's. Past it a call answers [`crate::Status::RateLimited`]; retry after a moment."
     },
     {
       "module": "ckx_sdk::limits::manifest",
@@ -7258,6 +7265,34 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "kind": "const",
       "signature": "pub const WORLD_BATCH_MAX: usize = 512;",
       "docs": "World events in one `$world` call, at most."
+    },
+    {
+      "module": "ckx_sdk::limits::node",
+      "name": "BURST_SECONDS",
+      "kind": "const",
+      "signature": "pub const BURST_SECONDS: u32 = 2;",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::limits::node",
+      "name": "READ_UNITS_PER_SEC",
+      "kind": "const",
+      "signature": "pub const READ_UNITS_PER_SEC: u32 = 200;",
+      "docs": "Units per second; a bucket holds two seconds' worth for a burst."
+    },
+    {
+      "module": "ckx_sdk::limits::node",
+      "name": "VOXELS_PER_WRITE_UNIT",
+      "kind": "const",
+      "signature": "pub const VOXELS_PER_WRITE_UNIT: usize = 64;",
+      "docs": "Voxels one write unit pays for: a `set_voxels` of 4,096 voxels costs 64 units, and a `set_chunk` costs one unit plus one per started 64 states. A chunk state costs one unit per started 4 KiB, and any other call one unit."
+    },
+    {
+      "module": "ckx_sdk::limits::node",
+      "name": "WRITE_UNITS_PER_SEC",
+      "kind": "const",
+      "signature": "pub const WRITE_UNITS_PER_SEC: u32 = 50;",
+      "docs": ""
     },
     {
       "module": "ckx_sdk::model",
@@ -7849,6 +7884,13 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "ckx_sdk::node",
+      "name": "CHUNK_GRID_BYTES",
+      "kind": "const",
+      "signature": "pub const CHUNK_GRID_BYTES: usize = 4096;",
+      "docs": "A [`World::set_chunk`] grid: one type byte per voxel of the 16×16×16 chunk."
+    },
+    {
+      "module": "ckx_sdk::node",
       "name": "Chunk",
       "kind": "struct",
       "signature": "pub struct Chunk { pub id: u64, pub at: ChunkPos, pub voxels: Option<Vec<u8>>, pub chunk_state: Option<Vec<u8>>, }",
@@ -7922,6 +7964,34 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "name": "ChunkPos::z",
       "kind": "field",
       "signature": "pub z: i64",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "ChunkVoxelState",
+      "kind": "struct",
+      "signature": "pub struct ChunkVoxelState { /// `(x, y, z)` within the chunk. pub voxel: (i16, i16, i16), pub voxel_type: i16, pub state: Option<Vec<u8>>, }",
+      "docs": "One voxel's state stored with a [`World::set_chunk`]: the voxel, its type and its bytes."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "ChunkVoxelState::state",
+      "kind": "field",
+      "signature": "pub state: Option<Vec<u8>>",
+      "docs": ""
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "ChunkVoxelState::voxel",
+      "kind": "field",
+      "signature": "pub voxel: (i16, i16, i16)",
+      "docs": "`(x, y, z)` within the chunk."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "ChunkVoxelState::voxel_type",
+      "kind": "field",
+      "signature": "pub voxel_type: i16",
       "docs": ""
     },
     {
@@ -8136,6 +8206,13 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "ckx_sdk::node",
+      "name": "MAX_CHUNK_STATES",
+      "kind": "const",
+      "signature": "pub const MAX_CHUNK_STATES: usize = 4096;",
+      "docs": "Voxel states stored with one [`World::set_chunk`]."
+    },
+    {
+      "module": "ckx_sdk::node",
       "name": "MAX_REPORT_DETAILS",
       "kind": "const",
       "signature": "pub const MAX_REPORT_DETAILS: usize = 1_000;",
@@ -8152,8 +8229,15 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "module": "ckx_sdk::node",
       "name": "MAX_VOXEL_WRITES",
       "kind": "const",
-      "signature": "pub const MAX_VOXEL_WRITES: usize = 16;",
-      "docs": "Voxel writes in one [`World::set_voxels`] call."
+      "signature": "pub const MAX_VOXEL_WRITES: usize = 4096;",
+      "docs": "Voxel writes in one [`World::set_voxels`] call: a whole 16×16×16 chunk's worth."
+    },
+    {
+      "module": "ckx_sdk::node",
+      "name": "MAX_VOXEL_WRITE_BYTES",
+      "kind": "const",
+      "signature": "pub const MAX_VOXEL_WRITE_BYTES: usize = 2 << 20;",
+      "docs": "The voxel states of one [`World::set_voxels`] or [`World::set_chunk`] call together, so the call stays well under the platform's message limit once encoded."
     },
     {
       "module": "ckx_sdk::node",
@@ -8549,6 +8633,13 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "ckx_sdk::node",
+      "name": "World::set_chunk",
+      "kind": "method",
+      "signature": "pub fn set_chunk(&self, chunk: ChunkPos, grid: &[u8], states: &[ChunkVoxelState]) -> Result<(), CallError>",
+      "docs": "Replaces the chunk at `chunk` with `grid` (one type byte per voxel, index `x + y*16 + z*256`) and `states`, and drops every voxel written into it before, so it reads back exactly as written; its own state blob ([`World::set_chunk_state`]) is kept. Nearby players are told once to read the chunk again rather than sent a voxel update per voxel, so this is the cheap way to change most of a chunk; the grid's mods hear it as `voxels`. A call costs one write plus one per started 64 states ([`crate::limits::node`]). Scope `world.write`; a mod may set chunks only inside its grid, where its owner may edit."
+    },
+    {
+      "module": "ckx_sdk::node",
       "name": "World::set_chunk_state",
       "kind": "method",
       "signature": "pub fn set_chunk_state(&self, chunk: ChunkPos, state: Option<&[u8]>) -> Result<(), CallError>",
@@ -8559,7 +8650,7 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "name": "World::set_voxels",
       "kind": "method",
       "signature": "pub fn set_voxels(&self, writes: &[VoxelWrite]) -> Result<Vec<u64>, CallError>",
-      "docs": "Writes up to [`MAX_VOXEL_WRITES`] voxels in one transaction, as the app, and shows them to nearby players. Returns the voxel update ids. Scope `world.write`."
+      "docs": "Writes up to [`MAX_VOXEL_WRITES`] voxels in one transaction, as the app, and shows each to nearby players as a voxel update. Their states may hold [`MAX_VOXEL_WRITE_BYTES`] together. Returns the voxel update ids. A call costs one write per started 64 voxels ([`crate::limits::node`]). Scope `world.write`."
     },
     {
       "module": "ckx_sdk::node",
@@ -8591,9 +8682,9 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "ckx_sdk::prelude",
-      "name": "crate::node::{AgeBracket, ChunkPos, GridPick, ReportReason, SafetyReport, VoxelWrite}",
+      "name": "crate::node::{AgeBracket, ChunkPos, ChunkVoxelState, GridPick, ReportReason, SafetyReport, VoxelWrite}",
       "kind": "reexport",
-      "signature": "pub use crate::node::{AgeBracket, ChunkPos, GridPick, ReportReason, SafetyReport, VoxelWrite};",
+      "signature": "pub use crate::node::{AgeBracket, ChunkPos, ChunkVoxelState, GridPick, ReportReason, SafetyReport, VoxelWrite};",
       "docs": ""
     },
     {

@@ -34,7 +34,8 @@ directly. So, before adding a wrapper:
 `CHUNK_CHANGED_NOTIFICATION` (146, `[i64 updatedAt ms]`) for a hub's or mod's `world.set_chunk`
 (ck-api `v2.68.0`, cks-game-api #654). `binary-wire.ts` decodes it, the `udpNotifications` document
 selects `ChunkChangedNotification`, and it dispatches as `chunkChanged` (handler and bus key).
-`schema.gql` is #654's. CrowdyCPP's `Handlers::chunkChanged` is the same event.
+`schema.gql` is #654's. The embedded browser authoring index is compute-toolchain v1.17.0's
+(ckx-sdk 0.14.0, cks-game-api #657). CrowdyCPP's `Handlers::chunkChanged` is the same event.
 
 **18.28.0: region reads (2026-11-11).** ck-api `v2.67.0` (cks-game-api #652): `chunks.byDistance`
 and `voxels.listByDistance` take a box (`lowChunk` / `highChunk`), pages are stable and answer
