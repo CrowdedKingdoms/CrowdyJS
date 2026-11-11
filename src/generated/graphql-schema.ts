@@ -1879,6 +1879,25 @@ export type Chunk = {
   voxels: Maybe<Scalars['String']['output']>;
 };
 
+/** A chunk near you was replaced as a whole (a hub's or mod's world.set_chunk; Buddy v0.45.0): read it again with getChunk, or getChunksByDistance with since. It comes instead of a voxel update per voxel. Received via the udpNotifications subscription. */
+export type ChunkChangedNotification = {
+  __typename?: 'ChunkChangedNotification';
+  /** The ID of the app the chunk is in. */
+  appId: Scalars['BigInt']['output'];
+  /** The X coordinate of the replaced chunk. */
+  chunkX: Scalars['BigInt']['output'];
+  /** The Y coordinate of the replaced chunk. */
+  chunkY: Scalars['BigInt']['output'];
+  /** The Z coordinate of the replaced chunk. */
+  chunkZ: Scalars['BigInt']['output'];
+  /** Chunk replication distance (0-8) the notification was fanned out over. */
+  distance: Scalars['Int']['output'];
+  /** Correlation byte from the datagram tail (always 0 today). */
+  sequenceNumber: Scalars['Int']['output'];
+  /** The stored chunk's new updatedAt, in epoch milliseconds: a copy at least this new is current. */
+  updatedAtMs: Scalars['BigInt']['output'];
+};
+
 /** Authoritative result of an ordinary player claiming one chunk as a new grid under SELF_CLAIM. Grid creation, title assignment, and direct ACL grants are committed atomically. */
 export type ChunkClaimResult = {
   __typename?: 'ChunkClaimResult';
@@ -10902,7 +10921,7 @@ export enum UdpErrorCode {
 }
 
 /** All game-server messages delivered over the UDP proxy as GraphQL payloads. Subscribe to udpNotifications before or with sending mutations so responses and GenericErrorResponse (correlate via sequenceNumber) are not missed. NOTE: the ActorUpdateResponse and VoxelUpdateResponse members are LEGACY and never emitted (applied updates arrive as your own *Notification self-echo; failures as GenericErrorResponse) — they remain in the union for backward compatibility and will be removed in a future major version. */
-export type UdpNotification = ActorLeftNotification | ActorUpdateNotification | ActorUpdateResponse | ChannelAudioNotification | ChannelMessageNotification | ClientAudioNotification | ClientEventNotification | ClientTextNotification | ClientVideoNotification | GenericErrorResponse | RealtimeConnectionEvent | ServerEventNotification | SingleActorMessageNotification | VoxelUpdateNotification | VoxelUpdateResponse;
+export type UdpNotification = ActorLeftNotification | ActorUpdateNotification | ActorUpdateResponse | ChannelAudioNotification | ChannelMessageNotification | ChunkChangedNotification | ClientAudioNotification | ClientEventNotification | ClientTextNotification | ClientVideoNotification | GenericErrorResponse | RealtimeConnectionEvent | ServerEventNotification | SingleActorMessageNotification | VoxelUpdateNotification | VoxelUpdateResponse;
 
 /** UDP proxy session for the game token on the request. Returned by udpProxyConnectionStatus and connectUdpProxy. Binary UDP layouts are documented in database/client-wire-formats.md. */
 export type UdpProxyConnectionStatus = {
