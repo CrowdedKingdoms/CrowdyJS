@@ -14,11 +14,11 @@
  *   CROWDY_OWNER_EMAIL='owner@example.com' \
  *   npm test
  */
-import test from 'node:test';
+import test, { beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { Buffer } from 'node:buffer';
-import { provisionClients, mintAppAccess } from '../provision.mjs';
+import { provisionClients, mintAppAccess, freshActorUuid } from '../provision.mjs';
 import { gameClientConfig } from '../helpers.mjs';
 
 globalThis.WebSocket = WebSocket;
@@ -34,11 +34,16 @@ const NOTIFY_WAIT_MS = Number(process.env.CROWDY_TEST_NOTIFY_WAIT_MS ?? 3000);
 const SESSION_WAIT_MS = Number(process.env.CROWDY_TEST_SESSION_WAIT_MS ?? 2500);
 
 const MEMBERS = [
-  { name: 'A', uuid: 'aaaaaaaa0000111122223333aaaaaaaa', chunk: { x: '0', y: '0', z: '0' } },
-  { name: 'B', uuid: 'bbbbbbbb0000111122223333bbbbbbbb', chunk: { x: '3', y: '4', z: '0' } },
-  { name: 'C', uuid: 'cccccccc0000111122223333cccccccc', chunk: { x: '4', y: '4', z: '0' } },
-  { name: 'D', uuid: 'dddddddd0000111122223333dddddddd', chunk: { x: '0', y: '0', z: '7' } },
+  { name: 'A', uuid: freshActorUuid(), chunk: { x: '0', y: '0', z: '0' } },
+  { name: 'B', uuid: freshActorUuid(), chunk: { x: '3', y: '4', z: '0' } },
+  { name: 'C', uuid: freshActorUuid(), chunk: { x: '4', y: '4', z: '0' } },
+  { name: 'D', uuid: freshActorUuid(), chunk: { x: '0', y: '0', z: '7' } },
 ];
+// A fresh actor per test: each test signs up new players, and a send under an actor
+// another player still holds is refused UNAUTHORIZED.
+beforeEach(() => {
+  for (const m of MEMBERS) m.uuid = freshActorUuid();
+});
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));

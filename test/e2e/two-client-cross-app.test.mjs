@@ -28,7 +28,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { Buffer } from 'node:buffer';
-import { provisionAppWithPlayers, mintAppAccess } from '../provision.mjs';
+import { provisionAppWithPlayers, mintAppAccess, freshActorUuid } from '../provision.mjs';
 import { gameClientConfig } from '../helpers.mjs';
 
 // CrowdyJS realtime depends on a global `WebSocket`; node doesn't have one.
@@ -51,9 +51,9 @@ const NOTIFY_WAIT_MS = Number(process.env.CROWDY_TEST_NOTIFY_WAIT_MS ?? 3000);
 const SYNC_WAIT_MS = Number(process.env.CROWDY_TEST_SYNC_WAIT_MS ?? 3000);
 const CHUNK = { x: '0', y: '0', z: '0' };
 // clientApp's own actor, registered so it is an in-range recipient.
-const OBSERVER_UUID = 'aaaaaaaabbbbccccddddeeeeeeeeeeee';
+const OBSERVER_UUID = freshActorUuid();
 // The peer (player[1]) that sends; clientApp must receive these.
-const SENDER_UUID = 'ddddddddccccbbbbaaaaeeeeeeeeeeee';
+const SENDER_UUID = freshActorUuid();
 
 function randomBase64ActorState(byteCount = 96) {
   const buf = new Uint8Array(byteCount);
