@@ -120,6 +120,39 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.30.0: a ChunkStore the game can stand behind
+
+**What it needs.** What 18.29.0 needs (ck-api `v2.68.0` for the GraphQL proxy); the box reads and
+`since` are ck-api `v2.67.0`'s.
+
+**What changes for a game using `session.chunks`.**
+
+- **`ensureAround` reads only what the store does not hold, as boxes.** A step along one axis at
+  range 8 reads the 289 chunks it uncovers instead of the 4,913 of the cube, and each box is read
+  in pages of 1,000 (the size the server says it applied). Range 0 now reads one chunk; it read
+  the 27 of radius 1. A chunk a later page repeats is counted in `duplicatePageChunks`.
+- **A refused edit is undone.** An edit the server refuses (`UNAUTHORIZED` for a voxel the player
+  may not edit), one the transport does not take (`NOT_SENT`, `SEND_FAILED`), and one whose echo
+  does not come back within `editTimeoutMs` (10 s, `TIMEOUT`) put the voxel back as it was and
+  reach `onEditRefused(listener)` as a `VoxelEditRefusal` (`coord`, `voxel`, `voxelType`, `state`,
+  `reason`, `restored`). It was left showing. A store that hydrates reads a timed-out edit's chunk
+  again, since its echo may only have been lost.
+- **Edits are paced.** At most `maxEditsInFlight` (128) are unanswered and `maxEditsPerSecond`
+  (250) go out a second; the rest wait in order (`queuedEdits`, `editsInFlight`), already shown.
+  The server drops a session's traffic above 500 messages a second without a word. `setVoxel`
+  resolves when its edit's turn came.
+- **`chunkChanged` reads the chunk again** (`reloadReplacedChunks`), and the server's copy replaces
+  a seeded chunk's queued write-back.
+- **After a reconnect the store catches up** (`catchUpOnReconnect`, needs the client's `realtime`):
+  `catchUp(since)` applies the recorded edits of the last area since 30 s before the connection
+  dropped (`voxels.listByDistance`) and reads again the chunks whose stored row changed.
+- **A read keeps this client's unanswered edits over a stored copy that predates them.** `hydrate`
+  replaces the chunk's states and overlay with the stored copy's (a `world.set_chunk` drops older
+  edits), then puts those edits back.
+- `CachedChunk` has `voxelStatesTruncated` (the hydration got only part of the chunk's edits) and
+  `storedAt` (when the server last wrote the stored row). `WorldStoresClient` takes optional
+  `voxels` and `realtime`, which a `CrowdyClient` has.
+
 ## 18.29.0: a replaced chunk says so
 
 **What it needs.** ck-api `v2.68.0` (cks-game-api #654) for the GraphQL proxy: the

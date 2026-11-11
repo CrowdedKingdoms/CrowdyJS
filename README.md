@@ -34,6 +34,7 @@ so it needs that Game API or newer; promote the Game API before the SDK on each 
 
 | CrowdyJS | Needs the Game API (ck-api) |
 | --- | --- |
+| 18.30.0 | as 18.29.0 (`ChunkStore` reads boxes and `since`: v2.67.0) |
 | 18.29.0 | v2.68.0 or later for the GraphQL proxy (`udpNotifications` selects `ChunkChangedNotification`) |
 | 18.28.0 | v2.67.0 or later (`gameApps.nearbyGrids` selects `permissionKeys`) |
 | 18.27.0 | v2.64.0 or later (`isEmailConfirmationRequiredError` reads a code v2.65.0 sends) |

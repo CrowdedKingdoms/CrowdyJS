@@ -102,6 +102,7 @@ export {
   type ChunkOverlayVoxel,
   type ChunkStoreConfig,
   type ChunkWriteBackFailure,
+  type VoxelEditRefusal,
   type SetVoxelInput,
 } from './chunks.js';
 export {
