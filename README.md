@@ -34,6 +34,7 @@ so it needs that Game API or newer; promote the Game API before the SDK on each 
 
 | CrowdyJS | Needs the Game API (ck-api) |
 | --- | --- |
+| 18.27.0 | v2.64.0 or later (`isEmailConfirmationRequiredError` reads a code v2.65.0 sends) |
 | 18.26.0 | v2.64.0 or later (app reads and `apps.update` select `idleTimeoutSeconds` and `effectiveIdleTimeoutSeconds`) |
 | 18.25.0 | v2.61.0 or later (app reads and `apps.update` select `hasSafetyModerator`; `platform.territoryPolicies` selects `regionCode`) |
 | 18.24.0 | v2.60.0 or later (`users.me` selects `ageBracket` and `country`; app reads and `apps.update` select the safety log and age fields; the teen safety calls). `auth.recordPlayerConsents` with both flags and `auth.playerLegalAcceptance()` without an app work against older releases |
@@ -132,6 +133,13 @@ and, since ck-api v2.60.0, the app's own `client.auth.appRequiredDocuments(appId
 before minting; `client.auth.playerLegalAcceptance({ appId })` says whether that is still
 needed. `auth.register` takes the same fields, and a browser page must send them.
 See [MIGRATION.md](MIGRATION.md#1840-the-terms-and-age-gate).
+
+**A new password account confirms its email before it plays** (ck-api v2.65.0, 2026-11-11).
+Until the player opens the link `auth.register` emailed, those same three calls answer
+`EMAIL_CONFIRMATION_REQUIRED` (`isEmailConfirmationRequiredError`). Studio's `/authorize`
+handles it on the first row; a native client shows "check your inbox" and offers
+`client.auth.resendConfirmationEmail(email)`. Accounts made before 2026-11-11, managed
+players, staff and dev or test accounts made with a provisioning token are not asked.
 
 **The player gate** (ck-api v2.60.0, the teen safety program) runs at every mint and
 refresh: a country Crowded Kingdoms does not serve is refused `TERRITORY_NOT_SUPPORTED`

@@ -414,6 +414,18 @@ const SetInitialPasswordDocument = parse(
   `mutation SetInitialPassword($newPassword: String!) { setInitialPassword(newPassword: $newPassword) }`,
 ) as TypedDocumentNode<{ setInitialPassword: boolean }, { newPassword: string }>;
 
+// EMAIL CONFIRMATION. `register` emails a link carrying the token, and the page it
+// opens (Studio's) calls `confirmEmail`. Since ck-api v2.65.0 a password account made
+// from 2026-11-11 confirms before its first gameplay token, so a native client that
+// meets `EMAIL_CONFIRMATION_REQUIRED` offers `resendConfirmationEmail`.
+const ConfirmEmailDocument = parse(
+  `mutation ConfirmEmail($token: String!) { confirmEmail(token: $token) }`,
+) as TypedDocumentNode<{ confirmEmail: boolean }, { token: string }>;
+
+const ResendConfirmationEmailDocument = parse(
+  `mutation ResendConfirmationEmail($email: String!) { resendConfirmationEmail(email: $email) }`,
+) as TypedDocumentNode<{ resendConfirmationEmail: boolean }, { email: string }>;
+
 const CheckAuthMethodDocument = parse(
   `query CheckAuthMethod($input: CheckAuthMethodInput!) { checkAuthMethod(input: $input) { hasPassword } }`,
 ) as TypedDocumentNode<
@@ -566,6 +578,14 @@ export class AuthAPI {
    * (`ageRequirementNotMetOf`); either way no account is made. Since ck-api v2.61.0
    * the age refusal names no age, and for 24 hours the same client (address and user
    * agent) is refused it whatever it sends.
+   *
+   * **The email (ck-api v2.65.0).** The account starts unconfirmed and is emailed a
+   * link. A password account made since 2026-11-11 gets no gameplay token until it
+   * confirms: `portal.mintAppToken`, `portal.createAuthorizationCode` and
+   * `portal.refresh` answer `EMAIL_CONFIRMATION_REQUIRED`
+   * ({@link isEmailConfirmationRequiredError}), and {@link resendConfirmationEmail}
+   * sends the link again. Accounts made with a dev or test provisioning token are
+   * not asked.
    */
   async register(input: {
     email: string;
@@ -776,6 +796,34 @@ export class AuthAPI {
       email,
     });
     return data.requestPasswordReset;
+  }
+
+  /**
+   * Confirm the account's email address with the token from the emailed link, which
+   * also enables password sign-in. `false` for an invalid or expired token. Public
+   * (the token is the authorization), from a first-party origin or a client with no
+   * browser origin. The link opens Studio, which calls this itself; a client needs it
+   * only if it serves the link's page.
+   */
+  async confirmEmail(token: string): Promise<boolean> {
+    const data = await this.graphql.request(ConfirmEmailDocument, { token });
+    return data.confirmEmail;
+  }
+
+  /**
+   * Email the confirmation link again: the remedy for `EMAIL_CONFIRMATION_REQUIRED`
+   * ({@link isEmailConfirmationRequiredError}, ck-api v2.65.0). Public, from a
+   * first-party origin or a native client that sends no `Origin`; rate-limited.
+   *
+   * Always resolves `true`, whether or not the address has an unconfirmed account,
+   * so it cannot be used to enumerate users and a `true` is not evidence an email
+   * was sent.
+   */
+  async resendConfirmationEmail(email: string): Promise<boolean> {
+    const data = await this.graphql.request(ResendConfirmationEmailDocument, {
+      email,
+    });
+    return data.resendConfirmationEmail;
   }
 
   /**
