@@ -13,7 +13,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { Buffer } from 'node:buffer';
-import { provisionClients } from '../provision.mjs';
+import { provisionClients, freshActorUuid } from '../provision.mjs';
 
 globalThis.WebSocket = WebSocket;
 
@@ -32,9 +32,9 @@ const skipReason =
 const SEND_COUNT = Number(process.env.CROWDY_TEST_SEND_COUNT ?? 5);
 const NOTIFY_WAIT_MS = Number(process.env.CROWDY_TEST_NOTIFY_WAIT_MS ?? 3000);
 const CHUNK = { x: '0', y: '0', z: '0' };
-const TEST_UUID_A = 'aaaaaaaabbbbccccddddeeeeeeeeeeee';
-const TEST_UUID_B = 'bbbbbbbbccccddddeeeeeeeeeeeeeeee';
-const AUDIO_UUID = 'audio-aaaa-bbbb-cccc-dddd-eeeeee';
+const TEST_UUID_A = freshActorUuid();
+const TEST_UUID_B = freshActorUuid();
+const AUDIO_UUID = freshActorUuid();
 
 function randomBase64(byteCount = 64) {
   const buf = new Uint8Array(byteCount);

@@ -9,11 +9,11 @@
  * management API (provision.mjs). No database credentials. Auto-skips unless the
  * integration env vars are present.
  */
-import test from 'node:test';
+import test, { beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { Buffer } from 'node:buffer';
-import { provisionClients } from '../provision.mjs';
+import { provisionClients, freshActorUuid } from '../provision.mjs';
 
 globalThis.WebSocket = WebSocket;
 
@@ -30,8 +30,14 @@ const skipReason =
     : undefined;
 
 const NOTIFY_WAIT_MS = Number(process.env.CROWDY_TEST_NOTIFY_WAIT_MS ?? 3000);
-const UUID_A = 'aaaaaaaabbbbccccddddeeeeeeeeeeee';
-const UUID_B = 'bbbbbbbbccccddddeeeeeeeeeeeeeeee';
+let UUID_A = freshActorUuid();
+let UUID_B = freshActorUuid();
+// A fresh actor per test: each test signs up new players, and a send under an actor
+// another player still holds is refused UNAUTHORIZED.
+beforeEach(() => {
+  UUID_A = freshActorUuid();
+  UUID_B = freshActorUuid();
+});
 
 function b64(s) {
   return Buffer.from(s, 'utf8').toString('base64');
