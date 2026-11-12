@@ -22,7 +22,8 @@ import type { ChunksAPI } from '../domains/chunks.js';
 import type { HostAPI } from '../domains/host.js';
 import type { StateAPI } from '../domains/state.js';
 import type { UdpAPI } from '../domains/udp.js';
-import type { UdpNotificationHandlers } from '../realtime.js';
+import type { VoxelsAPI } from '../domains/voxels.js';
+import type { RealtimeStatus, UdpNotificationHandlers } from '../realtime.js';
 import { intervalTicker, type Ticker } from './ticker.js';
 
 /**
@@ -36,6 +37,13 @@ export interface WorldStoresClient {
   state: StateAPI;
   avatars: AvatarsAPI;
   host: HostAPI;
+  /**
+   * The recorded voxel edits. ChunkStore reads a region's edits with it after a reconnect; without
+   * it the store re-reads only the chunks whose stored row changed.
+   */
+  voxels?: Pick<VoxelsAPI, 'listByDistance'>;
+  /** The realtime connection's status. ChunkStore catches up on what it missed while it was down. */
+  realtime?: { onStatus(listener: (status: RealtimeStatus) => void): () => void };
 }
 
 /** The kinds of outbound sends the session can attribute errors to. */
@@ -101,6 +109,7 @@ const BUS_KEYS: BusKey[] = [
   'audio',
   'video',
   'actorLeft',
+  'chunkChanged',
   'text',
   'clientEvent',
   'serverEvent',

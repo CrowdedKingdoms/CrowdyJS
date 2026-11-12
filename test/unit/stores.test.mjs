@@ -677,31 +677,43 @@ function fakeChunks(initial = {}) {
   const server = new Map(Object.entries(initial));
   const calls = { byDistance: 0, get: 0, update: [] };
   const key = (c) => `${c.x}:${c.y}:${c.z}`;
+  // A cube or a box, ordered by x, y, z and paged, with the paging applied echoed (ck-api v2.67.0).
   const api = {
-    async byDistance({ centerCoordinate, maxDistance }) {
+    async byDistance({ centerCoordinate, maxDistance, lowChunk, highChunk, limit, skip, since }) {
       calls.byDistance += 1;
-      const center = {
-        x: Number(centerCoordinate.x),
-        y: Number(centerCoordinate.y),
-        z: Number(centerCoordinate.z),
-      };
+      (calls.inputs ??= []).push({ centerCoordinate, maxDistance, lowChunk, highChunk, limit, skip, since });
+      const n = (c) => ({ x: Number(c.x), y: Number(c.y), z: Number(c.z) });
+      const inside = lowChunk
+        ? (x, y, z) => {
+            const lo = n(lowChunk);
+            const hi = n(highChunk);
+            return x >= lo.x && x <= hi.x && y >= lo.y && y <= hi.y && z >= lo.z && z <= hi.z;
+          }
+        : (x, y, z) => {
+            const c = n(centerCoordinate);
+            return Math.max(Math.abs(x - c.x), Math.abs(y - c.y), Math.abs(z - c.z)) <= maxDistance;
+          };
       const chunks = [];
       for (const [k, entry] of server) {
         const [x, y, z] = k.split(':').map(Number);
-        const dist = Math.max(
-          Math.abs(x - center.x),
-          Math.abs(y - center.y),
-          Math.abs(z - center.z),
-        );
-        if (dist <= maxDistance) {
-          chunks.push({
-            coordinates: { x: String(x), y: String(y), z: String(z) },
-            voxels: entry.voxels ?? null,
-            chunkState: entry.chunkState ?? null,
-          });
-        }
+        if (!inside(x, y, z)) continue;
+        if (since && !(entry.updatedAt && entry.updatedAt >= since)) continue;
+        chunks.push({
+          coordinates: { x: String(x), y: String(y), z: String(z) },
+          voxels: entry.voxels ?? null,
+          chunkState: entry.chunkState ?? null,
+          updatedAt: entry.updatedAt ?? null,
+        });
       }
-      return { chunks };
+      chunks.sort(
+        (a, b) =>
+          a.coordinates.x - b.coordinates.x ||
+          a.coordinates.y - b.coordinates.y ||
+          a.coordinates.z - b.coordinates.z,
+      );
+      const applied = limit || 1000;
+      const from = skip || 0;
+      return { chunks: chunks.slice(from, from + applied), limit: applied, skip: from };
     },
     async get({ coordinates }) {
       calls.get += 1;
@@ -974,7 +986,7 @@ test('ChunkStore: hydration puts recorded edits on a chunk stored with voxels: n
       ],
     },
   });
-  const { client } = fakeClient({ chunks: api });
+  const { client, net } = fakeClient({ chunks: api });
   const session = createWorldSession(client, '42', {
     ticker: manualTicker(),
     chunks: { voxelStateCodec: codec, writeBackIntervalMs: false },
@@ -988,11 +1000,21 @@ test('ChunkStore: hydration puts recorded edits on a chunk stored with voxels: n
   assert.deepEqual(store.voxelStateAt(at, 1, 1, 1), { placedBy: 'hub' });
 
   // The server says the block at (2,2,2) was mined (type 0, no state): the state goes too.
-  await store.setVoxel({ chunk: at, x: 2, y: 2, z: 2, voxelType: 7, state: { placedBy: 'me' } });
-  assert.deepEqual(store.voxelStateAt(at, 2, 2, 2), { placedBy: 'me' });
+  net.handlers.voxelUpdate({
+    chunkX: '0', chunkY: '0', chunkZ: '0',
+    voxelX: 2, voxelY: 2, voxelZ: 2, voxelType: 7, voxelState: codec.encode({ placedBy: 'them' }),
+    uuid: 'w'.repeat(32), sequenceNumber: 1, epochMillis: '2',
+  });
+  assert.deepEqual(store.voxelStateAt(at, 2, 2, 2), { placedBy: 'them' });
   await store.hydrate(at);
   assert.equal(store.voxelTypeAt(at, 2, 2, 2), 0);
   assert.equal(store.voxelStateAt(at, 2, 2, 2), undefined);
+
+  // This client's own edit the server has not echoed yet stays over a stored copy that predates it.
+  await store.setVoxel({ chunk: at, x: 3, y: 3, z: 3, voxelType: 6, state: { placedBy: 'me' } });
+  await store.hydrate(at);
+  assert.equal(store.voxelTypeAt(at, 3, 3, 3), 6);
+  assert.deepEqual(store.voxelStateAt(at, 3, 3, 3), { placedBy: 'me' });
   session.dispose();
 });
 

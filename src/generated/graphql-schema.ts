@@ -1879,6 +1879,25 @@ export type Chunk = {
   voxels: Maybe<Scalars['String']['output']>;
 };
 
+/** A chunk near you was replaced as a whole (a hub's or mod's world.set_chunk; Buddy v0.45.0): read it again with getChunk, or getChunksByDistance with since. It comes instead of a voxel update per voxel. Received via the udpNotifications subscription. */
+export type ChunkChangedNotification = {
+  __typename?: 'ChunkChangedNotification';
+  /** The ID of the app the chunk is in. */
+  appId: Scalars['BigInt']['output'];
+  /** The X coordinate of the replaced chunk. */
+  chunkX: Scalars['BigInt']['output'];
+  /** The Y coordinate of the replaced chunk. */
+  chunkY: Scalars['BigInt']['output'];
+  /** The Z coordinate of the replaced chunk. */
+  chunkZ: Scalars['BigInt']['output'];
+  /** Chunk replication distance (0-8) the notification was fanned out over. */
+  distance: Scalars['Int']['output'];
+  /** Correlation byte from the datagram tail (always 0 today). */
+  sequenceNumber: Scalars['Int']['output'];
+  /** The stored chunk's new updatedAt, in epoch milliseconds: a copy at least this new is current. */
+  updatedAtMs: Scalars['BigInt']['output'];
+};
+
 /** Authoritative result of an ordinary player claiming one chunk as a new grid under SELF_CLAIM. Grid creation, title assignment, and direct ACL grants are committed atomically. */
 export type ChunkClaimResult = {
   __typename?: 'ChunkClaimResult';
@@ -1969,9 +1988,9 @@ export type ChunksByDistanceResponse = {
   __typename?: 'ChunksByDistanceResponse';
   /** Chunks found within the search cube. */
   chunks: Array<Chunk>;
-  /** Echo of the `limit` applied to this page, or null if none was supplied. */
+  /** The `limit` applied to this page: the one asked for, or 1000 when none (or 0) was. */
   limit: Maybe<Scalars['Int']['output']>;
-  /** Echo of the `skip` applied to this page, or null if none was supplied. */
+  /** The `skip` applied to this page: the one asked for, or 0. */
   skip: Maybe<Scalars['Int']['output']>;
 };
 
@@ -4380,21 +4399,27 @@ export type GetChunkLodsInput = {
   lodLevels: Array<Scalars['Int']['input']>;
 };
 
-/** Arguments for getChunksByDistance: selects chunks within a cubic (Chebyshev-distance) radius around a center chunk, with pagination. */
+/** Arguments for getChunksByDistance: selects the stored chunks in a region, either a cube (centerCoordinate and maxDistance) or a box (lowChunk and highChunk), with pagination. A cube is ordered by Chebyshev distance from its center, then x, y, z; a box by x, y, z. */
 export type GetChunksByDistanceInput = {
   /** Id of the app whose chunks to search (decimal string). */
   appId: Scalars['BigInt']['input'];
-  /** Center chunk of the search cube. */
-  centerCoordinate: ChunkCoordinatesInput;
-  /** Maximum number of chunks to return. Defaults to 1000 when omitted. Must be >= 0. */
+  /** Center chunk of the search cube. With maxDistance; leave both out to search a box (lowChunk and highChunk) instead. */
+  centerCoordinate?: InputMaybe<ChunkCoordinatesInput>;
+  /** The opposite corner of the search box, with lowChunk; both corners are inclusive. */
+  highChunk?: InputMaybe<ChunkCoordinatesInput>;
+  /** Maximum number of chunks to return. Defaults to 1000 when omitted or 0; a cube at maxDistance 8 holds up to 4,913. Must be >= 0. */
   limit?: InputMaybe<Scalars['Int']['input']>;
-  /** Cube 'radius' in chunks measured as Chebyshev distance: matches chunks whose x, y and z each differ from the center by at most this many chunks (a (2*maxDistance+1)^3 cube). Integer, 1-8 inclusive. */
-  maxDistance: Scalars['Int']['input'];
+  /** One corner of a search box, with highChunk, instead of a cube: for streaming only the slab a step uncovers. Corners are normalized per axis, and the box may cover at most 4,913 chunks (the cube maxDistance 8 reads). */
+  lowChunk?: InputMaybe<ChunkCoordinatesInput>;
+  /** Cube 'radius' in chunks measured as Chebyshev distance: matches chunks whose x, y and z each differ from the center by at most this many chunks (a (2*maxDistance+1)^3 cube). Integer, 1-8 inclusive. With centerCoordinate. */
+  maxDistance?: InputMaybe<Scalars['Int']['input']>;
+  /** Optional inclusive lower time bound: only chunks whose updatedAt is at or after it, i.e. chunks whose stored grid, chunk state or LODs were written since (updateChunk, updateChunkState, updateChunkLods). Single voxel edits do not move a chunk's updatedAt; read those with listVoxelUpdatesByDistance's since. */
+  since?: InputMaybe<Scalars['DateTime']['input']>;
   /** Number of chunks to skip for pagination. Defaults to 0 when omitted. Must be >= 0. */
   skip?: InputMaybe<Scalars['Int']['input']>;
 };
 
-/** Arguments for getVoxelList: selects all recorded voxel edits for one chunk by app id and chunk coordinates. */
+/** Arguments for getVoxelList: selects the recorded voxel edits for one chunk by app id and chunk coordinates, by position and at most 65,536 of them (listVoxels pages past that). */
 export type GetVoxelListInput = {
   /** Id of the app that owns the chunk (decimal string). */
   appId: Scalars['BigInt']['input'];
@@ -5041,30 +5066,38 @@ export type LinkIdentityInput = {
   state: Scalars['String']['input'];
 };
 
-/** Arguments for listVoxelUpdatesByDistance: selects recorded voxel edits across chunks within a cubic (Chebyshev) radius of a center chunk, grouped per chunk and ordered by increasing distance. */
+/** Arguments for listVoxelUpdatesByDistance: selects recorded voxel edits across the chunks of a region, either a cube (centerCoordinate and maxDistance) or a box (lowChunk and highChunk), grouped per chunk. A cube is ordered by increasing Chebyshev distance, then x, y, z; a box by x, y, z. Edits are returned for chunks whose grid was never stored too. */
 export type ListVoxelUpdatesByDistanceInput = {
   /** Id of the app whose voxel edits to search (decimal string). */
   appId: Scalars['BigInt']['input'];
-  /** Center chunk of the search cube. */
-  centerCoordinate: ChunkCoordinatesInput;
-  /** Maximum number of CHUNKS (not voxels) to include. Defaults to 1000 when omitted. Must be >= 0. */
+  /** Center chunk of the search cube. With maxDistance; leave both out to search a box (lowChunk and highChunk) instead. */
+  centerCoordinate?: InputMaybe<ChunkCoordinatesInput>;
+  /** The opposite corner of the search box, with lowChunk; both corners are inclusive. */
+  highChunk?: InputMaybe<ChunkCoordinatesInput>;
+  /** Maximum number of CHUNKS (not voxels) to include. Defaults to 1000 when omitted or 0. Must be >= 0. */
   limit?: InputMaybe<Scalars['Int']['input']>;
-  /** Cube radius in chunks measured as Chebyshev distance: matches chunks whose x, y and z each differ from the center by at most this many chunks. Integer, 1-8 inclusive. */
-  maxDistance: Scalars['Int']['input'];
+  /** One corner of a search box, with highChunk, instead of a cube. Corners are normalized per axis, and the box may cover at most 4,913 chunks (the cube maxDistance 8 reads). */
+  lowChunk?: InputMaybe<ChunkCoordinatesInput>;
+  /** Cube radius in chunks measured as Chebyshev distance: matches chunks whose x, y and z each differ from the center by at most this many chunks. Integer, 1-8 inclusive. With centerCoordinate. */
+  maxDistance?: InputMaybe<Scalars['Int']['input']>;
   /** Optional inclusive lower time bound; only edits with createdAt >= this timestamp are returned. */
   since?: InputMaybe<Scalars['DateTime']['input']>;
   /** Number of chunks to skip for pagination. Defaults to 0 when omitted. Must be >= 0. */
   skip?: InputMaybe<Scalars['Int']['input']>;
 };
 
-/** Arguments for listVoxels: selects recorded voxel edits for one chunk, optionally only those at/after a timestamp. */
+/** Arguments for listVoxels: selects the recorded voxel edits of one chunk, ordered by voxel position (x, then y, then z), optionally only those at/after a timestamp, a page at a time. */
 export type ListVoxelsInput = {
   /** Id of the app that owns the chunk (decimal string). */
   appId: Scalars['BigInt']['input'];
   /** Address of the chunk whose voxel edits to list. */
   coordinates: ChunkCoordinatesInput;
+  /** Most edits to return, 1-65,536 (the default). A page shorter than the limit is the last; read the next with skip. */
+  limit?: InputMaybe<Scalars['Int']['input']>;
   /** Optional inclusive lower time bound. When set, only voxel edits with createdAt >= this timestamp are returned. */
   since?: InputMaybe<Scalars['DateTime']['input']>;
+  /** Edits to skip, for the next page. Defaults to 0. */
+  skip?: InputMaybe<Scalars['Int']['input']>;
 };
 
 /** A single level-of-detail (LOD) representation of a chunk. */
@@ -7148,7 +7181,7 @@ export type MyTierAccess = {
   via: Maybe<Scalars['String']['output']>;
 };
 
-/** A grid overlapping a scanned region (returned by nearbyGrids). Bounds only — no permission keys. */
+/** A grid overlapping a scanned region (returned by nearbyGrids): its bounds and the caller's own permission keys on it. */
 export type NearbyGrid = {
   __typename?: 'NearbyGrid';
   /** The app (tenant) that owns the grid. */
@@ -7159,6 +7192,8 @@ export type NearbyGrid = {
   highChunk: ChunkCoordinates;
   /** Low (minimum) corner chunk of the grid box. */
   lowChunk: ChunkCoordinates;
+  /** The caller's own unexpired permission keys on this grid, sorted; empty when none. These are the grants the server checks: a voxel edit needs update_voxel_data on the grid that decides its chunk. */
+  permissionKeys: Array<Scalars['String']['output']>;
 };
 
 /** A grid overlapping a scanned region, plus a user's effective permission keys on it (returned by nearbyGridPermissions). */
@@ -7190,7 +7225,7 @@ export type NearbyGridPermissionsInput = {
   userId: Scalars['BigInt']['input'];
 };
 
-/** Scan a region for grids. Player-safe: returns bounds only, no permission keys and no impersonation userId. */
+/** Scan a region for grids. Player-safe: returns each grid's bounds and the caller's own permission keys, and takes no userId. */
 export type NearbyGridsInput = {
   /** The app (tenant) to scan within. */
   appId: Scalars['BigInt']['input'];
@@ -8378,7 +8413,7 @@ export type Query = {
   getChunk: Maybe<Chunk>;
   /** Fetches only the requested level-of-detail (LOD) meshes for one chunk, identified by app id and coordinates. Returns null if the chunk does not exist. Cheaper than getChunk when you only need LODs. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only. */
   getChunkLods: Maybe<ChunkLodsResponse>;
-  /** Returns all chunks for an app within a cubic (Chebyshev-distance) radius of a center chunk, paginated. The cube spans center +/- maxDistance chunks on each axis. Each chunk's `voxelStates`, when selected, include its recorded voxel edits as in getChunk (selecting them costs one more read). Use this for bulk region loads; use getChunk for a single chunk. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only. */
+  /** Returns the stored chunks of an app in a region, paginated: a cube (center +/- maxDistance chunks on each axis, nearest first) or a box between two corners (lowChunk and highChunk, at most 4,913 chunks, by x, y, z), optionally only those written since a time. Pages are stable: each chunk is on exactly one. Each chunk's `voxelStates`, when selected, include its recorded voxel edits as in getChunk (selecting them costs one more read). Use this for bulk region loads; use getChunk for a single chunk. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only. */
   getChunksByDistance: ChunksByDistanceResponse;
   /** Returns all recorded voxel edits (the voxel_updates log) for a single chunk, newest first, as a ChunkVoxelResponse. Use getChunk instead when you want the packed voxel grid rather than the individual edit log. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only. */
   getVoxelList: ChunkVoxelResponse;
@@ -8412,9 +8447,9 @@ export type Query = {
   inputLogSessions: InputLogSessionConnection;
   /** OPERATOR: legal holds, newest first (at most 500), on one organization or account if given; only the ones that apply now unless includeReleased. */
   legalHolds: Array<LegalHold>;
-  /** Lists recorded voxel edits for all chunks within a cubic (Chebyshev) radius of a center chunk, grouped per chunk and ordered by increasing distance, paginated over chunks. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only. */
+  /** Lists recorded voxel edits for the chunks of a region, grouped per chunk and paginated over chunks: a cube (center +/- maxDistance, by increasing distance) or a box between two corners (lowChunk and highChunk, at most 4,913 chunks, by x, y, z). It reads the edit log alone, so chunks whose grid was never stored are included. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only. */
   listVoxelUpdatesByDistance: VoxelUpdatesByDistanceResponse;
-  /** Lists recorded voxel edits for a single chunk (optionally only those at/after `since`), newest first. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only. */
+  /** Lists the recorded voxel edits of a single chunk (optionally only those at/after `since`), one per voxel position, ordered by position and paged by limit (default and most 65,536) and skip. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only. */
   listVoxels: Array<Voxel>;
   /** One managed player by the id your organization knows it by, or null. An org token with players:manage, or an org admin with manage_players. */
   managedPlayer: Maybe<ManagedPlayer>;
@@ -8468,7 +8503,7 @@ export type Query = {
   myTierAccess: MyTierAccess;
   /** List every grid overlapping a chunk-coordinate bounding box, each with the given user's effective permission keys on it. Useful for previewing what a user can do across a region (e.g. around their current position). Requires app-admin ('manage_apps'). */
   nearbyGridPermissions: Array<NearbyGridPermissions>;
-  /** List every grid overlapping a chunk-coordinate bounding box, returning gridId and bounds only. Player-safe: no permission keys and no impersonation userId. Requires an app-scoped token for the same app. */
+  /** List every grid overlapping a chunk-coordinate bounding box: its gridId, its bounds and the caller's own permission keys on it. Player-safe: another user's keys need nearbyGridPermissions (app admin). The grid that decides a voxel edit in a chunk is the smallest box covering it (the lower gridId on a tie), and the edit needs update_voxel_data there. Requires an app-scoped token for the same app. */
   nearbyGrids: Array<NearbyGrid>;
   /** An org's off-session auto-billing configuration (enabled flag, recharge amount, low-water threshold, per-period cap, and last error). Requires the 'view_billing' org permission. */
   orgAutoBilling: OrgAutoBilling;
@@ -10886,7 +10921,7 @@ export enum UdpErrorCode {
 }
 
 /** All game-server messages delivered over the UDP proxy as GraphQL payloads. Subscribe to udpNotifications before or with sending mutations so responses and GenericErrorResponse (correlate via sequenceNumber) are not missed. NOTE: the ActorUpdateResponse and VoxelUpdateResponse members are LEGACY and never emitted (applied updates arrive as your own *Notification self-echo; failures as GenericErrorResponse) — they remain in the union for backward compatibility and will be removed in a future major version. */
-export type UdpNotification = ActorLeftNotification | ActorUpdateNotification | ActorUpdateResponse | ChannelAudioNotification | ChannelMessageNotification | ClientAudioNotification | ClientEventNotification | ClientTextNotification | ClientVideoNotification | GenericErrorResponse | RealtimeConnectionEvent | ServerEventNotification | SingleActorMessageNotification | VoxelUpdateNotification | VoxelUpdateResponse;
+export type UdpNotification = ActorLeftNotification | ActorUpdateNotification | ActorUpdateResponse | ChannelAudioNotification | ChannelMessageNotification | ChunkChangedNotification | ClientAudioNotification | ClientEventNotification | ClientTextNotification | ClientVideoNotification | GenericErrorResponse | RealtimeConnectionEvent | ServerEventNotification | SingleActorMessageNotification | VoxelUpdateNotification | VoxelUpdateResponse;
 
 /** UDP proxy session for the game token on the request. Returned by udpProxyConnectionStatus and connectUdpProxy. Binary UDP layouts are documented in database/client-wire-formats.md. */
 export type UdpProxyConnectionStatus = {
@@ -11478,16 +11513,16 @@ export type VoxelUpdateResponse = {
   uuid: Scalars['String']['output'];
 };
 
-/** Result of listVoxelUpdatesByDistance: per-chunk groups of voxel edits ordered by increasing distance from the center, plus an echo of the pagination applied. */
+/** Result of listVoxelUpdatesByDistance: per-chunk groups of voxel edits (a cube ordered by increasing distance from its center, a box by x, y, z), plus the pagination applied. */
 export type VoxelUpdatesByDistanceResponse = {
   __typename?: 'VoxelUpdatesByDistanceResponse';
-  /** The center chunk the search was performed around. */
+  /** The center chunk of a cube search; for a box, its middle chunk (rounded toward lowChunk). */
   centerCoordinate: ChunkCoordinates;
-  /** Per-chunk groups of voxel edits, ordered by increasing Chebyshev distance from centerCoordinate. */
+  /** Per-chunk groups of voxel edits: for a cube by increasing Chebyshev distance from centerCoordinate, then x, y, z; for a box by x, y, z. */
   chunks: Array<ChunkVoxelUpdatesResponse>;
-  /** Echo of the chunk `limit` applied to this page, or null if none was supplied. */
+  /** The chunk `limit` applied to this page: the one asked for, or 1000 when none (or 0) was. */
   limit: Maybe<Scalars['Int']['output']>;
-  /** Echo of the chunk `skip` applied to this page, or null if none was supplied. */
+  /** The chunk `skip` applied to this page: the one asked for, or 0. */
   skip: Maybe<Scalars['Int']['output']>;
 };
 

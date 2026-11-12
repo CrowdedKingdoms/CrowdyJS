@@ -136,6 +136,11 @@ export interface UdpNotificationHandlers {
    * `actorUpdate` for the same uuid is a rejoin.
    */
   actorLeft?: (notification: Extract<UdpNotification, { __typename?: 'ActorLeftNotification' }>) => void;
+  /**
+   * A chunk near you was replaced as a whole (a hub's or mod's `world.set_chunk`; Buddy
+   * v0.45.0): read it again. `updatedAtMs` is the stored chunk's new `updatedAt`.
+   */
+  chunkChanged?: (notification: Extract<UdpNotification, { __typename?: 'ChunkChangedNotification' }>) => void;
   text?: (notification: Extract<UdpNotification, { __typename?: 'ClientTextNotification' }>) => void;
   /**
    * A nearby client emitted a custom client event (a client-defined
@@ -1381,6 +1386,9 @@ export class RealtimeClient {
           case 'ActorLeftNotification':
             handlers.actorLeft?.(notification);
             break;
+          case 'ChunkChangedNotification':
+            handlers.chunkChanged?.(notification);
+            break;
           case 'ClientTextNotification':
             handlers.text?.(notification);
             break;
@@ -1482,6 +1490,7 @@ const NOTIFICATION_KINDS: Record<string, string> = {
   ClientAudioNotification: 'audio',
   ClientVideoNotification: 'video',
   ActorLeftNotification: 'actorLeft',
+  ChunkChangedNotification: 'chunkChanged',
   ClientTextNotification: 'text',
   ClientEventNotification: 'clientEvent',
   ServerEventNotification: 'serverEvent',
