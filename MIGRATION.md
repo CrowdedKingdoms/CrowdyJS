@@ -120,6 +120,80 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.30.0: a ChunkStore the game can stand behind
+
+**What it needs.** What 18.29.0 needs (ck-api `v2.68.0` for the GraphQL proxy); the box reads and
+`since` are ck-api `v2.67.0`'s.
+
+**What changes for a game using `session.chunks`.**
+
+- **`ensureAround` reads only what the store does not hold, as boxes.** A step along one axis at
+  range 8 reads the 289 chunks it uncovers instead of the 4,913 of the cube, and each box is read
+  in pages of 1,000 (the size the server says it applied). Range 0 now reads one chunk; it read
+  the 27 of radius 1. A chunk a later page repeats is counted in `duplicatePageChunks`.
+- **A refused edit is undone.** An edit the server refuses (`UNAUTHORIZED` for a voxel the player
+  may not edit), one the transport does not take (`NOT_SENT`, `SEND_FAILED`), and one whose echo
+  does not come back within `editTimeoutMs` (10 s, `TIMEOUT`) put the voxel back as it was and
+  reach `onEditRefused(listener)` as a `VoxelEditRefusal` (`coord`, `voxel`, `voxelType`, `state`,
+  `reason`, `restored`). It was left showing. A store that hydrates reads a timed-out edit's chunk
+  again, since its echo may only have been lost.
+- **Edits are paced.** At most `maxEditsInFlight` (128) are unanswered and `maxEditsPerSecond`
+  (250) go out a second; the rest wait in order (`queuedEdits`, `editsInFlight`), already shown.
+  The server drops a session's traffic above 500 messages a second without a word. `setVoxel`
+  resolves when its edit's turn came.
+- **`chunkChanged` reads the chunk again** (`reloadReplacedChunks`), and the server's copy replaces
+  a seeded chunk's queued write-back.
+- **After a reconnect the store catches up** (`catchUpOnReconnect`, needs the client's `realtime`):
+  `catchUp(since)` applies the recorded edits of the last area since 30 s before the connection
+  dropped (`voxels.listByDistance`) and reads again the chunks whose stored row changed.
+- **A read keeps this client's unanswered edits over a stored copy that predates them.** `hydrate`
+  replaces the chunk's states and overlay with the stored copy's (a `world.set_chunk` drops older
+  edits), then puts those edits back.
+- `CachedChunk` has `voxelStatesTruncated` (the hydration got only part of the chunk's edits) and
+  `storedAt` (when the server last wrote the stored row). `WorldStoresClient` takes optional
+  `voxels` and `realtime`, which a `CrowdyClient` has.
+
+## 18.29.0: a replaced chunk says so
+
+**What it needs.** ck-api `v2.68.0` (cks-game-api #654) for the GraphQL proxy: the
+`udpNotifications` document selects `ChunkChangedNotification`, which an older Game API refuses as
+a whole subscription. The binary relay needs nothing new. The notification itself comes from the
+realtime servers' `v0.45.0`.
+
+**What changes for a game.**
+
+- `chunkChanged` (a handler, a World Stores bus key, `ChunkChangedNotification`) fires when a chunk
+  near the player was replaced as a whole by a hub's or mod's `world.set_chunk`. It carries the
+  chunk and its new `updatedAtMs`: read the chunk again (`chunks.get`, or `chunks.byDistance` with
+  `since`). It comes instead of a voxel update per voxel, so a game that ignores it sees the
+  change only on its next read.
+
+## 18.28.0: region reads take a box, a `since` and stable pages
+
+**What it needs.** ck-api `v2.67.0` (cks-game-api #652): `gameApps.nearbyGrids` selects
+`permissionKeys`, which older releases refuse as a whole query. The other changes are inputs.
+
+**What changes for a game.**
+
+- `chunks.byDistance` and `voxels.listByDistance` take a box, `lowChunk` and `highChunk`
+  (inclusive, either order, at most 4,913 chunks), instead of `centerCoordinate` and
+  `maxDistance`: a client streaming the world as the player walks reads only the slab a step
+  uncovers. Give one region or the other; both is `BAD_USER_INPUT`.
+- Pages are stable: a cube comes nearest first and then by x, y, z, a box by x, y, z, so each
+  chunk is on exactly one page. `limit` and `skip` in the answer are the values applied (1000
+  and 0 by default), not `null`.
+- `chunks.byDistance` takes `since`: only chunks whose stored row was written at or after it
+  (`updateChunk`, `updateChunkState`, `updateChunkLods`). Single voxel edits do not move it; read
+  those with `voxels.listByDistance`'s `since`.
+- `voxels.list` pages: `limit` (1-65,536, the default) and `skip`, ordered by position. It was
+  newest first and unbounded; `chunks.voxelList` is its first page.
+- `gameApps.nearbyGrids` returns each grid's `permissionKeys` for the caller, so a game can grey
+  out a build tool or draw claim borders before an edit is refused. The grid that decides a voxel
+  edit is the smallest one covering its chunk (the lower `gridId` on a tie), and the edit needs
+  `update_voxel_data` there.
+- `voxels.listByDistance` reads the edit log alone, so it returns edits in chunks whose grid was
+  never stored.
+
 ## 18.27.0: a new account confirms its email before it plays
 
 **What it needs.** Nothing new: the release selects nothing ck-api `v2.64.0` lacks.

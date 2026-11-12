@@ -139,12 +139,15 @@ export class GameAppsAPI {
   }
 
   /**
-   * List grids overlapping a chunk-coordinate box. Player-safe: bounds only,
-   * no permission keys and no impersonation userId. Requires an app-scoped
-   * token (ck-api v1.93.0).
+   * List grids overlapping a chunk-coordinate box, each with the caller's own
+   * unexpired `permissionKeys` on it (ck-api v2.67.0; bounds only before).
+   * Player-safe: another user's keys need {@link GameAppsAPI.nearbyGridPermissions}.
+   * The grid that decides a voxel edit in a chunk is the smallest box covering
+   * it (the lower `gridId` on a tie), and the edit needs `update_voxel_data`
+   * there. Requires an app-scoped token (ck-api v1.93.0).
    *
    * @param input - {@link NearbyGridsInput} (app, corners).
-   * @returns The overlapping grids with id and bounds.
+   * @returns The overlapping grids with id, bounds and your keys on each.
    */
   async nearbyGrids(
     input: NearbyGridsInput,
