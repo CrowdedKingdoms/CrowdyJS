@@ -53,15 +53,19 @@ export class VoxelsAPI {
   constructor(private gql: GraphQLClient) {}
 
   /**
-   * List recorded voxel edits for a single chunk, newest first (optionally only
-   * those at/after a timestamp). Read-only.
+   * List the recorded voxel edits of a single chunk, one per voxel position,
+   * ordered by position, a page at a time (optionally only those at/after a
+   * timestamp). Read-only.
    *
-   * @param input - {@link ListVoxelsInput}: `appId`, chunk `coordinates`, and an
+   * @param input - {@link ListVoxelsInput}: `appId`, chunk `coordinates`, an
    *   optional inclusive `since` lower time bound (only edits with
-   *   `createdAt >= since`).
-   * @returns The matching {@link Voxel} edits, newest first (each `state` blob
+   *   `createdAt >= since`), and `limit` (1-65,536, the default) / `skip`
+   *   paging (ck-api v2.67.0; before it the list was newest first and
+   *   unbounded). A page shorter than `limit` is the last.
+   * @returns The matching {@link Voxel} edits (each `state` blob
    *   base64-encoded).
-   * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `FORBIDDEN`.
+   * @throws {CrowdyGraphQLError} `BAD_USER_INPUT` (a `limit` outside
+   *   `1-65,536`), `UNAUTHENTICATED` / `FORBIDDEN`.
    */
   async list(
     input: ListVoxelsQueryVariables['input']
@@ -71,19 +75,21 @@ export class VoxelsAPI {
   }
 
   /**
-   * List recorded voxel edits for all chunks within a cubic (Chebyshev) radius of
-   * a center chunk, grouped per chunk and ordered by increasing distance,
-   * paginated over chunks. Read-only.
+   * List recorded voxel edits for the chunks of a region, grouped per chunk and
+   * paginated over chunks: a cube (`centerCoordinate` ± `maxDistance`, by
+   * increasing distance) or a box between two corners (`lowChunk` and
+   * `highChunk`, at most 4,913 chunks, by x, y, z; ck-api v2.67.0). It reads
+   * the edit log alone, so it returns edits in chunks whose grid was never
+   * stored. Read-only.
    *
-   * @param input - {@link ListVoxelUpdatesByDistanceInput}: `appId`,
-   *   `centerCoordinate`, `maxDistance` (in chunk units, integer `1-8`), optional
-   *   `limit` (max **chunks**, not voxels — default 1000) / `skip` (default 0),
-   *   and an optional `since` lower time bound.
+   * @param input - {@link ListVoxelUpdatesByDistanceInput}: `appId`, the
+   *   region, optional `limit` (max **chunks**, not voxels — default 1000) /
+   *   `skip` (default 0), and an optional `since` lower time bound.
    * @returns A {@link VoxelUpdatesByDistanceResponse}: per-chunk groups of voxel
-   *   edits ordered by increasing distance from `centerCoordinate`, plus an echo
-   *   of the applied `limit`/`skip`.
+   *   edits, `centerCoordinate` (for a box, its middle chunk) and the
+   *   `limit`/`skip` applied.
    * @throws {CrowdyGraphQLError} `BAD_USER_INPUT` (e.g. `maxDistance` outside
-   *   `1-8`), `UNAUTHENTICATED`, or `FORBIDDEN`.
+   *   `1-8`, or a box over 4,913 chunks), `UNAUTHENTICATED`, or `FORBIDDEN`.
    */
   async listByDistance(
     input: ListVoxelUpdatesByDistanceQueryVariables['input']

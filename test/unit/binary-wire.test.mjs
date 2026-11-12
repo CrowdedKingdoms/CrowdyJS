@@ -266,3 +266,28 @@ test('parseRelayFrame: a signed bundle member with containsAuth = 0 parses as a 
   assert.equal(parsed[0].__typename, 'ActorUpdateNotification');
   assert.equal(parsed[0].sequenceNumber, 4);
 });
+
+test('parseRelayFrame: a CHUNK_CHANGED_NOTIFICATION (146) names the chunk and its new updatedAt', () => {
+  // [146][8B app][8B x][8B y][8B z][distance][decay][containsAuth=0][32B uuid][8B updatedAt ms]
+  // [8B epoch][1B seq]: the long-spatial notification Buddy v0.45.0 fans out for world.set_chunk.
+  const dg = Buffer.alloc(68 + 8 + 9);
+  dg[0] = 146;
+  dg.writeBigInt64LE(7n, 1);
+  dg.writeBigInt64LE(-4n, 9);
+  dg.writeBigInt64LE(0n, 17);
+  dg.writeBigInt64LE(9n, 25);
+  dg[33] = 8;
+  dg.writeBigInt64LE(1_794_400_000_321n, 68);
+  const parsed = wire.parseRelayFrame(Uint8Array.from(dg));
+  assert.equal(parsed.length, 1);
+  assert.deepEqual(parsed[0], {
+    __typename: 'ChunkChangedNotification',
+    appId: '7',
+    chunkX: '-4',
+    chunkY: '0',
+    chunkZ: '9',
+    distance: 8,
+    updatedAtMs: '1794400000321',
+    sequenceNumber: 0,
+  });
+});

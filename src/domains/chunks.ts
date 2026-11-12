@@ -96,19 +96,25 @@ export class ChunksAPI {
   }
 
   /**
-   * Return all chunks for an app within a cubic (Chebyshev-distance) radius of a
-   * center chunk, paginated — the cube spans center ± `maxDistance` chunks on
-   * each axis (a `(2·maxDistance+1)³` cube). Use this for bulk region loads; use
-   * {@link ChunksAPI.get} for a single chunk. Read-only.
+   * Return the stored chunks of a region, paginated: a cube (`centerCoordinate`
+   * ± `maxDistance` chunks on each axis, nearest first) or a box between two
+   * corners (`lowChunk` and `highChunk`, inclusive, either order, at most 4,913
+   * chunks, ordered by x, y, z), one or the other. A box streams in only the
+   * slab a step uncovers. Pages are stable: each chunk is on exactly one. Use
+   * this for bulk region loads; use {@link ChunksAPI.get} for a single chunk.
+   * Read-only.
    *
-   * @param input - {@link GetChunksByDistanceInput}: `appId`, `centerCoordinate`
-   *   (int64 decimal strings), `maxDistance` (in chunk units, integer `1-8`),
-   *   and optional `limit` (max chunks, default 1000) / `skip` (default 0)
-   *   pagination.
-   * @returns A {@link ChunksByDistanceResponse}: the matching `chunks` plus an
-   *   echo of the applied `limit`/`skip`.
+   * @param input - {@link GetChunksByDistanceInput}: `appId`, the region,
+   *   optional `limit` (max chunks, default 1000) / `skip` (default 0), and an
+   *   optional `since`: only chunks whose stored row was written at or after it
+   *   (`updateChunk`, `updateChunkState`, `updateChunkLods`; voxel edits do not
+   *   move it, see {@link VoxelsAPI.listByDistance}). Box, `since` and stable
+   *   pages need ck-api v2.67.0.
+   * @returns A {@link ChunksByDistanceResponse}: the matching `chunks` and the
+   *   `limit`/`skip` applied.
    * @throws {CrowdyGraphQLError} `BAD_USER_INPUT` (e.g. `maxDistance` outside
-   *   `1-8`), `UNAUTHENTICATED`, or `FORBIDDEN`.
+   *   `1-8`, a box over 4,913 chunks, or a cube and a box together),
+   *   `UNAUTHENTICATED`, or `FORBIDDEN`.
    */
   async byDistance(
     input: GetChunksByDistanceQueryVariables['input']
@@ -118,13 +124,16 @@ export class ChunksAPI {
   }
 
   /**
-   * List every recorded voxel edit (the `voxel_updates` log) for a single chunk,
-   * newest first. Use {@link ChunksAPI.get} instead when you want the packed
-   * voxel grid rather than the individual edit log. Read-only.
+   * List the recorded voxel edits (the `voxel_updates` log) of a single chunk,
+   * ordered by position and at most 65,536 of them, in a chunk-shaped envelope:
+   * the first page of {@link VoxelsAPI.list}, which pages past that (ck-api
+   * v2.67.0; before it the list was newest first and unbounded). Use
+   * {@link ChunksAPI.get} instead when you want the packed voxel grid rather
+   * than the individual edit log. Read-only.
    *
    * @param input - {@link GetVoxelListInput}: `appId` and chunk `coordinates`.
    * @returns A {@link ChunkVoxelResponse}: the chunk address plus its
-   *   {@link Voxel} edits (each `state` blob base64-encoded), newest first.
+   *   {@link Voxel} edits (each `state` blob base64-encoded).
    * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` / `FORBIDDEN`.
    */
   async voxelList(
