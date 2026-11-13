@@ -60,15 +60,23 @@ function compareBases(a, b) {
   return 0;
 }
 
-/** Normalise `npm view … dist-tags --json` into an object of tag -> version. */
+/**
+ * Normalise `npm view … dist-tags --json` into an object of tag -> version. Newer npm CLIs wrap
+ * the answer in an array (`[{"latest": …}]`), older ones print the object itself.
+ */
 export function normalizeDistTags(raw) {
   if (raw === null || raw === undefined || raw === '') return {};
   const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
   if (parsed === null || parsed === undefined) return {};
-  if (typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error(`unexpected registry dist-tags: ${JSON.stringify(parsed)}`);
+  const entries = Array.isArray(parsed) ? parsed : [parsed];
+  const tags = {};
+  for (const entry of entries) {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new Error(`unexpected registry dist-tags: ${JSON.stringify(parsed)}`);
+    }
+    Object.assign(tags, entry);
   }
-  return parsed;
+  return tags;
 }
 
 /**
