@@ -120,6 +120,33 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.32.0: a voxel's time is its chunk's whole-chunk write
+
+**What it needs.** ck-api `v2.70.0` (cks-game-api #671): `chunks.get` and `chunks.byDistance`
+select `Chunk.voxelsUpdatedAt`, which an older Game API refuses. Promote the Game API before the
+SDK on each tier.
+
+**What changed on the server.** A whole-chunk write (`updateChunk`, a mod's `world.set_chunk`)
+now supersedes every voxel edit recorded at or before it, at every voxel, so the chunk reads back
+as written. `Chunk.voxelsUpdatedAt` says when that was. Chunk-state and LOD writes move only
+`updatedAt`. Before, an edit of any age showed where the chunk stored no state, and a chunk-state
+or LOD write moved the time the stores judged a copy by.
+
+**In the ChunkStore.**
+- `CachedChunk.storedAt` is the copy's `voxelsUpdatedAt`: the time of every voxel it has no entry
+  for. A change older than it is dropped, as before, but a chunk-state or LOD write no longer
+  moves it.
+- A chunk not written whole since v2.70.0 has a null `voxelsUpdatedAt`, so `storedAt` is null.
+  A stored copy and the changes merged since its read are then ordered by arrival, and a realtime
+  change of any age applies, as the server shows a recorded edit of any age over that chunk's grid.
+- `CachedChunk.rowAt` (new) is the row's `updatedAt`. It orders copies: `hydrate` skips an older
+  copy than the one it holds, and `catchUp` reads a chunk again when its row moved, a chunk-state
+  write included.
+
+**Writing a grid now overwrites.** `chunks.update` with a grid read earlier erases the edits other
+players made since that read, as `world.set_chunk` always did. Read the chunk (or let the store
+merge) before writing a whole chunk back.
+
 ## 18.31.1: a stored copy's times are clamped too
 
 What 18.31.0 needs. A stored copy's `updatedAt` (the row's and each voxel state's) is held to 5

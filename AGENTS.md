@@ -30,6 +30,16 @@ directly. So, before adding a wrapper:
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
 
+**18.32.0: a voxel's time is its chunk's whole-chunk write (2026-11-13, OI-2026-11-13-003).**
+ck-api v2.70.0 supersedes every edit recorded at or before a whole-chunk write (`updateChunk`,
+`world.set_chunk`) and reports it as `Chunk.voxelsUpdatedAt`; chunk-state and LOD writes move only
+`updatedAt`. `CachedChunk.storedAt` is that voxels time (null: not written whole since v2.70.0, and
+merges fall back to arrival order, matching the server's any-age rule for such chunks), and the
+new `rowAt` is the row's `updatedAt`, which orders copies (`hydrate`'s newer-copy check,
+`catchUp`'s re-read). `chunkChanged` still compares with `storedAt` (`world.set_chunk` sends its
+voxels write). Tests: the `18.32.0` cases in `test/unit/chunk-store-region.test.mjs`, whose fake
+server models v2.70.0 (`voxelsUpdatedAt` defaults to the entry's `updatedAt`).
+
 **18.31.0: the ChunkStore merges by the server's time (2026-11-12, the Unreal team's feedback-1
 B1-B8, mirroring CrowdyCPP 0.84.0).** Each voxel's confirmed value carries the server's time:
 `cellTimes` (per chunk, the voxels newer than `storedAt`) and `arrivals` (the voxels merged since
@@ -796,7 +806,12 @@ ported in CrowdyCPP and then CrowdyPy (which vendors CrowdyCPP's native core).
 
 `dev/vX.Y.Z` / `test/vX.Y.Z` publish
 `X.Y.Z-dev.N` / `X.Y.Z-test.N` to the `@dev` / `@test` dist-tags; only a `prod/`
-tag moves `latest`. Consumers pin the EXACT prerelease for their tier — never a
+tag moves `latest`. A dist-tag never moves back: `scripts/ci/resolve-npm-publish-version.mjs`
+refuses a publish whose base version is older than the one its dist-tag serves (a
+re-run that publishes nothing stays a no-op). The `publish` job runs in the
+`npm-publish` environment, which admits only `dev/v*`, `test/v*` and `prod/v*` tags;
+once npm's trusted publisher is bound to it, a run of an older `publish.yml` (one
+queued for days, say) cannot publish at all. Consumers pin the EXACT prerelease for their tier — never a
 caret, which cannot match a prerelease at all. `GameClientBootstrap` selects
 `gameApiUrl`, `gameApiWsUrl` and `discoveryUrl`.
 
