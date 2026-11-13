@@ -43,6 +43,10 @@
 
 const TIERS = new Set(['dev', 'test', 'prod']);
 
+function escapeRegExp(text) {
+  return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /** `X.Y.Z` of a version, prerelease and build dropped, as numbers; null when it is not one. */
 function baseOf(version) {
   const match = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(String(version));
@@ -108,9 +112,7 @@ export function resolvePublishVersion({ tier, version, registryVersions, distTag
   if (tier === 'prod') {
     resolved = { publishVersion: base, distTag: 'latest' };
   } else {
-    const pattern = new RegExp(
-      `^${base.replace(/\./g, '\\.')}-${tier}\\.(\\d+)$`,
-    );
+    const pattern = new RegExp(`^${escapeRegExp(base)}-${tier}\\.(\\d+)$`);
     let highest = 0;
     for (const candidate of existing) {
       const match = pattern.exec(candidate);
