@@ -30,6 +30,7 @@ so it needs that Game API or newer; promote the Game API before the SDK on each 
 
 | CrowdyJS | Needs the Game API (ck-api) |
 | --- | --- |
+| 18.32.0 | v2.70.0 or later (`chunks.get` and `chunks.byDistance` select `Chunk.voxelsUpdatedAt`) |
 | 18.31.1 | as 18.31.0 |
 | 18.31.0 | v2.69.0 or later (`chunks.get` selects `VoxelState.updatedAt`) |
 | 18.30.0 | as 18.29.0 (`ChunkStore` reads boxes and `since`: v2.67.0) |
