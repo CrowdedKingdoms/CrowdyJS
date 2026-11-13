@@ -30,6 +30,24 @@ directly. So, before adding a wrapper:
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
 
+**18.31.0: the ChunkStore merges by the server's time (2026-11-12, the Unreal team's feedback-1
+B1-B8, mirroring CrowdyCPP 0.84.0).** Each voxel's confirmed value carries the server's time:
+`cellTimes` (per chunk, the voxels newer than `storedAt`) and `arrivals` (the voxels merged since
+the stored copy, with `mergeSeq` for sources without times). `confirm` drops a change older than
+the value held (`epochMillis`, an entry's `updatedAt`, a recorded edit's `createdAt`; a time more
+than 5 min past `Date.now()` is clamped). `pendingCells` replace `stale`/`previous`: a voxel's
+unanswered edits over its confirmed `base`; another client's edit becomes the base, the newest
+optimistic edit shows, and `finishEdit` (echo, refusal, timeout) shows the next edit or the base.
+An echo matches sender, sequence, voxel, type and state (`sameEncodedState`). `adoptCopy` (bulk
+read and `hydrate`) keeps merged values newer than the copy's for their voxel; the voxelUpdate
+handler makes an entry for a chunk in `inFlight`/`hydrating`, so a change made during a load
+survives it. `catchUp(since, boxes?)` reads every tracked chunk (`tileBoxes`, at most 17³ each)
+or the given boxes (`cutBox`; over 64 resolves false), `missing` chunks included; `lastArea` is
+gone. `evict`/`pruneIf` (`forget` drops `inFlight` too, so an evicted chunk's read is not
+applied); `hydrate` resolves whether its copy was applied. GetChunk selects
+`voxelStates.updatedAt` (ck-api v2.69.0). Tests: the `B1`-`B8` cases in
+`test/unit/chunk-store-region.test.mjs`, and `chunk-store-echo.test.mjs`.
+
 **18.30.0: the ChunkStore rework (2026-11-11, the Unreal team's C3-C5 in CrowdyJS first).**
 `ensureAround` reads only untracked chunks, as boxes (`coverWithBoxes`: cut where the halves'
 boxes are smallest; more than 8 boxes reads the bounding box), each paged by the `limit` the server
@@ -345,8 +363,8 @@ reaches the same `channelAudio` handler and the subscription needs a game API th
 error 33 is `APP_PAUSED`.
 `assertVoxelEdit` is the one int16 / 1,024-byte state check for `sendVoxelUpdate` and
 `ChunkStore.setVoxel`. `ChunkStore` keeps pending local edits per voxel until echoed, refused or
-timed out (10 s; undone since 18.30.0) and applies an
-echo of one only when a foreign edit came in between and no newer local edit is pending
+timed out (10 s; undone since 18.30.0); since 18.31.0 an echo confirms its edit and a foreign
+edit in between becomes the voxel's confirmed value under it
 (`test/unit/chunk-store-echo.test.mjs`). `errors.ts` adds `actorExistsOf`, `accessRefusalOf`,
 `appPausedOf`, `isAppPaused`; `portal.ts` selects `runtimeGate` (identity path: security review
 before the PR). CrowdyCPP 0.60.0 mirrors all of it; its wire_test and
