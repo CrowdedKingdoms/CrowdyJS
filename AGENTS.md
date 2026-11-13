@@ -806,7 +806,12 @@ ported in CrowdyCPP and then CrowdyPy (which vendors CrowdyCPP's native core).
 
 `dev/vX.Y.Z` / `test/vX.Y.Z` publish
 `X.Y.Z-dev.N` / `X.Y.Z-test.N` to the `@dev` / `@test` dist-tags; only a `prod/`
-tag moves `latest`. Consumers pin the EXACT prerelease for their tier — never a
+tag moves `latest`. A dist-tag never moves back: `scripts/ci/resolve-npm-publish-version.mjs`
+refuses a publish whose base version is older than the one its dist-tag serves (a
+re-run that publishes nothing stays a no-op). The `publish` job runs in the
+`npm-publish` environment, which admits only `dev/v*`, `test/v*` and `prod/v*` tags;
+once npm's trusted publisher is bound to it, a run of an older `publish.yml` (one
+queued for days, say) cannot publish at all. Consumers pin the EXACT prerelease for their tier — never a
 caret, which cannot match a prerelease at all. `GameClientBootstrap` selects
 `gameApiUrl`, `gameApiWsUrl` and `discoveryUrl`.
 

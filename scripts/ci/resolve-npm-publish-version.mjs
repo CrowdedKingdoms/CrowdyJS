@@ -23,16 +23,69 @@
  * published against this exact base version gives 1, 2, 3 — and it is also the only
  * source that cannot collide, since it is the same list npm will validate against.
  *
- * Usage:  node scripts/ci/resolve-npm-publish-version.mjs <tier> <version> < versions.json
+ * A DIST-TAG NEVER MOVES BACK. A queued run of an old tag (or a re-run of one) would
+ * otherwise mint the next ordinal of an old version and point `@dev` at it, silently
+ * replacing a newer release for every consumer of the tag. Given what the registry's
+ * dist-tags serve, a publish whose base version is older than the base its dist-tag
+ * already serves is refused. A re-run that publishes nothing (a prod version already on
+ * the registry) is still a no-op.
+ *
+ * Usage:  node scripts/ci/resolve-npm-publish-version.mjs <tier> <version> [dist-tags.json] < versions.json
  *
  * <version> may be given as `v14.2.0` or `14.2.0`. Registry input is whatever
  * `npm view <name> versions --json` prints: a JSON array, a bare JSON string when the
  * package has exactly one version, or `[]` when the package does not exist yet.
+ * `dist-tags.json` holds what `npm view <name> dist-tags --json` prints (`{}` for an
+ * unpublished package).
  * Prints `publish_version=` and `dist_tag=` on stdout, and appends both to
  * $GITHUB_OUTPUT when it is set.
  */
 
 const TIERS = new Set(['dev', 'test', 'prod']);
+
+function escapeRegExp(text) {
+  return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** `X.Y.Z` of a version, prerelease and build dropped, as numbers; null when it is not one. */
+function baseOf(version) {
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(String(version));
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null;
+}
+
+function compareBases(a, b) {
+  for (let i = 0; i < 3; i += 1) {
+    if (a[i] !== b[i]) return a[i] < b[i] ? -1 : 1;
+  }
+  return 0;
+}
+
+/** Normalise `npm view … dist-tags --json` into an object of tag -> version. */
+export function normalizeDistTags(raw) {
+  if (raw === null || raw === undefined || raw === '') return {};
+  const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  if (parsed === null || parsed === undefined) return {};
+  if (typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`unexpected registry dist-tags: ${JSON.stringify(parsed)}`);
+  }
+  return parsed;
+}
+
+/**
+ * Refuses a publish that would point `distTag` at an older base version than it serves.
+ * `distTags` undefined skips the check (no registry answer was given).
+ */
+function assertTagMovesForward({ distTag, base, publishVersion, existing, distTags }) {
+  if (distTags === undefined || existing.includes(publishVersion)) return;
+  const served = normalizeDistTags(distTags)[distTag];
+  const servedBase = served === undefined ? null : baseOf(served);
+  if (servedBase && compareBases(servedBase, baseOf(base)) > 0) {
+    throw new Error(
+      `@${distTag} serves ${served}, which is newer than ${base}; publishing ${publishVersion} ` +
+        `would move @${distTag} back. Refusing. Release a newer version instead.`,
+    );
+  }
+}
 
 /** Normalise whatever `npm view … versions --json` produced into an array of strings. */
 export function normalizeRegistryVersions(raw) {
@@ -46,7 +99,7 @@ export function normalizeRegistryVersions(raw) {
   return parsed;
 }
 
-export function resolvePublishVersion({ tier, version, registryVersions }) {
+export function resolvePublishVersion({ tier, version, registryVersions, distTags }) {
   if (!TIERS.has(tier)) {
     throw new Error(`tier '${tier}' is not one of dev, test, prod`);
   }
@@ -54,19 +107,21 @@ export function resolvePublishVersion({ tier, version, registryVersions }) {
   if (!/^\d+\.\d+\.\d+$/.test(base)) {
     throw new Error(`version '${version}' is not a bare MAJOR.MINOR.PATCH`);
   }
+  const existing = normalizeRegistryVersions(registryVersions).map(String);
+  let resolved;
   if (tier === 'prod') {
-    return { publishVersion: base, distTag: 'latest' };
+    resolved = { publishVersion: base, distTag: 'latest' };
+  } else {
+    const pattern = new RegExp(`^${escapeRegExp(base)}-${tier}\\.(\\d+)$`);
+    let highest = 0;
+    for (const candidate of existing) {
+      const match = pattern.exec(candidate);
+      if (match) highest = Math.max(highest, Number(match[1]));
+    }
+    resolved = { publishVersion: `${base}-${tier}.${highest + 1}`, distTag: tier };
   }
-  const existing = normalizeRegistryVersions(registryVersions);
-  const pattern = new RegExp(
-    `^${base.replace(/\./g, '\\.')}-${tier}\\.(\\d+)$`,
-  );
-  let highest = 0;
-  for (const candidate of existing) {
-    const match = pattern.exec(String(candidate));
-    if (match) highest = Math.max(highest, Number(match[1]));
-  }
-  return { publishVersion: `${base}-${tier}.${highest + 1}`, distTag: tier };
+  assertTagMovesForward({ ...resolved, base, existing, distTags });
+  return resolved;
 }
 
 async function readStdin() {
@@ -77,17 +132,22 @@ async function readStdin() {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const [tier, version] = process.argv.slice(2);
+  const [tier, version, distTagsFile] = process.argv.slice(2);
   if (!tier || !version) {
     console.error(
-      'usage: resolve-npm-publish-version.mjs <tier> <version> < registry-versions.json',
+      'usage: resolve-npm-publish-version.mjs <tier> <version> [dist-tags.json] < registry-versions.json',
     );
     process.exit(2);
   }
   const raw = await readStdin();
   let resolved;
   try {
-    resolved = resolvePublishVersion({ tier, version, registryVersions: raw || '[]' });
+    let distTags;
+    if (distTagsFile) {
+      const { readFileSync } = await import('node:fs');
+      distTags = readFileSync(distTagsFile, 'utf8').trim() || '{}';
+    }
+    resolved = resolvePublishVersion({ tier, version, registryVersions: raw || '[]', distTags });
   } catch (error) {
     console.error(`::error::${error.message}`);
     process.exit(1);
