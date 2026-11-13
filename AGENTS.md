@@ -45,7 +45,8 @@ survives it. `catchUp(since, boxes?)` reads every tracked chunk (`tileBoxes`, at
 or the given boxes (`cutBox`; over 64 resolves false), `missing` chunks included; `lastArea` is
 gone. `evict`/`pruneIf` (`forget` drops `inFlight` too, so an evicted chunk's read is not
 applied); `hydrate` resolves whether its copy was applied. GetChunk selects
-`voxelStates.updatedAt` (ck-api v2.69.0). Tests: the `B1`-`B8` cases in
+`voxelStates.updatedAt` (ck-api v2.69.0). 18.31.1 clamps a stored copy's times (`adoptCopy`, the
+`hydrate` and catch-up staleness checks, `chunkChanged`) as `confirm` clamps the others. Tests: the `B1`-`B8` cases in
 `test/unit/chunk-store-region.test.mjs`, and `chunk-store-echo.test.mjs`.
 
 **18.30.0: the ChunkStore rework (2026-11-11, the Unreal team's C3-C5 in CrowdyJS first).**

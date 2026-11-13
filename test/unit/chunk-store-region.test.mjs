@@ -383,6 +383,17 @@ test('B1: a voxel keeps the newest value by the server time, whatever order chan
   assert.ok(t.store.confirmedAt(at, 3, 3, 3) <= Date.now() + 5 * 60_000, 'a wrong clock is held to 5 minutes ahead');
   foreign(t, 3, 3, 3, 6, now + 6 * 60_000);
   assert.equal(t.store.voxelTypeAt(at, 3, 3, 3), 6);
+
+  // A stored copy's times are held the same way (18.31.1).
+  t.server.stored.set('0:0:0', {
+    updatedAt: iso(now + 86_400_000),
+    voxelStates: [{ voxelCoord: { x: 7, y: 7, z: 7 }, voxelType: 2, state: null, updatedAt: iso(now + 86_400_000) }],
+  });
+  assert.equal(await t.store.hydrate(at), true);
+  assert.ok(t.store.get(at).storedAt <= Date.now() + 5 * 60_000);
+  assert.ok(t.store.confirmedAt(at, 7, 7, 7) <= Date.now() + 5 * 60_000);
+  foreign(t, 7, 7, 7, 8, now + 7 * 60_000);
+  assert.equal(t.store.voxelTypeAt(at, 7, 7, 7), 8);
   t.session.dispose();
 });
 
