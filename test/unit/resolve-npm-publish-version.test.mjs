@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  normalizeDistTags,
   normalizeRegistryVersions,
   resolvePublishVersion,
 } from '../../scripts/ci/resolve-npm-publish-version.mjs';
@@ -165,6 +166,141 @@ test('an unknown tier is refused', () => {
   assert.throws(
     () => resolvePublishVersion({ tier: 'staging', version: 'v14.2.0', registryVersions: '[]' }),
     /not one of dev, test, prod/,
+  );
+});
+
+test('a dev publish of an older version than @dev serves is refused', () => {
+  // A run of dev/v18.28.0 left queued for days would otherwise publish 18.28.0-dev.2
+  // and point @dev back at it, replacing 18.31.1-dev.1 for every consumer of the tag.
+  assert.throws(
+    () =>
+      resolvePublishVersion({
+        tier: 'dev',
+        version: 'v18.28.0',
+        registryVersions: '["18.28.0-dev.1","18.31.1-dev.1"]',
+        distTags: '{"latest":"18.31.1","dev":"18.31.1-dev.1","test":"18.31.1-test.1"}',
+      }),
+    /@dev serves 18\.31\.1-dev\.1, which is newer than 18\.28\.0/,
+  );
+});
+
+test('a re-run of the version @dev serves mints its next ordinal', () => {
+  assert.deepEqual(
+    resolvePublishVersion({
+      tier: 'dev',
+      version: 'v18.31.1',
+      registryVersions: '["18.31.1-dev.1"]',
+      distTags: '{"dev":"18.31.1-dev.1"}',
+    }),
+    { publishVersion: '18.31.1-dev.2', distTag: 'dev' },
+  );
+});
+
+test('a newer version moves its dist-tag forward', () => {
+  assert.equal(
+    resolvePublishVersion({
+      tier: 'test',
+      version: 'v18.32.0',
+      registryVersions: '["18.31.1-test.1"]',
+      distTags: '{"test":"18.31.1-test.1"}',
+    }).publishVersion,
+    '18.32.0-test.1',
+  );
+});
+
+test('each tier is judged by its own dist-tag', () => {
+  // @dev being ahead says nothing about @test, which this publish moves.
+  assert.equal(
+    resolvePublishVersion({
+      tier: 'test',
+      version: 'v18.31.1',
+      registryVersions: '["18.32.0-dev.1"]',
+      distTags: '{"dev":"18.32.0-dev.1","test":"18.30.0-test.1"}',
+    }).publishVersion,
+    '18.31.1-test.1',
+  );
+});
+
+test('a dist-tag that does not exist yet does not block the first publish to it', () => {
+  assert.equal(
+    resolvePublishVersion({
+      tier: 'test',
+      version: 'v18.32.0',
+      registryVersions: '[]',
+      distTags: '{"latest":"18.31.1"}',
+    }).publishVersion,
+    '18.32.0-test.1',
+  );
+});
+
+test('a prod re-run of a version already on the registry stays a no-op', () => {
+  // The workflow skips the upload for a version npm already has, so nothing moves.
+  assert.deepEqual(
+    resolvePublishVersion({
+      tier: 'prod',
+      version: 'v18.28.0',
+      registryVersions: '["18.28.0","18.31.1"]',
+      distTags: '{"latest":"18.31.1"}',
+    }),
+    { publishVersion: '18.28.0', distTag: 'latest' },
+  );
+});
+
+test('a prod publish of an unpublished version older than @latest is refused', () => {
+  assert.throws(
+    () =>
+      resolvePublishVersion({
+        tier: 'prod',
+        version: 'v18.30.5',
+        registryVersions: '["18.31.1"]',
+        distTags: '{"latest":"18.31.1"}',
+      }),
+    /would move @latest back/,
+  );
+});
+
+test('without a dist-tag answer the guard does not run', () => {
+  assert.equal(
+    resolvePublishVersion({ tier: 'dev', version: 'v18.28.0', registryVersions: '[]' }).publishVersion,
+    '18.28.0-dev.1',
+  );
+});
+
+test('dist-tags normalise from npm output shapes', () => {
+  for (const empty of ['', '{}', null, undefined]) {
+    assert.deepEqual(normalizeDistTags(empty), {});
+  }
+  assert.deepEqual(normalizeDistTags('{"dev":"1.0.0-dev.1"}'), { dev: '1.0.0-dev.1' });
+  assert.throws(() => normalizeDistTags('["1.0.0"]'), /unexpected registry dist-tags/);
+});
+
+test('dist-tags wrapped in an array, as newer npm CLIs print them, are read the same', () => {
+  // The first 18.32.0 publish ran npm@latest, which answered `[{...}]`; the resolver refused it.
+  const wrapped = '[{"latest":"18.31.1","dev":"18.31.1-dev.1","test":"18.31.1-test.1"}]';
+  assert.deepEqual(normalizeDistTags(wrapped), {
+    latest: '18.31.1',
+    dev: '18.31.1-dev.1',
+    test: '18.31.1-test.1',
+  });
+  assert.deepEqual(normalizeDistTags('[]'), {});
+  assert.equal(
+    resolvePublishVersion({
+      tier: 'dev',
+      version: 'v18.32.0',
+      registryVersions: '["18.31.1-dev.1"]',
+      distTags: wrapped,
+    }).publishVersion,
+    '18.32.0-dev.1',
+  );
+  assert.throws(
+    () =>
+      resolvePublishVersion({
+        tier: 'dev',
+        version: 'v18.28.0',
+        registryVersions: '["18.28.0-dev.1"]',
+        distTags: wrapped,
+      }),
+    /would move @dev back/,
   );
 });
 
