@@ -68,6 +68,10 @@ jobs:
   publish:
     needs: guard
     runs-on: ubuntu-latest
+    # npm's trusted publisher for this package is bound to this environment, so a job that
+    # does not declare it cannot publish, including a run of an older copy of this file.
+    # The environment admits only dev/v*, test/v* and prod/v* tags.
+    environment: npm-publish
 
     permissions:
       contents: read
@@ -138,6 +142,26 @@ jobs:
             console.log(`registry knows ${versions.length} version(s); newest: ${versions.at(-1)}`);
           ' "$RUNNER_TEMP/registry-versions.json"
 
+      # What each dist-tag serves now, so the resolver can refuse to move one back. Read with
+      # the same care as the versions above: an unreadable registry is not an empty one.
+      - name: Read the dist-tags from the registry
+        env:
+          NAME: ${{ steps.pkg.outputs.name }}
+        run: |
+          set -euo pipefail
+          if raw=$(npm view "$NAME" dist-tags --json 2>"$RUNNER_TEMP/npm-tags.err"); then
+            :
+          elif grep -qE 'E404|is not in this registry' "$RUNNER_TEMP/npm-tags.err"; then
+            raw='{}'
+          else
+            cat "$RUNNER_TEMP/npm-tags.err" >&2
+            echo "::error::could not read $NAME's dist-tags from the npm registry. Refusing to guess what each tag serves."
+            exit 1
+          fi
+          [ -n "$raw" ] || raw='{}'
+          printf '%s' "$raw" > "$RUNNER_TEMP/registry-dist-tags.json"
+          echo "dist-tags: $raw"
+
       - name: Resolve the version and dist-tag to publish
         id: resolve
         env:
@@ -146,7 +170,7 @@ jobs:
         run: |
           set -euo pipefail
           node scripts/ci/resolve-npm-publish-version.mjs "$TIER" "$TAG_VERSION" \
-            < "$RUNNER_TEMP/registry-versions.json"
+            "$RUNNER_TEMP/registry-dist-tags.json" < "$RUNNER_TEMP/registry-versions.json"
 
       # A re-run must not be an error. The dev/test ordinals are free by construction
       # (the resolver picked the next unused one), so this only ever fires for a prod
