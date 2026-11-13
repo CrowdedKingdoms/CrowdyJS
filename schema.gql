@@ -5661,7 +5661,7 @@ type VoxelState {
   """
   state: String
   """
-  When this entry was last written: the recorded voxel edit's time, or the chunk's own write for a state stored with it. A client that also hears realtime voxel updates keeps, per voxel, the newer of this and a notification's time (a realtime edit is recorded at the time its notification carries, replication servers v0.46.0). Null when the read did not apply recorded edits. Game API v2.69.0.
+  When this entry was last written: the recorded voxel edit's time, or for a state stored with the chunk, when the chunk's voxels were last written whole (Chunk.voxelsUpdatedAt; the chunk's last write when that is null). A client that also hears realtime voxel updates keeps, per voxel, the newer of this and a notification's time (a realtime edit is recorded at the time its notification carries, replication servers v0.46.0). Null when the read did not apply recorded edits. Game API v2.69.0; stored states dated by the whole-chunk write since v2.70.0.
   """
   updatedAt: DateTime
 }
@@ -5689,7 +5689,7 @@ type Chunk {
   """
   voxels: String
   """
-  Sparse list of per-voxel overrides: the states stored with the chunk (e.g. rotation, atlas, flags) and every voxel edit recorded for it since (the voxel_updates log), each with its voxel type, which takes precedence over the type byte in `voxels`. Positions and types are app-defined signed 16-bit values; an entry outside the 16x16x16 grid or the 0-255 type range lives only here. Empty when the chunk has neither.
+  Sparse list of per-voxel overrides: the states stored with the chunk (e.g. rotation, atlas, flags) and every voxel edit recorded for it since (the voxel_updates log), each with its voxel type, which takes precedence over the type byte in `voxels`. A whole-chunk write (updateChunk, a mod's world.set_chunk) supersedes the edits recorded at or before it (`voxelsUpdatedAt`). Positions and types are app-defined signed 16-bit values; an entry outside the 16x16x16 grid or the 0-255 type range lives only here. Empty when the chunk has neither.
   """
   voxelStates: [VoxelState!]!
   """
@@ -5702,8 +5702,14 @@ type Chunk {
   owner: ID
   """Timestamp when this chunk row was first created."""
   createdAt: DateTime!
-  """Timestamp of the most recent write to this chunk."""
+  """
+  Timestamp of the most recent write to this chunk, a chunk-state or LOD write included (getChunksByDistance `since` reads it). For when the voxels were last written, read `voxelsUpdatedAt`.
+  """
   updatedAt: DateTime!
+  """
+  When the chunk's grid and stored voxel states were last written whole (updateChunk, a mod's world.set_chunk). Every voxel edit recorded at or before it is superseded, so `voxelStates` holds the stored states (dated with this time) and the edits recorded after it. Chunk-state and LOD writes do not move it. Null when the chunk has not been written whole since Game API v2.70.0: then an edit recorded at any time applies over the grid, as before. A client that merges realtime voxel updates into a copy treats a voxel with no entry as written at this time. Game API v2.70.0.
+  """
+  voxelsUpdatedAt: DateTime
   """
   BASE64-encoded opaque binary blob holding chunk-LEVEL state (distinct from per-voxel state). Decode from base64; null when unset. Written only via updateChunkState and preserved by updateChunk/updateChunkLods.
   """
@@ -8399,11 +8405,11 @@ type Query {
   """
   getChunksByDistance(input: GetChunksByDistanceInput!): ChunksByDistanceResponse!
   """
-  Lists the recorded voxel edits of a single chunk (optionally only those at/after `since`), one per voxel position, ordered by position and paged by limit (default and most 65,536) and skip. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only.
+  Lists the recorded voxel edits of a single chunk (optionally only those at/after `since`), one per voxel position, ordered by position and paged by limit (default and most 65,536) and skip. Edits a whole-chunk write has superseded (recorded at or before Chunk.voxelsUpdatedAt) are left out. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only.
   """
   listVoxels(input: ListVoxelsInput!): [Voxel!]!
   """
-  Lists recorded voxel edits for the chunks of a region, grouped per chunk and paginated over chunks: a cube (center +/- maxDistance, by increasing distance) or a box between two corners (lowChunk and highChunk, at most 4,913 chunks, by x, y, z). It reads the edit log alone, so chunks whose grid was never stored are included. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only.
+  Lists recorded voxel edits for the chunks of a region, grouped per chunk and paginated over chunks: a cube (center +/- maxDistance, by increasing distance) or a box between two corners (lowChunk and highChunk, at most 4,913 chunks, by x, y, z). It reads the edit log alone, so chunks whose grid was never stored are included. Edits a whole-chunk write has superseded (recorded at or before Chunk.voxelsUpdatedAt) are left out. Requires a valid bearer token; app-scoped tokens are limited to their own app. Read-only.
   """
   listVoxelUpdatesByDistance(input: ListVoxelUpdatesByDistanceInput!): VoxelUpdatesByDistanceResponse!
   """
@@ -10554,7 +10560,7 @@ type Mutation {
     appId: BigInt!
   ): GameHost
   """
-  Creates or replaces a chunk's dense voxel grid and/or per-voxel states for the given app and coordinates, records each provided voxel state as an individual voxel update, and asynchronously uploads the chunk to the CDN. WRITES world state. Leaves chunkState and LODs untouched. Requires an app token for the app and either the 'manage_apps' permission on the app (resolved via its org; super admins bypass) or the voxel edit permission for this chunk that updateVoxel checks (app access, the tier's update_voxel_data, and update_voxel_data on the most specific grid covering the chunk). Throws FORBIDDEN otherwise, and for a chunk only the app's world grid covers while the app's wilderness is closed (App.wildernessWritesOpen false).
+  Creates or replaces a chunk's dense voxel grid and/or per-voxel states for the given app and coordinates, records each provided voxel state as an individual voxel update, and asynchronously uploads the chunk to the CDN. WRITES world state. A whole-chunk write: every voxel edit recorded for the chunk at or before it is superseded and removed, so the chunk reads back as written (Chunk.voxelsUpdatedAt; Game API v2.70.0). A client that saves a grid it read earlier therefore overwrites edits made since that read. Leaves chunkState and LODs untouched. Requires an app token for the app and either the 'manage_apps' permission on the app (resolved via its org; super admins bypass) or the voxel edit permission for this chunk that updateVoxel checks (app access, the tier's update_voxel_data, and update_voxel_data on the most specific grid covering the chunk). Throws FORBIDDEN otherwise, and for a chunk only the app's world grid covers while the app's wilderness is closed (App.wildernessWritesOpen false).
   """
   updateChunk(input: ChunkUpdateInput!): Chunk!
   """

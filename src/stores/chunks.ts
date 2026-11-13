@@ -160,7 +160,7 @@ function boxAround(coords: readonly ChunkCoord[]): ChunkBox {
   return { lo, hi };
 }
 
-/** A stored row's `updatedAt` (an ISO time, or epoch ms) as epoch ms; null when absent or unreadable. */
+/** A server time (an ISO time, or epoch ms) as epoch ms; null when absent or unreadable. */
 function storedAtMs(updatedAt: unknown): number | null {
   if (updatedAt == null || updatedAt === '') return null;
   const ms = typeof updatedAt === 'number' ? updatedAt : Date.parse(String(updatedAt));
@@ -388,8 +388,18 @@ export interface CachedChunk<TVoxelState = string, TChunkState = string> {
    * most 262,144 per request): the rest are missing from `voxels` and `voxelStates`.
    */
   voxelStatesTruncated: boolean;
-  /** When the server last wrote the chunk's stored row (epoch ms), from the last read of it; null when unknown. */
+  /**
+   * When the server last wrote the chunk's voxels whole (epoch ms; `voxelsUpdatedAt`, an
+   * `updateChunk` or `world.set_chunk`), from the last read of it: the time of every voxel the copy
+   * has no entry for. Null when unknown or not written whole since Game API v2.70.0; then a stored
+   * copy and the changes merged since its read are ordered by arrival (18.32.0).
+   */
   storedAt: number | null;
+  /**
+   * When the server last wrote the chunk's row (epoch ms; `updatedAt`, which a chunk-state or LOD
+   * write moves too), from the last read of it; null when unknown. Orders copies of the chunk.
+   */
+  rowAt: number | null;
   /** Whether local edits are queued for write-back. */
   dirty: boolean;
 }
@@ -911,6 +921,7 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
               chunk.voxels ?? null,
               chunk.chunkState ?? null,
               chunk.updatedAt,
+              chunk.voxelsUpdatedAt,
               requestedSeq,
             );
           });
@@ -991,7 +1002,12 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
     box: ChunkBox,
     take: (
       coord: ChunkCoord,
-      chunk: { voxels?: string | null; chunkState?: string | null; updatedAt?: unknown },
+      chunk: {
+        voxels?: string | null;
+        chunkState?: string | null;
+        updatedAt?: unknown;
+        voxelsUpdatedAt?: unknown;
+      },
     ) => void,
     since?: Date,
   ): Promise<void> {
@@ -1045,13 +1061,19 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
       return false;
     }
     const chunk = this.ensureEntry(coord);
-    const rowMs = storedAtMs(full.updatedAt);
-    const heldTo = rowMs === null ? null : this.clampTime(rowMs);
+    const readRow = this.serverTime(full.updatedAt);
     // A newer copy came first (another read's): the store already holds this one's news.
-    if (chunk.hydrated && heldTo !== null && chunk.storedAt !== null && chunk.storedAt > heldTo) return true;
+    if (chunk.hydrated && readRow !== null && chunk.rowAt !== null && chunk.rowAt > readRow) return true;
     chunk.chunkState = this.decodeChunkState(full.chunkState ?? null);
     chunk.voxelStatesTruncated = full.voxelStatesTruncated === true;
-    this.adoptCopy(chunk, full.voxels ?? null, full.voxelStates ?? [], rowMs, requestedSeq);
+    chunk.rowAt = readRow;
+    this.adoptCopy(
+      chunk,
+      full.voxels ?? null,
+      full.voxelStates ?? [],
+      storedAtMs(full.voxelsUpdatedAt),
+      requestedSeq,
+    );
     chunk.loadState = 'loaded';
     chunk.hydrated = true;
     this.touch(chunk);
@@ -1092,9 +1114,9 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
         (coord, stored) => {
           const chunk = this.chunks.get(chunkKey(coord));
           if (!chunk || chunk.dirty) return;
-          const stamped = storedAtMs(stored.updatedAt);
-          const at = stamped === null ? null : this.clampTime(stamped);
-          if (chunk.loadState === 'loaded' && at !== null && chunk.storedAt !== null && chunk.storedAt >= at) {
+          // Any write to the row since, a chunk-state or LOD write included, is read again.
+          const at = this.serverTime(stored.updatedAt);
+          if (chunk.loadState === 'loaded' && at !== null && chunk.rowAt !== null && chunk.rowAt >= at) {
             return;
           }
           replaced.set(chunk.key, coord);
@@ -1388,13 +1410,23 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
     voxels: string | null,
     chunkState: string | null,
     updatedAt: unknown,
+    voxelsUpdatedAt: unknown,
     requestedSeq: number,
   ): void {
     const chunk = this.ensureEntry(coord);
     chunk.chunkState = this.decodeChunkState(chunkState);
-    this.adoptCopy(chunk, voxels, undefined, storedAtMs(updatedAt), requestedSeq);
+    chunk.rowAt = this.serverTime(updatedAt);
+    this.adoptCopy(chunk, voxels, undefined, storedAtMs(voxelsUpdatedAt), requestedSeq);
     chunk.loadState = 'loaded';
     this.touch(chunk);
+  }
+
+  /** A server time from a read, clamped like every other; null when absent. */
+  private serverTime(value: unknown): number | null {
+    const ms = storedAtMs(value);
+    if (ms === null) return null;
+    const clamped = this.clampTime(ms);
+    return clamped > 0 ? clamped : null;
   }
 
   /**
@@ -1402,17 +1434,18 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
    * the store merged since the read was asked for: a value newer than the copy's for its voxel
    * stays (by the server's times; without them, a value merged after `requestedSeq`). This
    * client's unanswered edits show over the copy, which becomes their confirmed value unless the
-   * one held is newer.
+   * one held is newer. `voxelsMs` is when the copy's voxels were written whole, the time of every
+   * voxel it has no entry for.
    */
   private adoptCopy(
     chunk: CachedChunk<TVoxelState, TChunkState>,
     voxels: string | null,
     entries: readonly StoredVoxelEntry[] | undefined,
-    rowMs: number | null,
+    voxelsMs: number | null,
     requestedSeq: number,
   ): void {
     // Every server time is held to MAX_FUTURE_SKEW_MS past this machine's clock.
-    const row = this.clampTime(rowMs ?? 0);
+    const row = this.clampTime(voxelsMs ?? 0);
     const entryTimes = new Map<string, number>();
     for (const entry of entries ?? []) {
       const vk = voxelKey(entry.voxelCoord.x, entry.voxelCoord.y, entry.voxelCoord.z);
@@ -1911,6 +1944,7 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
         hydrated: false,
         voxelStatesTruncated: false,
         storedAt: null,
+        rowAt: null,
         dirty: false,
       };
       this.chunks.set(key, chunk);
