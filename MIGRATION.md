@@ -120,6 +120,45 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.31.1: a stored copy's times are clamped too
+
+What 18.31.0 needs. A stored copy's `updatedAt` (the row's and each voxel state's) is held to 5
+minutes past this machine's clock, as a notification's and a recorded edit's times already were,
+so a copy dated far ahead cannot hold its voxels against every later change.
+
+## 18.31.0: the ChunkStore merges by the server's time
+
+**What it needs.** ck-api `v2.69.0` (cks-game-api #668): `chunks.get` selects each voxel state's
+`updatedAt`, which an older Game API refuses. Promote the Game API before the SDK on each tier.
+Buddy `v0.46.0` dates a realtime edit with the moment the server accepted it, so a catch-up's
+`createdAt` and a notification's `epochMillis` come from one clock; with an older Buddy the merge
+still holds, by the database's write time.
+
+**What changes for a game using `session.chunks`.**
+
+- **Changes merge by the server's time.** Each voxel keeps the value the server confirmed last
+  and when: a stored copy's write, an entry's `updatedAt`, a notification's `epochMillis`, a
+  recorded edit's `createdAt`. A change older than the value held is dropped, so a slow
+  notification or a late page no longer overwrites a newer value. A time more than 5 minutes past
+  this machine's clock counts as 5 minutes ahead. `confirmedAt(coord, x, y, z)` reads it.
+- **A change that arrives while a chunk loads is kept.** The store tracks a chunk it is reading,
+  and its copy merges under what arrived meanwhile: a newer change stays, an older one gives way.
+  It dropped them before.
+- **Another client's edit goes under this client's unanswered edit.** The voxel keeps showing your
+  edit until the server answers it; if the server refuses it (or it times out), the voxel shows
+  the other client's edit, not what it held before yours. `VoxelEditRefusal.restored` is true
+  whenever the voxel stopped showing the edit. It showed the other edit at once before, and your
+  echo put yours back.
+- **An echo matches by its value too**: sender, sequence number, voxel, type and state. A change
+  with your uuid and sequence number but another value is another change.
+- **`catchUp(since, boxes?)` covers every chunk the store tracks**, the never-stored (`missing`)
+  ones included, read in boxes of at most 17³; or the boxes you pass (cut to 17³; more than 64
+  resolves false). It covered the last `ensureAround` area. It resolves whether anything was read.
+- **`evict(coord)` and `pruneIf(predicate)`** drop chunks for a view that is not a cube; a chunk
+  queued for write-back stays. `pruneBeyond` returns how many it dropped.
+- **`hydrate(coord)` resolves whether its copy was applied**: false for a chunk never stored, or one
+  evicted while the read was out (it is not brought back).
+
 ## 18.30.0: a ChunkStore the game can stand behind
 
 **What it needs.** What 18.29.0 needs (ck-api `v2.68.0` for the GraphQL proxy); the box reads and
