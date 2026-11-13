@@ -11378,6 +11378,8 @@ export type VoxelState = {
   __typename?: 'VoxelState';
   /** BASE64-encoded binary state blob for this voxel (decode from base64); null/empty when the voxel has no extra state. */
   state: Maybe<Scalars['String']['output']>;
+  /** When this entry was last written: the recorded voxel edit's time, or the chunk's own write for a state stored with it. A client that also hears realtime voxel updates keeps, per voxel, the newer of this and a notification's time (a realtime edit is recorded at the time its notification carries, replication servers v0.46.0). Null when the read did not apply recorded edits. Game API v2.69.0. */
+  updatedAt: Maybe<Scalars['DateTime']['output']>;
   /** Voxel position within the chunk (signed 16-bit per axis, app-defined). */
   voxelCoord: VoxelCoordinates;
   /** Voxel type id at this position (signed 16-bit, app-defined). */
