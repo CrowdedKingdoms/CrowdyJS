@@ -13,6 +13,12 @@ import { loadStores } from '../helpers.mjs';
 const ME = 'm'.repeat(32);
 const OTHER = 'o'.repeat(32);
 
+/**
+ * When an entry's voxels were last written whole (Game API v2.70.0): its own `voxelsUpdatedAt`
+ * when given (null: not written whole since), else its row's `updatedAt`, as an updateChunk sets.
+ */
+const voxelsTime = (entry) => ('voxelsUpdatedAt' in entry ? entry.voxelsUpdatedAt : (entry.updatedAt ?? null));
+
 /** A server of stored chunks keyed "x:y:z", answering box reads in x, y, z order, paged. */
 function fakeServer(initial = {}) {
   const stored = new Map(Object.entries(initial));
@@ -33,8 +39,9 @@ function fakeServer(initial = {}) {
         out.push({
           coordinates: { x: String(x), y: String(y), z: String(z) },
           voxels: entry.voxels ?? null,
-          chunkState: null,
+          chunkState: entry.chunkState ?? null,
           updatedAt: entry.updatedAt ?? null,
+          voxelsUpdatedAt: voxelsTime(entry),
         });
       }
       out.sort(
@@ -54,10 +61,11 @@ function fakeServer(initial = {}) {
       return {
         coordinates,
         voxels: entry.voxels ?? null,
-        chunkState: null,
+        chunkState: entry.chunkState ?? null,
         voxelStates: entry.voxelStates ?? [],
         voxelStatesTruncated: entry.truncated ?? false,
         updatedAt: entry.updatedAt ?? null,
+        voxelsUpdatedAt: voxelsTime(entry),
       };
     },
     async update(input) {
@@ -509,5 +517,67 @@ test('B8: hydrate resolves whether its copy was applied; a chunk evicted while i
   assert.equal(t.store.evict(at), true);
   assert.equal(await reading, false);
   assert.equal(t.store.get(at), undefined);
+  t.session.dispose();
+});
+
+// 18.32.0: Game API v2.70.0 dates a chunk's voxels by its last whole-chunk write
+// (`voxelsUpdatedAt`); chunk-state and LOD writes move only `updatedAt`.
+test('18.32.0: the floor is the voxels write, so a chunk-state write after it drops no newer change', async () => {
+  const t = await setup({
+    server: fakeServer({ '0:0:0': { updatedAt: iso(9_000), voxelsUpdatedAt: iso(1_000) } }),
+  });
+  const at = { x: 0, y: 0, z: 0 };
+  await t.store.ensureAround(at, 0);
+  assert.equal(t.store.get(at).storedAt, 1_000);
+  assert.equal(t.store.get(at).rowAt, 9_000);
+  foreign(t, 1, 1, 1, 5, 5_000);
+  assert.equal(t.store.voxelTypeAt(at, 1, 1, 1), 5, 'newer than the voxels write, older than the row');
+  foreign(t, 2, 2, 2, 6, 500);
+  assert.equal(t.store.voxelTypeAt(at, 2, 2, 2), 0, 'older than the voxels write');
+  t.session.dispose();
+});
+
+test('18.32.0: a chunk not written whole since Game API v2.70.0 has no floor', async () => {
+  const t = await setup({
+    server: fakeServer({ '0:0:0': { updatedAt: iso(9_000), voxelsUpdatedAt: null } }),
+  });
+  const at = { x: 0, y: 0, z: 0 };
+  await t.store.ensureAround(at, 0);
+  assert.equal(t.store.get(at).storedAt, null);
+  // The server shows a recorded edit of any age over such a chunk's grid, and so does the store.
+  foreign(t, 1, 1, 1, 5, 500);
+  assert.equal(t.store.voxelTypeAt(at, 1, 1, 1), 5);
+  t.session.dispose();
+});
+
+test('18.32.0: a read after a chunk-state write keeps a change newer than the voxels write', async () => {
+  const server = fakeServer({ '0:0:0': { updatedAt: iso(1_000) } });
+  const t = await setup({ server });
+  const at = { x: 0, y: 0, z: 0 };
+  await t.store.ensureAround(at, 0);
+  foreign(t, 1, 1, 1, 5, 5_000);
+  // A chunk-state write: the row moves, the voxels write does not.
+  server.stored.set('0:0:0', { updatedAt: iso(9_000), voxelsUpdatedAt: iso(1_000), chunkState: 'ZmxhZw==' });
+  assert.equal(await t.store.hydrate(at), true);
+  assert.equal(t.store.get(at).chunkState, 'ZmxhZw==');
+  assert.equal(t.store.voxelTypeAt(at, 1, 1, 1), 5, 'the copy is older at that voxel');
+  assert.equal(t.store.confirmedAt(at, 1, 1, 1), 5_000);
+  t.session.dispose();
+});
+
+test('18.32.0: a catch-up reads again a chunk whose row moved, its voxels written or not', async () => {
+  const server = fakeServer({ '0:0:0': { updatedAt: iso(1_000) } });
+  const t = await setup({ server });
+  const at = { x: 0, y: 0, z: 0 };
+  await t.store.ensureAround(at, 0);
+  const gets = server.gets();
+  assert.equal(await t.store.catchUp(new Date(0)), true);
+  assert.equal(server.gets(), gets, 'nothing written since the copy');
+  server.stored.set('0:0:0', { updatedAt: iso(9_000), voxelsUpdatedAt: iso(1_000), chunkState: 'ZmxhZw==' });
+  assert.equal(await t.store.catchUp(new Date(0)), true);
+  await flush();
+  assert.equal(server.gets(), gets + 1, 'the chunk-state write is read');
+  assert.equal(t.store.get(at).chunkState, 'ZmxhZw==');
+  assert.equal(t.store.get(at).rowAt, 9_000);
   t.session.dispose();
 });

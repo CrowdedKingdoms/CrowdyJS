@@ -15,6 +15,7 @@ query GetChunksByDistance($input: GetChunksByDistanceInput!) {
       owner
       createdAt
       updatedAt
+      voxelsUpdatedAt
       chunkState
       cdnUploadedAt
       lods {
