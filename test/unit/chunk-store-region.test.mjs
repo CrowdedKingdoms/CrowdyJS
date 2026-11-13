@@ -2,7 +2,9 @@
  * ChunkStore's region loads, paced realtime edits and catch-up (18.30.0): it reads only the chunks
  * it does not hold, as boxes and pages; it undoes and reports an edit the server refuses or never
  * echoes; it keeps at most 128 edits unanswered and paces them; and it reads a chunk again when the
- * server says it was replaced, or what changed while the connection was down.
+ * server says it was replaced, or what changed while the connection was down. 18.31.0: merging by
+ * the server's time, catch-up over every tracked chunk or given boxes, evict and pruneIf, and
+ * hydrate resolving whether its copy was applied.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -198,15 +200,16 @@ test('an edit the server refuses is undone and reported; a newer edit undoes to 
   t.refuse(t.sent[2]);
   assert.equal(t.store.voxelTypeAt(at, 2, 2, 2), 0, 'back to what the voxel held before both');
 
-  // A refusal after another client's edit leaves theirs.
+  // Another client's edit under the unanswered one shows once that is refused (18.31.0).
   await t.store.setVoxel({ chunk: at, x: 3, y: 3, z: 3, voxelType: 8 });
   t.handlers().voxelUpdate({
     chunkX: '0', chunkY: '0', chunkZ: '0', voxelX: 3, voxelY: 3, voxelZ: 3, voxelType: 9,
     voxelState: '', uuid: OTHER, sequenceNumber: 200, epochMillis: '1',
   });
+  assert.equal(t.store.voxelTypeAt(at, 3, 3, 3), 8);
   t.refuse(t.sent[3]);
   assert.equal(t.store.voxelTypeAt(at, 3, 3, 3), 9);
-  assert.equal(t.refusals[3].restored, false);
+  assert.equal(t.refusals[3].restored, true);
   t.session.dispose();
 });
 
@@ -349,5 +352,151 @@ test('hydration surfaces voxelStatesTruncated', async () => {
   const t = await setup({ server: fakeServer({ '0:0:0': { truncated: true } }), config: { hydrateVoxelStates: true } });
   await t.store.ensureAround({ x: 0, y: 0, z: 0 }, 0);
   assert.equal(t.store.get({ x: 0, y: 0, z: 0 }).voxelStatesTruncated, true);
+  t.session.dispose();
+});
+
+/** A realtime voxel edit from another client at `epochMillis`. */
+function foreign(t, x, y, z, voxelType, epochMillis, chunk = { x: 0, y: 0, z: 0 }) {
+  t.handlers().voxelUpdate({
+    chunkX: String(chunk.x), chunkY: String(chunk.y), chunkZ: String(chunk.z),
+    voxelX: x, voxelY: y, voxelZ: z, voxelType, voxelState: '',
+    uuid: OTHER, sequenceNumber: 9, epochMillis: String(epochMillis),
+  });
+}
+
+const iso = (ms) => new Date(ms).toISOString();
+
+test('B1: a voxel keeps the newest value by the server time, whatever order changes arrive in', async () => {
+  const t = await setup({ server: fakeServer({ '0:0:0': { updatedAt: iso(1_000) } }) });
+  const at = { x: 0, y: 0, z: 0 };
+  await t.store.ensureAround(at, 0);
+  assert.equal(t.store.confirmedAt(at, 1, 1, 1), 1_000);
+  foreign(t, 1, 1, 1, 5, 3_000);
+  foreign(t, 1, 1, 1, 6, 2_000);
+  assert.equal(t.store.voxelTypeAt(at, 1, 1, 1), 5, 'the older change is dropped');
+  foreign(t, 1, 1, 1, 7, 3_000);
+  assert.equal(t.store.voxelTypeAt(at, 1, 1, 1), 7, 'as new is applied');
+  foreign(t, 2, 2, 2, 9, 500);
+  assert.equal(t.store.voxelTypeAt(at, 2, 2, 2), 0, 'older than the stored row');
+  const now = Date.now();
+  foreign(t, 3, 3, 3, 4, now + 86_400_000);
+  assert.ok(t.store.confirmedAt(at, 3, 3, 3) <= Date.now() + 5 * 60_000, 'a wrong clock is held to 5 minutes ahead');
+  foreign(t, 3, 3, 3, 6, now + 6 * 60_000);
+  assert.equal(t.store.voxelTypeAt(at, 3, 3, 3), 6);
+  t.session.dispose();
+});
+
+test('B2: a change that arrives while a chunk loads survives its copy when newer', async () => {
+  const { CHUNK_VOLUME } = await loadStores();
+  const grid = Buffer.from(new Uint8Array(CHUNK_VOLUME).fill(1)).toString('base64');
+  const server = fakeServer({
+    '0:0:0': {
+      voxels: grid,
+      updatedAt: iso(1_000),
+      voxelStates: [{ voxelCoord: { x: 3, y: 3, z: 3 }, voxelType: 4, state: null, updatedAt: iso(9_000) }],
+    },
+  });
+  let release;
+  const gate = new Promise((resolve) => (release = resolve));
+  const byDistance = server.chunks.byDistance;
+  server.chunks.byDistance = async (input) => {
+    await gate;
+    return byDistance(input);
+  };
+  const t = await setup({ server, config: { hydrateVoxelStates: true } });
+  const at = { x: 0, y: 0, z: 0 };
+  const loading = t.store.ensureAround(at, 0);
+  await flush();
+  foreign(t, 2, 2, 2, 3, 5_000);
+  foreign(t, 3, 3, 3, 6, 5_000);
+  foreign(t, 4, 4, 4, 7, 500);
+  release();
+  await loading;
+  assert.equal(t.store.voxelTypeAt(at, 2, 2, 2), 3, 'newer than the copy: kept');
+  assert.equal(t.store.voxelTypeAt(at, 3, 3, 3), 4, "the copy's entry is newer");
+  assert.equal(t.store.confirmedAt(at, 3, 3, 3), 9_000);
+  assert.equal(t.store.voxelTypeAt(at, 4, 4, 4), 1, 'older than the copy');
+  t.session.dispose();
+});
+
+test('B4: a confirmed change under an unanswered edit shows when the edit times out', async () => {
+  const t = await setup({ server: fakeServer({ '0:0:0': { updatedAt: iso(1_000) } }), config: { editTimeoutMs: 1_000 } });
+  const at = { x: 0, y: 0, z: 0 };
+  await t.store.ensureAround(at, 0);
+  await t.store.setVoxel({ chunk: at, x: 1, y: 1, z: 1, voxelType: 5 });
+  foreign(t, 1, 1, 1, 9, 3_000);
+  assert.equal(t.store.voxelTypeAt(at, 1, 1, 1), 5);
+  assert.equal(t.store.confirmedAt(at, 1, 1, 1), 3_000);
+  t.ticker.advance(2_000);
+  assert.equal(t.store.voxelTypeAt(at, 1, 1, 1), 9);
+  assert.equal(t.refusals[0].reason, 'TIMEOUT');
+  assert.equal(t.refusals[0].restored, true);
+  t.session.dispose();
+});
+
+test('B5/B6: a catch-up reads every tracked chunk in boxes of at most 17^3, or the boxes given', async () => {
+  const server = fakeServer({ '0:0:0': { updatedAt: iso(1_000) }, '40:0:0': { updatedAt: iso(1_000) } });
+  const t = await setup({ server });
+  await t.store.ensureAround({ x: 0, y: 0, z: 0 }, 1);
+  await t.store.ensureAround({ x: 40, y: 0, z: 0 }, 0);
+  const before = server.reads.length;
+  server.edits.push(
+    { coordinates: { x: '1', y: '0', z: '0' }, voxels: [{ location: { x: 2, y: 2, z: 2 }, voxelType: 3, state: null, createdAt: iso(5_000) }] },
+    {
+      coordinates: { x: '0', y: '0', z: '0' },
+      voxels: [
+        { location: { x: 4, y: 4, z: 4 }, voxelType: 6, state: null, createdAt: iso(5_000) },
+        { location: { x: 5, y: 5, z: 5 }, voxelType: 7, state: null, createdAt: iso(500) },
+      ],
+    },
+  );
+  assert.equal(await t.store.catchUp(new Date(0)), true);
+  const boxes = server.reads.slice(before).filter((r) => !r.edits);
+  const covered = (c) =>
+    boxes.some((b) => c.x >= Number(b.lowChunk.x) && c.x <= Number(b.highChunk.x) &&
+      c.y >= Number(b.lowChunk.y) && c.y <= Number(b.highChunk.y) &&
+      c.z >= Number(b.lowChunk.z) && c.z <= Number(b.highChunk.z));
+  for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) for (let z = -1; z <= 1; z++) assert.ok(covered({ x, y, z }));
+  assert.ok(covered({ x: 40, y: 0, z: 0 }));
+  for (const b of boxes) {
+    const volume = (Number(b.highChunk.x) - Number(b.lowChunk.x) + 1) *
+      (Number(b.highChunk.y) - Number(b.lowChunk.y) + 1) * (Number(b.highChunk.z) - Number(b.lowChunk.z) + 1);
+    assert.ok(volume <= 17 ** 3);
+  }
+  assert.equal(t.store.voxelTypeAt({ x: 1, y: 0, z: 0 }, 2, 2, 2), 3, 'a chunk never stored takes its edits');
+  assert.equal(t.store.get({ x: 1, y: 0, z: 0 }).loadState, 'missing');
+  assert.equal(t.store.voxelTypeAt({ x: 0, y: 0, z: 0 }, 4, 4, 4), 6);
+  assert.equal(t.store.voxelTypeAt({ x: 0, y: 0, z: 0 }, 5, 5, 5), 0, 'older than the row');
+
+  const explicit = server.reads.length;
+  assert.equal(await t.store.catchUp(new Date(0), [{ low: { x: -20, y: 0, z: 0 }, high: { x: 20, y: 0, z: 0 } }]), true);
+  assert.equal(server.reads.slice(explicit).filter((r) => !r.edits).length, 3, '41 wide: 17 + 17 + 7');
+  assert.equal(await t.store.catchUp(new Date(0), [{ low: { x: 0, y: 0, z: 0 }, high: { x: 200, y: 200, z: 0 } }]), false);
+  t.session.dispose();
+});
+
+test('B7: evict drops one chunk and pruneIf the chunks a predicate picks; a queued write-back stays', async () => {
+  const { CHUNK_VOLUME } = await loadStores();
+  const t = await setup({ server: fakeServer() });
+  for (let x = 0; x < 6; x++) t.store.seed({ x, y: 0, z: 0 }, new Uint8Array(CHUNK_VOLUME), { writeBack: x === 5 });
+  assert.equal(t.store.evict({ x: 1, y: 0, z: 0 }), true);
+  assert.equal(t.store.evict({ x: 1, y: 0, z: 0 }), false);
+  assert.equal(t.store.pruneIf((c) => c.coord.x % 2 === 0), 3);
+  assert.equal(t.store.evict({ x: 5, y: 0, z: 0 }), false, 'queued for write-back');
+  assert.deepEqual(t.store.list().map((c) => c.coord.x).sort(), [3, 5]);
+  t.session.dispose();
+});
+
+test('B8: hydrate resolves whether its copy was applied; a chunk evicted while its read is out is not', async () => {
+  const server = fakeServer({ '0:0:0': { updatedAt: iso(1_000) } });
+  const t = await setup({ server });
+  const at = { x: 0, y: 0, z: 0 };
+  await t.store.ensureAround(at, 0);
+  assert.equal(await t.store.hydrate(at), true);
+  assert.equal(await t.store.hydrate({ x: 9, y: 0, z: 0 }), false, 'never stored');
+  const reading = t.store.hydrate(at);
+  assert.equal(t.store.evict(at), true);
+  assert.equal(await reading, false);
+  assert.equal(t.store.get(at), undefined);
   t.session.dispose();
 });

@@ -57,18 +57,21 @@ const MAX_BOX_CHUNKS = 17 ** 3;
 const MAX_BOXES = 8;
 /** How far before the connection dropped a catch-up read starts, for the client's and server's clocks. */
 const CATCH_UP_MARGIN_MS = 30_000;
+/**
+ * A server time more than this far past this machine's clock counts as this machine's clock plus
+ * this much, so that one wrong clock cannot hold a voxel against every later change.
+ */
+const MAX_FUTURE_SKEW_MS = 5 * 60_000;
+/** More boxes than this (after cutting each to 17³) is not a view: {@link ChunkStore.catchUp} refuses it. */
+const MAX_CATCH_UP_BOXES = 64;
 
-/** A voxel's content before an edit was applied, put back when the edit is refused. */
+/** A voxel's type and typed state. */
 interface VoxelContent<TVoxelState> {
   voxelType: number;
   state?: TVoxelState;
 }
 
-/**
- * A voxel edit this client made that the server has not echoed yet: queued, then sent. `stale` is
- * set when another client's edit of the same voxel arrived (or the edit was not applied locally),
- * so its echo must be applied: the server ordered it last.
- */
+/** A voxel edit this client made that the server has not answered yet: queued, then sent. */
 interface PendingVoxelEdit<TVoxelState> {
   coord: ChunkCoord;
   voxel: { x: number; y: number; z: number };
@@ -80,10 +83,53 @@ interface PendingVoxelEdit<TVoxelState> {
   state?: TVoxelState;
   /** When it was sent; undefined while it waits in the send queue. */
   sentAt?: number;
-  stale: boolean;
   optimistic: boolean;
-  /** What the voxel held before this edit, for an undo. */
-  previous: VoxelContent<TVoxelState>;
+}
+
+/**
+ * A voxel with unanswered local edits: the edits, oldest first, over the value the server last
+ * confirmed there, its server time, and the merge it arrived in (0: a stored copy).
+ */
+interface PendingCell<TVoxelState> {
+  coord: ChunkCoord;
+  voxel: { x: number; y: number; z: number };
+  edits: Array<PendingVoxelEdit<TVoxelState>>;
+  base: VoxelContent<TVoxelState>;
+  baseTimeMs: number;
+  baseArrival: number;
+}
+
+/** A voxel merged since the stored copy, and the merge it arrived in. */
+interface VoxelArrival {
+  x: number;
+  y: number;
+  z: number;
+  seq: number;
+}
+
+/** A stored chunk's `voxelStates` entry as a read returns it. */
+interface StoredVoxelEntry {
+  voxelCoord: { x: number; y: number; z: number };
+  voxelType: number;
+  state?: string | null;
+  updatedAt?: unknown;
+}
+
+/** The newest optimistic edit of a voxel: what it shows. */
+function shownEdit<TVoxelState>(cell: PendingCell<TVoxelState>): PendingVoxelEdit<TVoxelState> | undefined {
+  for (let i = cell.edits.length - 1; i >= 0; i -= 1) {
+    if (cell.edits[i].optimistic) return cell.edits[i];
+  }
+  return undefined;
+}
+
+/** Whether two base64 voxel states carry the same bytes (empty and absent are the same). */
+function sameEncodedState(a: string | undefined | null, b: string | undefined | null): boolean {
+  if (!a || !b) return !a && !b;
+  if (a === b) return true;
+  const x = decodeBase64(a);
+  const y = decodeBase64(b);
+  return x.length === y.length && x.every((v, i) => v === y[i]);
 }
 
 /** An edit waiting for its turn to be sent. */
@@ -119,6 +165,53 @@ function storedAtMs(updatedAt: unknown): number | null {
   if (updatedAt == null || updatedAt === '') return null;
   const ms = typeof updatedAt === 'number' ? updatedAt : Date.parse(String(updatedAt));
   return Number.isFinite(ms) ? ms : null;
+}
+
+/** The widest box one read covers along an axis: ck-api reads at most 17³ chunks. */
+const BOX_SIDE = 17;
+
+/** `coords` in boxes of at most 17³: the bounds of the coords in each cell of a 17-chunk lattice. */
+function tileBoxes(coords: readonly ChunkCoord[]): ChunkBox[] {
+  const tiles = new Map<string, ChunkBox>();
+  for (const c of coords) {
+    const tile = `${Math.floor(c.x / BOX_SIDE)}:${Math.floor(c.y / BOX_SIDE)}:${Math.floor(c.z / BOX_SIDE)}`;
+    const box = tiles.get(tile);
+    if (!box) {
+      tiles.set(tile, { lo: { ...c }, hi: { ...c } });
+      continue;
+    }
+    box.lo = { x: Math.min(box.lo.x, c.x), y: Math.min(box.lo.y, c.y), z: Math.min(box.lo.z, c.z) };
+    box.hi = { x: Math.max(box.hi.x, c.x), y: Math.max(box.hi.y, c.y), z: Math.max(box.hi.z, c.z) };
+  }
+  return [...tiles.values()];
+}
+
+/** A box cut into boxes of at most 17³. */
+function cutBox(low: ChunkCoord, high: ChunkCoord): ChunkBox[] {
+  const lo = { x: Math.min(low.x, high.x), y: Math.min(low.y, high.y), z: Math.min(low.z, high.z) };
+  const hi = { x: Math.max(low.x, high.x), y: Math.max(low.y, high.y), z: Math.max(low.z, high.z) };
+  const out: ChunkBox[] = [];
+  for (let x = lo.x; x <= hi.x; x += BOX_SIDE) {
+    for (let y = lo.y; y <= hi.y; y += BOX_SIDE) {
+      for (let z = lo.z; z <= hi.z; z += BOX_SIDE) {
+        out.push({
+          lo: { x, y, z },
+          hi: {
+            x: Math.min(hi.x, x + BOX_SIDE - 1),
+            y: Math.min(hi.y, y + BOX_SIDE - 1),
+            z: Math.min(hi.z, z + BOX_SIDE - 1),
+          },
+        });
+      }
+    }
+  }
+  return out;
+}
+
+/** How many boxes of 17³ a box cuts into. */
+function boxPieces(low: ChunkCoord, high: ChunkCoord): number {
+  const side = (a: number, b: number): number => Math.floor(Math.abs(b - a) / BOX_SIDE) + 1;
+  return side(low.x, high.x) * side(low.y, high.y) * side(low.z, high.z);
 }
 
 function boxVolume(box: ChunkBox): number {
@@ -321,8 +414,9 @@ export interface VoxelEditRefusal<TVoxelState = string> {
    */
   readonly reason: string;
   /**
-   * Whether the store put the voxel back as it was before the edit. It does not when a newer edit
-   * of the voxel (this client's or another's) is what the voxel shows, or the edit was sent with
+   * Whether the voxel stopped showing this edit: it shows this client's next unanswered edit of the
+   * voxel, or the value the server confirmed there (another client's edit that arrived meanwhile
+   * included). False when a newer edit of the voxel is what it shows, or the edit was sent with
    * `optimistic: false`.
    */
   readonly restored: boolean;
@@ -425,9 +519,9 @@ export interface ChunkStoreConfig<TVoxelState = string, TChunkState = string> {
    */
   reloadReplacedChunks?: boolean;
   /**
-   * When the realtime connection comes back, read what changed in the last area
-   * {@link ChunkStore.ensureAround} loaded while it was down (see {@link ChunkStore.catchUp}).
-   * Needs the client's `realtime` (a `CrowdyClient` has it). Defaults to true.
+   * When the realtime connection comes back, read what changed while it was down in every chunk
+   * the store tracks (see {@link ChunkStore.catchUp}). Needs the client's `realtime` (a
+   * `CrowdyClient` has it). Defaults to true.
    */
   catchUpOnReconnect?: boolean;
   /** Clock override for tests. Defaults to `Date.now`. */
@@ -466,17 +560,24 @@ export interface SetVoxelInput<TVoxelState> {
  *   edit with a type outside 0-255 or a position outside 0-15 goes to the
  *   chunk's `overlay` instead). A `chunkChanged` (a hub's or mod's
  *   `world.set_chunk`) reads the chunk again.
+ * - Merging (18.31.0): each voxel holds the last value the server confirmed and
+ *   the server's time for it (a stored row's write, an entry's `updatedAt`, a
+ *   notification's `epochMillis`, a recorded edit's `createdAt`). A change older
+ *   than the value held is dropped, whatever order changes arrive in, and a
+ *   stored copy that arrives after a newer realtime change keeps that change;
+ *   a change to a chunk still being read is kept the same way.
  * - `setVoxel` applies locally (optimistic) and replicates via the UDP path,
  *   paced: at most 128 edits unanswered and 250 a second by default. The
- *   server delivers every accepted edit back to its sender: that echo is
- *   matched (sender uuid + sequence number + voxel) and not applied again, so a
- *   local edit fires one change event, and an older echo never rolls back a
- *   newer local edit. It is applied only when another client's edit of that
- *   voxel arrived in between (the server ordered yours last) or the edit was
- *   sent with `optimistic: false`. An edit the server refuses, or whose echo
- *   does not come back in time, is undone and reported ({@link onEditRefused}).
+ *   server delivers every accepted edit back to its sender: that echo (sender
+ *   uuid + sequence number + voxel + type + state) confirms the edit and is not
+ *   applied again, so a local edit fires one change event. This client's
+ *   unanswered edits show over the confirmed value; another client's edit that
+ *   arrives meanwhile becomes the confirmed value. An edit the server refuses,
+ *   or whose echo does not come back in time, is reported
+ *   ({@link onEditRefused}) and the voxel shows the next unanswered edit, or
+ *   the confirmed value.
  * - After the realtime connection drops and comes back, it reads what changed
- *   in the area meanwhile ({@link catchUp}).
+ *   meanwhile in every chunk it tracks ({@link catchUp}).
  * - `seed`/`flush` implement deterministic-worldgen write-back through
  *   `chunks.update`, one throttled chunk at a time. Only seeded chunks are
  *   written back: realtime edits are recorded by the server.
@@ -516,8 +617,14 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
   private readonly editTimeoutMs: number;
   private revisionValue = 0;
   private sequence = 0;
-  /** This client's edits not yet echoed back, oldest first, per `chunkKey|voxelKey`. */
-  private readonly pendingEdits = new Map<string, Array<PendingVoxelEdit<TVoxelState>>>();
+  /** Voxels with this client's unanswered edits, per `chunkKey|voxelKey`. */
+  private readonly pendingCells = new Map<string, PendingCell<TVoxelState>>();
+  /** Per chunk key: the server's time for each voxel whose value is newer than the stored row. */
+  private readonly cellTimes = new Map<string, Map<string, number>>();
+  /** Per chunk key: the voxels merged since the stored copy. */
+  private readonly arrivals = new Map<string, Map<string, VoxelArrival>>();
+  /** Confirmed values merged so far: without server times, what was merged after a read was asked for is newer. */
+  private mergeSeq = 0;
   /** Edits waiting to be sent, in order. */
   private readonly sendQueue: Array<QueuedVoxelSend<TVoxelState>> = [];
   /** Sent edits not yet answered, by sequence number. */
@@ -529,8 +636,6 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
   private tokensAt: number;
   /** Chunks being read again; a key mapped to true is read once more when that read ends. */
   private readonly reloading = new Map<string, boolean>();
-  /** The area the last {@link ensureAround} covered, for a catch-up. */
-  private lastArea: { center: ChunkCoord; radius: number } | null = null;
   /** When the realtime connection was last lost (while the store had loaded an area). */
   private disconnectedAt: number | null = null;
   private wasConnected = false;
@@ -565,16 +670,21 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
           y: Number(notification.chunkY),
           z: Number(notification.chunkZ),
         };
-        const chunk = this.chunks.get(chunkKey(coord));
+        const key = chunkKey(coord);
+        let chunk = this.chunks.get(key);
+        // A chunk being read keeps what arrives meanwhile: its copy merges under it.
+        if (!chunk && (this.inFlight.has(key) || this.hydrating.has(key))) chunk = this.ensureEntry(coord);
         if (!chunk) return; // only merge into chunks we track
-        if (!this.takeEcho(chunk, notification)) return;
-        this.applyVoxel(
+        const timeMs = Number(notification.epochMillis);
+        if (this.takeEcho(chunk, notification, timeMs)) return;
+        this.confirm(
           chunk,
           notification.voxelX,
           notification.voxelY,
           notification.voxelZ,
           notification.voxelType,
           notification.voxelState || undefined,
+          timeMs,
         );
       }),
     );
@@ -583,7 +693,7 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
     ctx.onDispose(
       ctx.on('genericError', (notification) => {
         const entry = this.inFlightEdits.get(notification.sequenceNumber);
-        if (entry) this.undoEdit(entry.key, entry.edit, String(notification.errorCode));
+        if (entry) this.finishEdit(entry.key, entry.edit, String(notification.errorCode));
       }),
     );
 
@@ -691,6 +801,21 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
     return chunk.voxelStates.get(this.voxelIndex(x, y, z));
   }
 
+  /**
+   * When the server confirmed the value the store holds for a voxel (epoch ms): the last change it
+   * merged there, or the stored row's write. Null when unknown. An unanswered local edit shows over
+   * that value and does not change it.
+   */
+  confirmedAt(coord: ChunkCoord, x: number, y: number, z: number): number | null {
+    const key = chunkKey(coord);
+    const cell = this.pendingCells.get(`${key}|${voxelKey(x, y, z)}`);
+    if (cell) return cell.baseTimeMs > 0 ? cell.baseTimeMs : null;
+    const chunk = this.chunks.get(key);
+    if (!chunk) return null;
+    const at = this.timeOf(chunk, voxelKey(x, y, z));
+    return at > 0 ? at : null;
+  }
+
   /** Subscribe to per-chunk changes (loads, merges, edits). @returns off. */
   onChunkChanged(
     listener: (chunk: CachedChunk<TVoxelState, TChunkState>) => void,
@@ -759,7 +884,6 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
    */
   async ensureAround(center: ChunkCoord, radius: number): Promise<void> {
     const range = Math.max(0, Math.min(8, Math.floor(radius)));
-    this.lastArea = { center: { ...center }, radius: range };
     const around = chunksAround(center, range);
     const wanted = around.filter((coord) => {
       const key = chunkKey(coord);
@@ -772,22 +896,30 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
       const wantedKeys = new Set(wanted.map(chunkKey));
       for (const key of wantedKeys) this.inFlight.add(key);
       const pending = new Set(wantedKeys);
+      const requestedSeq = this.mergeSeq;
       try {
         for (const box of coverWithBoxes(wanted)) {
           await this.readBox(box, (coord, chunk) => {
             const key = chunkKey(coord);
-            if (!wantedKeys.has(key)) return;
-            // A chunk tracked meanwhile (an edit, a seed) keeps what it has.
+            // Not asked for, or evicted while the read was out.
+            if (!wantedKeys.has(key) || !this.inFlight.has(key)) return;
+            // A chunk loaded meanwhile, or a seed, keeps what it has.
             if (this.chunks.get(key)?.loadState === 'loaded' || this.chunks.get(key)?.dirty) return;
             returned.add(key);
-            this.applyServerChunk(coord, chunk.voxels ?? null, chunk.chunkState ?? null, chunk.updatedAt);
+            this.applyServerChunk(
+              coord,
+              chunk.voxels ?? null,
+              chunk.chunkState ?? null,
+              chunk.updatedAt,
+              requestedSeq,
+            );
           });
           // Requested-but-absent chunks have never been stored server-side.
           for (const coord of wanted) {
             const key = chunkKey(coord);
             if (!pending.has(key) || !inBox(box, coord)) continue;
             pending.delete(key);
-            if (!returned.has(key)) this.markMissing(coord);
+            if (!returned.has(key) && this.inFlight.has(key)) this.markMissing(coord);
           }
         }
       } catch (error) {
@@ -893,94 +1025,81 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
   }
 
   /**
-   * Hydrate one chunk's sparse voxel states (and chunk state) via a
-   * single-chunk fetch — bulk loads omit them. This client's edits the server has not echoed yet
-   * stay over the stored copy, which may predate them.
+   * Hydrate one chunk's sparse voxel states (and chunk state) via a single-chunk fetch — bulk loads
+   * omit them — merged as a load is: a value merged since the read was asked for that is newer than
+   * the copy stays, and this client's unanswered edits show over it. Resolves once that read has
+   * ended: true when its copy was applied (or a newer one was already held), false when the chunk
+   * was never stored or was evicted while the read was out.
    */
-  async hydrate(coord: ChunkCoord): Promise<void> {
+  async hydrate(coord: ChunkCoord): Promise<boolean> {
+    const key = chunkKey(coord);
+    const before = this.chunks.get(key);
+    const requestedSeq = this.mergeSeq;
     const full = await this.ctx.client.chunks.get({
       appId: this.ctx.appId,
       coordinates: toChunkInput(coord),
     });
+    if (before && this.chunks.get(key) !== before) return false;
     if (!full) {
       this.markMissing(coord);
-      return;
+      return false;
     }
     const chunk = this.ensureEntry(coord);
-    if (full.voxels != null) chunk.voxels = decodeBase64(full.voxels);
+    const rowMs = storedAtMs(full.updatedAt);
+    // A newer copy came first (another read's): the store already holds this one's news.
+    if (chunk.hydrated && rowMs !== null && chunk.storedAt !== null && chunk.storedAt > rowMs) return true;
     chunk.chunkState = this.decodeChunkState(full.chunkState ?? null);
     chunk.voxelStatesTruncated = full.voxelStatesTruncated === true;
-    chunk.storedAt = storedAtMs(full.updatedAt);
-    // The stored copy replaces what the store held for the chunk (a `world.set_chunk` drops the
-    // chunk's older edits); a state blob this codec cannot read keeps the one cached before.
-    const cachedStates = new Map(chunk.voxelStates);
-    const cachedOverlay = new Map(chunk.overlay);
-    chunk.voxelStates.clear();
-    chunk.overlay.clear();
-    for (const entry of full.voxelStates ?? []) {
-      const { x, y, z } = entry.voxelCoord;
-      if (!fitsDenseGrid(x, y, z, entry.voxelType)) {
-        const key = voxelKey(x, y, z);
-        let state = entry.state ? cachedOverlay.get(key)?.state : undefined;
-        if (entry.state) {
-          try {
-            state = this.voxelStateCodec.decode(entry.state);
-          } catch {
-            // As below: a foreign blob keeps the state already cached.
-          }
-        }
-        this.putOverlay(chunk, x, y, z, entry.voxelType, state);
-        continue;
-      }
-      const index = this.voxelIndex(x, y, z);
-      // A chunk stored with `voxels: null` still carries its recorded edits.
-      if (!chunk.voxels) chunk.voxels = new Uint8Array(CHUNK_VOLUME);
-      chunk.voxels[index] = entry.voxelType;
-      if (entry.state) {
-        try {
-          chunk.voxelStates.set(index, this.voxelStateCodec.decode(entry.state));
-        } catch {
-          // Foreign/legacy blobs keep the state cached before; the dense type still applied.
-          const cached = cachedStates.get(index);
-          if (cached !== undefined) chunk.voxelStates.set(index, cached);
-        }
-      }
-    }
-    this.reapplyPendingEdits(chunk);
+    this.adoptCopy(chunk, full.voxels ?? null, full.voxelStates ?? [], rowMs, requestedSeq);
     chunk.loadState = 'loaded';
     chunk.hydrated = true;
     this.touch(chunk);
+    return true;
   }
 
   /**
-   * Read the chunks in the last area {@link ensureAround} loaded that changed since `since`: the
-   * recorded edits (`voxels.listByDistance`, when the client has `voxels`) are applied to the
-   * chunks the store holds, and a chunk whose stored row was written since then
-   * (`chunks.byDistance` with `since`: `updateChunk`, `world.set_chunk`) is read again. The store
-   * calls it when the realtime connection comes back ({@link ChunkStoreConfig.catchUpOnReconnect}),
-   * from 30 s before the connection dropped. Needs ck-api v2.67.0.
+   * Read what changed since `since` in every chunk the store tracks (18.31.0; the last area
+   * {@link ensureAround} loaded before), or in `boxes`: the recorded edits
+   * (`voxels.listByDistance`, when the client has `voxels`) merge into the chunks the store tracks
+   * by their `createdAt`, the never-stored (`missing`) ones included, and a chunk whose stored row
+   * was written since then (`chunks.byDistance` with `since`: `updateChunk`, `world.set_chunk`) is
+   * read again. The area is read in boxes of at most 17³ chunks; a box larger than that is cut, and
+   * more than 64 such boxes is refused (resolves false). The store calls it when the realtime
+   * connection comes back ({@link ChunkStoreConfig.catchUpOnReconnect}), from 30 s before the
+   * connection dropped. Needs ck-api v2.67.0. Resolves whether anything was read.
    */
-  async catchUp(since: Date): Promise<void> {
-    const area = this.lastArea;
-    if (!area) return;
-    const box: ChunkBox = {
-      lo: { x: area.center.x - area.radius, y: area.center.y - area.radius, z: area.center.z - area.radius },
-      hi: { x: area.center.x + area.radius, y: area.center.y + area.radius, z: area.center.z + area.radius },
-    };
-    const replaced: ChunkCoord[] = [];
-    await this.readBox(
-      box,
-      (coord, stored) => {
-        const chunk = this.chunks.get(chunkKey(coord));
-        if (!chunk || chunk.dirty || chunk.loadState !== 'loaded') return;
-        const at = storedAtMs(stored.updatedAt);
-        if (at !== null && chunk.storedAt !== null && chunk.storedAt >= at) return;
-        replaced.push(coord);
-      },
-      since,
-    );
+  async catchUp(
+    since: Date,
+    boxes?: ReadonlyArray<{ low: ChunkCoord; high: ChunkCoord }>,
+  ): Promise<boolean> {
+    let read: ChunkBox[];
+    if (boxes) {
+      let pieces = 0;
+      for (const box of boxes) pieces += boxPieces(box.low, box.high);
+      if (pieces > MAX_CATCH_UP_BOXES) return false;
+      read = boxes.flatMap((box) => cutBox(box.low, box.high));
+    } else {
+      read = tileBoxes([...this.chunks.values()].map((chunk) => chunk.coord));
+    }
+    if (read.length === 0) return false;
+    const requestedSeq = this.mergeSeq;
+    const replaced = new Map<string, ChunkCoord>();
     const voxels = this.ctx.client.voxels;
-    if (voxels) {
+    for (const box of read) {
+      await this.readBox(
+        box,
+        (coord, stored) => {
+          const chunk = this.chunks.get(chunkKey(coord));
+          if (!chunk || chunk.dirty) return;
+          const at = storedAtMs(stored.updatedAt);
+          if (chunk.loadState === 'loaded' && at !== null && chunk.storedAt !== null && chunk.storedAt >= at) {
+            return;
+          }
+          replaced.set(chunk.key, coord);
+        },
+        since,
+      );
+      if (!voxels) continue;
       for (let skip = 0; ; ) {
         const page = await whenNotBusy(() =>
           voxels.listByDistance({
@@ -994,12 +1113,19 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
         );
         for (const group of page.chunks) {
           const chunk = this.chunks.get(chunkKey(fromChunkInput(group.coordinates)));
-          if (!chunk || chunk.loadState !== 'loaded') continue;
+          if (!chunk) continue;
           for (const edit of group.voxels) {
             const { x, y, z } = edit.location;
-            // This client's own unanswered edit of the voxel settles with its echo.
-            if (this.livePendingEdits(`${chunk.key}|${voxelKey(x, y, z)}`).length > 0) continue;
-            this.applyVoxel(chunk, x, y, z, edit.voxelType, edit.state ?? undefined);
+            this.confirm(
+              chunk,
+              x,
+              y,
+              z,
+              edit.voxelType,
+              edit.state ?? undefined,
+              storedAtMs(edit.createdAt) ?? 0,
+              requestedSeq,
+            );
           }
         }
         const applied = page.limit ?? PAGE_SIZE;
@@ -1007,7 +1133,8 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
         skip = (page.skip ?? skip) + applied;
       }
     }
-    await Promise.all(replaced.map((coord) => this.reload(coord)));
+    await Promise.all([...replaced.values()].map((coord) => this.reload(coord)));
+    return true;
   }
 
   /**
@@ -1027,11 +1154,38 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
     if (this.disposed) return false;
     const chunk = this.ensureEntry(input.chunk);
     const optimistic = input.optimistic ?? true;
-    const previous: VoxelContent<TVoxelState> = {
-      voxelType: this.voxelTypeAt(input.chunk, input.x, input.y, input.z),
+    const key = `${chunk.key}|${voxelKey(voxel.x, voxel.y, voxel.z)}`;
+    this.expireEdits();
+    let cell = this.pendingCells.get(key);
+    if (!cell) {
+      // The value under the edits: what the store holds now, as the server confirmed it.
+      const vk = voxelKey(voxel.x, voxel.y, voxel.z);
+      const base: VoxelContent<TVoxelState> = {
+        voxelType: this.voxelTypeAt(input.chunk, input.x, input.y, input.z),
+      };
+      const baseState = this.voxelStateAt(input.chunk, input.x, input.y, input.z);
+      if (baseState !== undefined) base.state = baseState;
+      cell = {
+        coord: { ...input.chunk },
+        voxel,
+        edits: [],
+        base,
+        baseTimeMs: this.timeOf(chunk, vk),
+        baseArrival: this.arrivalOf(chunk, vk),
+      };
+      this.pendingCells.set(key, cell);
+    }
+    const edit: PendingVoxelEdit<TVoxelState> = {
+      coord: { ...input.chunk },
+      voxel,
+      uuid: '',
+      sequenceNumber: -1,
+      voxelType: input.voxelType,
+      ...(encodedState !== undefined ? { encodedState } : {}),
+      ...(input.state !== undefined ? { state: input.state } : {}),
+      optimistic,
     };
-    const previousState = this.voxelStateAt(input.chunk, input.x, input.y, input.z);
-    if (previousState !== undefined) previous.state = previousState;
+    cell.edits.push(edit);
     if (optimistic) {
       this.applyVoxel(
         chunk,
@@ -1043,19 +1197,6 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
         input.state,
       );
     }
-    const edit: PendingVoxelEdit<TVoxelState> = {
-      coord: { ...input.chunk },
-      voxel,
-      uuid: '',
-      sequenceNumber: -1,
-      voxelType: input.voxelType,
-      ...(encodedState !== undefined ? { encodedState } : {}),
-      ...(input.state !== undefined ? { state: input.state } : {}),
-      stale: !optimistic,
-      optimistic,
-      previous,
-    };
-    const key = this.rememberEdit(chunk, voxel, edit);
     return new Promise<boolean>((resolve, reject) => {
       this.sendQueue.push({ key, edit, resolve, reject });
       this.pump();
@@ -1108,16 +1249,35 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
     return failures;
   }
 
-  /** Drop tracked chunks farther than `radius` from `center` (dirty ones kept). */
-  pruneBeyond(center: ChunkCoord, radius: number): void {
-    for (const [key, chunk] of this.chunks) {
-      if (chunk.dirty) continue;
-      if (chunkDistance(chunk.coord, center) > radius) {
-        this.chunks.delete(key);
-        this.hydrateFailures.delete(key);
-        this.revisionValue += 1;
-      }
+  /** Drop tracked chunks farther than `radius` from `center` (dirty ones kept). Returns how many. */
+  pruneBeyond(center: ChunkCoord, radius: number): number {
+    return this.pruneIf((chunk) => chunkDistance(chunk.coord, center) > radius);
+  }
+
+  /**
+   * Drop one tracked chunk (18.31.0), as {@link pruneBeyond} does. Returns whether it was dropped:
+   * false when the store does not track it, or it is queued for write-back. A read of it that is
+   * out is not applied.
+   */
+  evict(coord: ChunkCoord): boolean {
+    const chunk = this.chunks.get(chunkKey(coord));
+    if (!chunk || chunk.dirty) return false;
+    this.forget(chunk.key);
+    return true;
+  }
+
+  /**
+   * Drop every tracked chunk `drop` returns true for (18.31.0), for a view that is not a cube (a
+   * sphere, a column, several players); chunks queued for write-back stay. Returns how many.
+   */
+  pruneIf(drop: (chunk: CachedChunk<TVoxelState, TChunkState>) => boolean): number {
+    let dropped = 0;
+    for (const chunk of [...this.chunks.values()]) {
+      if (chunk.dirty || !drop(chunk)) continue;
+      this.forget(chunk.key);
+      dropped += 1;
     }
+    return dropped;
   }
 
   // -- internals --------------------------------------------------------------
@@ -1225,37 +1385,131 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
     coord: ChunkCoord,
     voxels: string | null,
     chunkState: string | null,
-    updatedAt?: unknown,
+    updatedAt: unknown,
+    requestedSeq: number,
   ): void {
     const chunk = this.ensureEntry(coord);
-    if (voxels != null) chunk.voxels = decodeBase64(voxels);
     chunk.chunkState = this.decodeChunkState(chunkState);
-    chunk.storedAt = storedAtMs(updatedAt);
-    this.reapplyPendingEdits(chunk);
+    this.adoptCopy(chunk, voxels, undefined, storedAtMs(updatedAt), requestedSeq);
     chunk.loadState = 'loaded';
     this.touch(chunk);
   }
 
   /**
-   * Put this client's unanswered optimistic edits of a chunk back over a stored copy just applied,
-   * which may predate them. What the copy holds for each such voxel becomes what an undo restores.
+   * Apply a stored copy (`entries` undefined: a bulk read, which has no `voxelStates`) under what
+   * the store merged since the read was asked for: a value newer than the copy's for its voxel
+   * stays (by the server's times; without them, a value merged after `requestedSeq`). This
+   * client's unanswered edits show over the copy, which becomes their confirmed value unless the
+   * one held is newer.
    */
-  private reapplyPendingEdits(chunk: CachedChunk<TVoxelState, TChunkState>): void {
+  private adoptCopy(
+    chunk: CachedChunk<TVoxelState, TChunkState>,
+    voxels: string | null,
+    entries: readonly StoredVoxelEntry[] | undefined,
+    rowMs: number | null,
+    requestedSeq: number,
+  ): void {
+    const row = rowMs ?? 0;
+    const entryTimes = new Map<string, number>();
+    for (const entry of entries ?? []) {
+      const vk = voxelKey(entry.voxelCoord.x, entry.voxelCoord.y, entry.voxelCoord.z);
+      // A voxel the copy lists twice counts at its latest time.
+      entryTimes.set(vk, Math.max(entryTimes.get(vk) ?? 0, storedAtMs(entry.updatedAt) ?? row));
+    }
+    const copyTime = (vk: string): number => entryTimes.get(vk) ?? row;
+    const heldIsNewer = (vk: string, heldMs: number, heldArrival: number): boolean => {
+      const copyMs = copyTime(vk);
+      return copyMs > 0 ? heldMs > copyMs : heldArrival > requestedSeq;
+    };
     const prefix = `${chunk.key}|`;
-    for (const [key, edits] of this.pendingEdits) {
-      if (!key.startsWith(prefix)) continue;
-      const live = edits.filter((edit) => !edit.stale);
-      if (live.length === 0) continue;
-      const { x, y, z } = live[0].voxel;
-      const stored: VoxelContent<TVoxelState> = {
+    const kept: Array<VoxelContent<TVoxelState> & VoxelArrival & { timeMs: number }> = [];
+    const replaced: VoxelArrival[] = [];
+    for (const [vk, arrival] of this.arrivals.get(chunk.key) ?? []) {
+      if (this.pendingCells.has(prefix + vk)) continue;
+      const heldMs = this.timeOf(chunk, vk);
+      if (!heldIsNewer(vk, heldMs, arrival.seq)) {
+        replaced.push(arrival);
+        continue;
+      }
+      const { x, y, z } = arrival;
+      const value: VoxelContent<TVoxelState> & VoxelArrival & { timeMs: number } = {
+        ...arrival,
         voxelType: this.voxelTypeAt(chunk.coord, x, y, z),
+        timeMs: heldMs,
       };
-      const storedState = this.voxelStateAt(chunk.coord, x, y, z);
-      if (storedState !== undefined) stored.state = storedState;
-      live[0].previous = stored;
-      const newest = live[live.length - 1];
-      if (!newest.optimistic) continue;
-      this.writeVoxel(chunk, x, y, z, newest.voxelType, newest.state);
+      const state = this.voxelStateAt(chunk.coord, x, y, z);
+      if (state !== undefined) value.state = state;
+      kept.push(value);
+    }
+
+    chunk.storedAt = rowMs;
+    if (voxels != null) chunk.voxels = decodeBase64(voxels);
+    this.cellTimes.delete(chunk.key);
+    this.arrivals.delete(chunk.key);
+    if (entries) {
+      // The stored copy replaces what the store held for the chunk (a `world.set_chunk` drops the
+      // chunk's older edits); a state blob this codec cannot read keeps the one cached before.
+      const cachedStates = new Map(chunk.voxelStates);
+      const cachedOverlay = new Map(chunk.overlay);
+      chunk.voxelStates.clear();
+      chunk.overlay.clear();
+      for (const entry of entries) {
+        const { x, y, z } = entry.voxelCoord;
+        const vk = voxelKey(x, y, z);
+        const entryMs = entryTimes.get(vk) ?? row;
+        if (entryMs > row) this.mapOf(this.cellTimes, chunk.key).set(vk, entryMs);
+        if (!fitsDenseGrid(x, y, z, entry.voxelType)) {
+          let state = entry.state ? cachedOverlay.get(vk)?.state : undefined;
+          if (entry.state) {
+            try {
+              state = this.voxelStateCodec.decode(entry.state);
+            } catch {
+              // As below: a foreign blob keeps the state already cached.
+            }
+          }
+          this.putOverlay(chunk, x, y, z, entry.voxelType, state);
+          continue;
+        }
+        const index = this.voxelIndex(x, y, z);
+        // A chunk stored with `voxels: null` still carries its recorded edits.
+        if (!chunk.voxels) chunk.voxels = new Uint8Array(CHUNK_VOLUME);
+        chunk.voxels[index] = entry.voxelType;
+        if (entry.state) {
+          try {
+            chunk.voxelStates.set(index, this.voxelStateCodec.decode(entry.state));
+          } catch {
+            // Foreign/legacy blobs keep the state cached before; the dense type still applied.
+            const cached = cachedStates.get(index);
+            if (cached !== undefined) chunk.voxelStates.set(index, cached);
+          }
+        }
+      }
+    } else {
+      // A bulk copy has no states: a merged voxel it supersedes keeps none of its own.
+      for (const { x, y, z } of replaced) {
+        chunk.overlay.delete(voxelKey(x, y, z));
+        if (inDenseGrid(x, y, z)) chunk.voxelStates.delete(this.voxelIndex(x, y, z));
+      }
+    }
+    for (const value of kept) {
+      this.writeVoxel(chunk, value.x, value.y, value.z, value.voxelType, value.state);
+      this.setTime(chunk, value.x, value.y, value.z, value.timeMs, value.seq);
+    }
+    for (const [key, cell] of this.pendingCells) {
+      if (!key.startsWith(prefix)) continue;
+      const { x, y, z } = cell.voxel;
+      const vk = voxelKey(x, y, z);
+      if (!heldIsNewer(vk, cell.baseTimeMs, cell.baseArrival)) {
+        const base: VoxelContent<TVoxelState> = { voxelType: this.voxelTypeAt(chunk.coord, x, y, z) };
+        const state = this.voxelStateAt(chunk.coord, x, y, z);
+        if (state !== undefined) base.state = state;
+        cell.base = base;
+        const copyMs = copyTime(vk);
+        if (copyMs > 0) cell.baseTimeMs = copyMs;
+        cell.baseArrival = 0;
+      }
+      const shown = shownEdit(cell) ?? cell.base;
+      this.writeVoxel(chunk, x, y, z, shown.voxelType, shown.state);
     }
   }
 
@@ -1275,7 +1529,7 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
     ) {
       const send = this.sendQueue.shift()!;
       // An edit undone while it waited (a pruned chunk's) is not sent.
-      if (!this.pendingEdits.get(send.key)?.includes(send.edit)) {
+      if (!this.pendingCells.get(send.key)?.edits.includes(send.edit)) {
         send.resolve(false);
         continue;
       }
@@ -1324,11 +1578,11 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
     }
     sent.then(
       (accepted) => {
-        if (!accepted) this.undoEdit(key, edit, 'NOT_SENT');
+        if (!accepted) this.finishEdit(key, edit, 'NOT_SENT');
         send.resolve(accepted);
       },
       (error: unknown) => {
-        this.undoEdit(key, edit, 'SEND_FAILED');
+        this.finishEdit(key, edit, 'SEND_FAILED');
         send.reject(error);
       },
     );
@@ -1338,36 +1592,54 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
   private expireEdits(): void {
     const cutoff = this.now() - this.editTimeoutMs;
     for (const { key, edit } of [...this.inFlightEdits.values()]) {
-      if (edit.sentAt !== undefined && edit.sentAt < cutoff) this.undoEdit(key, edit, 'TIMEOUT');
+      if (edit.sentAt !== undefined && edit.sentAt < cutoff) this.finishEdit(key, edit, 'TIMEOUT');
     }
   }
 
   /**
-   * Forget an edit the server will not apply and put its voxel back as it was before it, unless a
-   * newer edit is what the voxel shows. Reports it, then lets the next queued edit go.
+   * End an edit: echoed (`reason` null; at `echoTimeMs` it becomes the voxel's confirmed value,
+   * unless the one held is newer), or one the server will not apply (reported). The voxel then
+   * shows its next unanswered edit, or its confirmed value. Lets the next queued edit go.
    */
-  private undoEdit(key: string, edit: PendingVoxelEdit<TVoxelState>, reason: string): void {
-    const edits = this.pendingEdits.get(key);
-    const index = edits?.indexOf(edit) ?? -1;
-    if (!edits || index < 0) return;
-    edits.splice(index, 1);
-    if (edits.length === 0) this.pendingEdits.delete(key);
+  private finishEdit(
+    key: string,
+    edit: PendingVoxelEdit<TVoxelState>,
+    reason: string | null,
+    echoTimeMs = 0,
+  ): void {
+    const cell = this.pendingCells.get(key);
+    const index = cell?.edits.indexOf(edit) ?? -1;
+    if (!cell || index < 0) return;
+    const wasShown = shownEdit(cell) === edit;
+    cell.edits.splice(index, 1);
     if (this.inFlightEdits.get(edit.sequenceNumber)?.edit === edit) {
       this.inFlightEdits.delete(edit.sequenceNumber);
     }
-    let restored = false;
-    const chunk = this.chunks.get(chunkKey(edit.coord));
-    if (chunk && edit.optimistic && !edit.stale) {
-      const next = edits[index];
-      if (next) {
-        // A newer edit of this voxel shows; it now undoes to what this one replaced.
-        if (!next.stale) next.previous = edit.previous;
-      } else {
-        const { x, y, z } = edit.voxel;
-        this.applyVoxel(chunk, x, y, z, edit.previous.voxelType, undefined, edit.previous.state);
-        restored = true;
+    if (reason === null) {
+      const at = this.clampTime(echoTimeMs);
+      if (at <= 0 || at >= cell.baseTimeMs) {
+        cell.base = { voxelType: edit.voxelType, ...(edit.state !== undefined ? { state: edit.state } : {}) };
+        if (at > 0) cell.baseTimeMs = at;
+        cell.baseArrival = ++this.mergeSeq;
       }
     }
+    const chunk = this.chunks.get(chunkKey(edit.coord));
+    const { x, y, z } = edit.voxel;
+    if (cell.edits.length === 0) {
+      this.pendingCells.delete(key);
+      if (chunk) {
+        const vk = voxelKey(x, y, z);
+        this.setTime(chunk, x, y, z, Math.max(cell.baseTimeMs, this.timeOf(chunk, vk)), cell.baseArrival);
+        this.show(chunk, x, y, z, cell.base);
+      }
+    } else if (chunk) {
+      this.show(chunk, x, y, z, shownEdit(cell) ?? cell.base);
+    }
+    if (reason === null) {
+      this.pump();
+      return;
+    }
+    const restored = wasShown && chunk !== undefined;
     const refusal: VoxelEditRefusal<TVoxelState> = {
       coord: edit.coord,
       voxel: edit.voxel,
@@ -1401,56 +1673,149 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
     }
   }
 
-  private rememberEdit(
-    chunk: CachedChunk<TVoxelState, TChunkState>,
-    voxel: { x: number; y: number; z: number },
-    edit: PendingVoxelEdit<TVoxelState>,
-  ): string {
-    const key = `${chunk.key}|${voxelKey(voxel.x, voxel.y, voxel.z)}`;
-    const edits = this.livePendingEdits(key);
-    edits.push(edit);
-    this.pendingEdits.set(key, edits);
-    return key;
-  }
-
-  /** The pending edits for one voxel, oldest first, after undoing the ones that timed out. */
-  private livePendingEdits(key: string): Array<PendingVoxelEdit<TVoxelState>> {
-    this.expireEdits();
-    return this.pendingEdits.get(key) ?? [];
-  }
-
   /**
-   * Match a realtime voxel edit against this client's pending edits. Returns whether to apply it.
-   * The server delivers every accepted edit back to its sender: the echo of an edit already
-   * applied optimistically is not applied again (no second change event), and an echo is never
-   * applied over a newer local edit of the same voxel. Another client's edit is applied, and
-   * marks the pending local edits of that voxel stale so their echoes restore them.
+   * Whether a realtime voxel edit is the echo of one of this client's unanswered edits (sender uuid,
+   * sequence number, voxel, type and state); one is ended as echoed at the notification's time.
    */
   private takeEcho(
     chunk: CachedChunk<TVoxelState, TChunkState>,
-    notification: { uuid: string; sequenceNumber: number; voxelX: number; voxelY: number; voxelZ: number },
+    notification: {
+      uuid: string;
+      sequenceNumber: number;
+      voxelX: number;
+      voxelY: number;
+      voxelZ: number;
+      voxelType: number;
+      voxelState?: string | null;
+    },
+    timeMs: number,
   ): boolean {
     const key = `${chunk.key}|${voxelKey(notification.voxelX, notification.voxelY, notification.voxelZ)}`;
-    const edits = this.livePendingEdits(key);
-    if (edits.length === 0) return true;
-    const index = edits.findIndex(
+    this.expireEdits();
+    const cell = this.pendingCells.get(key);
+    if (!cell) return false;
+    const echoed = cell.edits.find(
       (edit) =>
         edit.sentAt !== undefined &&
         edit.uuid === notification.uuid &&
-        edit.sequenceNumber === notification.sequenceNumber,
+        edit.sequenceNumber === notification.sequenceNumber &&
+        edit.voxelType === notification.voxelType &&
+        sameEncodedState(edit.encodedState, notification.voxelState),
     );
-    if (index < 0) {
-      for (const edit of edits) edit.stale = true;
-      return true;
+    if (!echoed) return false;
+    this.finishEdit(key, echoed, null, timeMs);
+    return true;
+  }
+
+  /**
+   * Merge a confirmed value at the server's time for it. Without one (0), it is new unless it came
+   * from a read asked for at `readSeq` and the voxel changed after that. Under this client's
+   * unanswered edits it becomes their confirmed value, and the voxel keeps showing the newest edit.
+   */
+  private confirm(
+    chunk: CachedChunk<TVoxelState, TChunkState>,
+    x: number,
+    y: number,
+    z: number,
+    voxelType: number,
+    encodedState: string | undefined,
+    timeMs: number,
+    readSeq = 0,
+  ): void {
+    const vk = voxelKey(x, y, z);
+    const at = this.clampTime(timeMs);
+    const older = (heldMs: number, heldArrival: number): boolean =>
+      at > 0 ? at < heldMs : readSeq > 0 && heldArrival > readSeq;
+    let state: TVoxelState | undefined;
+    if (encodedState) {
+      try {
+        state = this.voxelStateCodec.decode(encodedState);
+      } catch {
+        state = undefined;
+      }
     }
-    const [echoed] = edits.splice(index, 1);
-    if (edits.length === 0) this.pendingEdits.delete(key);
-    if (this.inFlightEdits.get(echoed.sequenceNumber)?.edit === echoed) {
-      this.inFlightEdits.delete(echoed.sequenceNumber);
-      this.pump();
+    const cell = this.pendingCells.get(`${chunk.key}|${vk}`);
+    if (cell) {
+      if (older(cell.baseTimeMs, cell.baseArrival)) return;
+      cell.base = { voxelType, ...(state !== undefined ? { state } : {}) };
+      if (at > 0) cell.baseTimeMs = at;
+      cell.baseArrival = ++this.mergeSeq;
+      return;
     }
-    const newerLocalEdit = edits.length > index;
-    return echoed.stale && !newerLocalEdit;
+    const heldMs = this.timeOf(chunk, vk);
+    if (older(heldMs, this.arrivalOf(chunk, vk))) return;
+    this.setTime(chunk, x, y, z, at > 0 ? at : heldMs, ++this.mergeSeq);
+    this.writeVoxel(chunk, x, y, z, voxelType, state);
+    this.touch(chunk);
+  }
+
+  /** Show a value at a voxel; a change event only when it differs from what the voxel shows. */
+  private show(
+    chunk: CachedChunk<TVoxelState, TChunkState>,
+    x: number,
+    y: number,
+    z: number,
+    value: VoxelContent<TVoxelState>,
+  ): void {
+    if (
+      this.voxelTypeAt(chunk.coord, x, y, z) === value.voxelType &&
+      this.voxelStateAt(chunk.coord, x, y, z) === value.state
+    ) {
+      return;
+    }
+    this.writeVoxel(chunk, x, y, z, value.voxelType, value.state);
+    this.touch(chunk);
+  }
+
+  /** A server time, no further past this machine's clock than {@link MAX_FUTURE_SKEW_MS}; 0 when unknown. */
+  private clampTime(timeMs: number): number {
+    if (!(timeMs > 0)) return 0;
+    return Math.min(timeMs, Date.now() + MAX_FUTURE_SKEW_MS);
+  }
+
+  /** The server's time for a voxel's value: its own, or the stored row's (0 when unknown). */
+  private timeOf(chunk: CachedChunk<TVoxelState, TChunkState>, vk: string): number {
+    return this.cellTimes.get(chunk.key)?.get(vk) ?? chunk.storedAt ?? 0;
+  }
+
+  /** The merge a voxel's value arrived in (0: the stored copy). */
+  private arrivalOf(chunk: CachedChunk<TVoxelState, TChunkState>, vk: string): number {
+    return this.arrivals.get(chunk.key)?.get(vk)?.seq ?? 0;
+  }
+
+  /** Record a voxel's server time and the merge it arrived in (0: the stored copy). */
+  private setTime(
+    chunk: CachedChunk<TVoxelState, TChunkState>,
+    x: number,
+    y: number,
+    z: number,
+    timeMs: number,
+    arrival: number,
+  ): void {
+    const vk = voxelKey(x, y, z);
+    if (timeMs > (chunk.storedAt ?? 0)) this.mapOf(this.cellTimes, chunk.key).set(vk, timeMs);
+    else this.cellTimes.get(chunk.key)?.delete(vk);
+    if (arrival > 0) this.mapOf(this.arrivals, chunk.key).set(vk, { x, y, z, seq: arrival });
+    else this.arrivals.get(chunk.key)?.delete(vk);
+  }
+
+  private mapOf<V>(maps: Map<string, Map<string, V>>, key: string): Map<string, V> {
+    let map = maps.get(key);
+    if (!map) {
+      map = new Map();
+      maps.set(key, map);
+    }
+    return map;
+  }
+
+  /** Stop tracking a chunk. A read of it that is out is not applied. */
+  private forget(key: string): void {
+    this.chunks.delete(key);
+    this.inFlight.delete(key);
+    this.hydrateFailures.delete(key);
+    this.cellTimes.delete(key);
+    this.arrivals.delete(key);
+    this.revisionValue += 1;
   }
 
   private applyVoxel(

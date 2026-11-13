@@ -5660,6 +5660,10 @@ type VoxelState {
   BASE64-encoded binary state blob for this voxel (decode from base64); null/empty when the voxel has no extra state.
   """
   state: String
+  """
+  When this entry was last written: the recorded voxel edit's time, or the chunk's own write for a state stored with it. A client that also hears realtime voxel updates keeps, per voxel, the newer of this and a notification's time (a realtime edit is recorded at the time its notification carries, replication servers v0.46.0). Null when the read did not apply recorded edits. Game API v2.69.0.
+  """
+  updatedAt: DateTime
 }
 
 """A single level-of-detail (LOD) representation of a chunk."""

@@ -1,8 +1,8 @@
 /**
  * The server delivers every accepted voxel edit back to its sender (Buddy v0.37.0). ChunkStore
- * matches that echo to the edit it sent (sender uuid + sequence number + voxel): an edit applied
- * optimistically fires one change event, an older echo never rolls back a newer local edit, and
- * the echo is applied when another client's edit of the voxel arrived in between.
+ * matches that echo to the edit it sent (sender uuid + sequence number + voxel + type + state): an
+ * edit applied optimistically fires one change event, an older echo never rolls back a newer local
+ * edit, and another client's edit that arrives in between goes under the unanswered edit (18.31.0).
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -108,11 +108,11 @@ test('an older echo never rolls back a newer local edit', async () => {
   assert.equal(t.events(), 2);
 });
 
-test('an echo after another client edited the voxel restores the local edit', async () => {
+test("another client's edit goes under an unanswered local edit, which its echo confirms", async () => {
   const t = await setup();
   await t.store.setVoxel({ chunk: t.at, x: 1, y: 2, z: 3, voxelType: 7 });
   t.deliver({ uuid: OTHER, sequenceNumber: t.sent[0].sequenceNumber, voxelType: 5 });
-  assert.equal(t.store.voxelTypeAt(t.at, 1, 2, 3), 5);
+  assert.equal(t.store.voxelTypeAt(t.at, 1, 2, 3), 7);
   t.echo(t.sent[0]);
   assert.equal(t.store.voxelTypeAt(t.at, 1, 2, 3), 7);
   // Ours then theirs: the later foreign edit stands.
@@ -120,6 +120,17 @@ test('an echo after another client edited the voxel restores the local edit', as
   t.echo(t.sent[1]);
   t.deliver({ uuid: OTHER, sequenceNumber: 77, voxelType: 4 });
   assert.equal(t.store.voxelTypeAt(t.at, 1, 2, 3), 4);
+});
+
+test('an echo is matched by its value too: the same sender and sequence with another type is another change', async () => {
+  const t = await setup();
+  await t.store.setVoxel({ chunk: t.at, x: 1, y: 2, z: 3, voxelType: 7 });
+  t.deliver({ uuid: ME, sequenceNumber: t.sent[0].sequenceNumber, voxelType: 6 });
+  assert.equal(t.store.editsInFlight, 1);
+  assert.equal(t.store.voxelTypeAt(t.at, 1, 2, 3), 7);
+  t.echo(t.sent[0]);
+  assert.equal(t.store.editsInFlight, 0);
+  assert.equal(t.store.voxelTypeAt(t.at, 1, 2, 3), 7);
 });
 
 test('a non-optimistic edit is applied when its echo arrives', async () => {
