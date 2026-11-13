@@ -274,6 +274,36 @@ test('dist-tags normalise from npm output shapes', () => {
   assert.throws(() => normalizeDistTags('["1.0.0"]'), /unexpected registry dist-tags/);
 });
 
+test('dist-tags wrapped in an array, as newer npm CLIs print them, are read the same', () => {
+  // The first 18.32.0 publish ran npm@latest, which answered `[{...}]`; the resolver refused it.
+  const wrapped = '[{"latest":"18.31.1","dev":"18.31.1-dev.1","test":"18.31.1-test.1"}]';
+  assert.deepEqual(normalizeDistTags(wrapped), {
+    latest: '18.31.1',
+    dev: '18.31.1-dev.1',
+    test: '18.31.1-test.1',
+  });
+  assert.deepEqual(normalizeDistTags('[]'), {});
+  assert.equal(
+    resolvePublishVersion({
+      tier: 'dev',
+      version: 'v18.32.0',
+      registryVersions: '["18.31.1-dev.1"]',
+      distTags: wrapped,
+    }).publishVersion,
+    '18.32.0-dev.1',
+  );
+  assert.throws(
+    () =>
+      resolvePublishVersion({
+        tier: 'dev',
+        version: 'v18.28.0',
+        registryVersions: '["18.28.0-dev.1"]',
+        distTags: wrapped,
+      }),
+    /would move @dev back/,
+  );
+});
+
 test('a version that is not bare MAJOR.MINOR.PATCH is refused', () => {
   // The prefix convention exists so the tier never lands in the version's
   // prerelease field; accepting one here would put it back.
