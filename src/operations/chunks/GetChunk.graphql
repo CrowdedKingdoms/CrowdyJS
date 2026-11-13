@@ -16,6 +16,7 @@ query GetChunk($input: GetChunkInput!) {
       }
       voxelType
       state
+      updatedAt
     }
     voxelStatesTruncated
     owner
