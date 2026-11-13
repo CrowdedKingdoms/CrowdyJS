@@ -707,7 +707,7 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
           };
           const chunk = this.chunks.get(chunkKey(coord));
           if (!chunk) return;
-          const updatedAt = Number(notification.updatedAtMs);
+          const updatedAt = this.clampTime(Number(notification.updatedAtMs));
           if (chunk.storedAt !== null && updatedAt > 0 && chunk.storedAt >= updatedAt) return;
           // The server's copy is newer than a seed waiting to be written back over it.
           if (chunk.dirty) this.dropWriteBack(chunk);
@@ -1046,8 +1046,9 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
     }
     const chunk = this.ensureEntry(coord);
     const rowMs = storedAtMs(full.updatedAt);
+    const heldTo = rowMs === null ? null : this.clampTime(rowMs);
     // A newer copy came first (another read's): the store already holds this one's news.
-    if (chunk.hydrated && rowMs !== null && chunk.storedAt !== null && chunk.storedAt > rowMs) return true;
+    if (chunk.hydrated && heldTo !== null && chunk.storedAt !== null && chunk.storedAt > heldTo) return true;
     chunk.chunkState = this.decodeChunkState(full.chunkState ?? null);
     chunk.voxelStatesTruncated = full.voxelStatesTruncated === true;
     this.adoptCopy(chunk, full.voxels ?? null, full.voxelStates ?? [], rowMs, requestedSeq);
@@ -1091,7 +1092,8 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
         (coord, stored) => {
           const chunk = this.chunks.get(chunkKey(coord));
           if (!chunk || chunk.dirty) return;
-          const at = storedAtMs(stored.updatedAt);
+          const stamped = storedAtMs(stored.updatedAt);
+          const at = stamped === null ? null : this.clampTime(stamped);
           if (chunk.loadState === 'loaded' && at !== null && chunk.storedAt !== null && chunk.storedAt >= at) {
             return;
           }
@@ -1409,12 +1411,14 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
     rowMs: number | null,
     requestedSeq: number,
   ): void {
-    const row = rowMs ?? 0;
+    // Every server time is held to MAX_FUTURE_SKEW_MS past this machine's clock.
+    const row = this.clampTime(rowMs ?? 0);
     const entryTimes = new Map<string, number>();
     for (const entry of entries ?? []) {
       const vk = voxelKey(entry.voxelCoord.x, entry.voxelCoord.y, entry.voxelCoord.z);
+      const entryMs = this.clampTime(storedAtMs(entry.updatedAt) ?? 0);
       // A voxel the copy lists twice counts at its latest time.
-      entryTimes.set(vk, Math.max(entryTimes.get(vk) ?? 0, storedAtMs(entry.updatedAt) ?? row));
+      entryTimes.set(vk, Math.max(entryTimes.get(vk) ?? 0, entryMs > 0 ? entryMs : row));
     }
     const copyTime = (vk: string): number => entryTimes.get(vk) ?? row;
     const heldIsNewer = (vk: string, heldMs: number, heldArrival: number): boolean => {
@@ -1442,7 +1446,7 @@ export class ChunkStore<TVoxelState = string, TChunkState = string> {
       kept.push(value);
     }
 
-    chunk.storedAt = rowMs;
+    chunk.storedAt = row > 0 ? row : null;
     if (voxels != null) chunk.voxels = decodeBase64(voxels);
     this.cellTimes.delete(chunk.key);
     this.arrivals.delete(chunk.key);

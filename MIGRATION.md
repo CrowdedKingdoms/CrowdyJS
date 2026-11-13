@@ -120,6 +120,12 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.31.1: a stored copy's times are clamped too
+
+What 18.31.0 needs. A stored copy's `updatedAt` (the row's and each voxel state's) is held to 5
+minutes past this machine's clock, as a notification's and a recorded edit's times already were,
+so a copy dated far ahead cannot hold its voxels against every later change.
+
 ## 18.31.0: the ChunkStore merges by the server's time
 
 **What it needs.** ck-api `v2.69.0` (cks-game-api #668): `chunks.get` selects each voxel state's
