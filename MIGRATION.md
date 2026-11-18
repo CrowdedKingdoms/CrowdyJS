@@ -120,6 +120,35 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.33.0: a mod knows the Studio revision it runs
+
+**What it needs.** ck-api `v2.73.0`: every exec mod build, mod and CLIENT half read selects
+`studioProjectId` and `studioRevision`, which an older Game API refuses. Promote the Game API
+before the SDK on each tier.
+
+**A build names its Studio source.** `exec.modBuild(appId, crate, studio?)` and
+`exec.modClientBuild(appId, crate, studio?)` take an optional `ExecStudioSource`
+(`{ projectId, revision }`): a Studio project of yours in the app, at a saved revision it has
+reached (`revision` is the project's `revision.id`). Another player's project is `NOT_FOUND`;
+a revision past the project's is `BAD_REQUEST`. The build reports it (`ExecBuild.studioProjectId`,
+`studioRevision`), and so does what is deployed from it: the `ExecMod` of that version
+(`modDeploy`, `mods`, `myMods`, `modSetEnabled`) and the attached `ExecModClient`. An install,
+a build that named none, and a version deployed before v2.73.0 report null. `CrowdyStudioController`
+sends the open project and its saved revision on every draft test and live deploy.
+
+**The CLIENT half starter comes from the platform.** `exec.modClientStarter(appId)` returns the
+`client-half` crate (`Cargo.toml`, `src/lib.rs`), the same crate this SDK carries.
+`createCrowdyStudioStarterProject` takes it as `clientStarter` and renames its package to the
+CLIENT module, as it does the mod starter; without it the CLIENT target is the SDK's copy.
+`CrowdyStudioController.createProject` asks for it when the project has a CLIENT target, and
+uses its own copy when the API host's toolchain predates it (a GraphQL error with
+`extensions.httpStatus` 503). `CrowdyStudioMods.modClientStarter` is optional, so a `mods` of
+your own needs no change.
+
+**Studio's address.** `client.crowdyStudio.links()` (public, `crowdyStudioLinks`) answers this
+tier's Studio `origin` and its `walletUrl`, so a dock follows Studio without an SDK release:
+pass the origin as the dock's `studioOrigin`.
+
 ## 18.32.0: a voxel's time is its chunk's whole-chunk write
 
 **What it needs.** ck-api `v2.70.0` (cks-game-api #671): `chunks.get` and `chunks.byDistance`

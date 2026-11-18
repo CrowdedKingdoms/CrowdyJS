@@ -29,6 +29,11 @@ export interface CrowdyStudioNewProjectOptions {
    * has a SERVER target.
    */
   modStarter?: CrowdyStudioModStarter;
+  /**
+   * The CLIENT target's crate (`client.exec.modClientStarter(appId)`), its package named for
+   * the project. Without it the CLIENT target is the starter this SDK carries, the same crate.
+   */
+  clientStarter?: CrowdyStudioModStarter;
 }
 
 /**
@@ -66,8 +71,10 @@ export function createCrowdyStudioStarterProject(
     metadata,
     files: targets.flatMap((target) =>
       target === 'SERVER'
-        ? modStarterFiles(mod!, metadata.serverModuleName!)
-        : clientHalfStarterFiles(metadata.clientModuleName!),
+        ? starterFiles(mod!, metadata.serverModuleName!, 'SERVER')
+        : options.clientStarter
+          ? starterFiles(options.clientStarter, metadata.clientModuleName!, 'CLIENT')
+          : clientHalfStarterFiles(metadata.clientModuleName!),
     ),
   };
 }
@@ -139,16 +146,19 @@ crowdy::register_module!(init: init, tick: tick, invoke: invoke, event: event);
   ];
 }
 
-function modStarterFiles(
+function starterFiles(
   starter: CrowdyStudioModStarter,
   name: string,
+  target: 'SERVER' | 'CLIENT',
 ): CrowdyStudioProjectFile[] {
   const paths = new Set(starter.files.map((file) => file.path));
   if (!paths.has('Cargo.toml') || !paths.has('src/lib.rs')) {
-    throw new Error('The mod starter has no Cargo.toml or src/lib.rs');
+    throw new Error(
+      `The ${target === 'SERVER' ? 'mod' : 'CLIENT half'} starter has no Cargo.toml or src/lib.rs`,
+    );
   }
   return starter.files.map((file) => ({
-    target: 'SERVER',
+    target,
     path: file.path,
     content:
       file.path === 'Cargo.toml'

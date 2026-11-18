@@ -165,6 +165,8 @@ fragment ExecBuildFields on ExecBuild {
     capabilityHash
     tickIntervalMs
   }
+  studioProjectId
+  studioRevision
 }
 
 mutation ExecBuild($input: ExecBuildInput!) {
@@ -191,6 +193,8 @@ fragment ExecModFields on ExecMod {
   blocked
   running
   updatedAt
+  studioProjectId
+  studioRevision
 }
 
 fragment ExecModListingFields on ExecModListing {
@@ -230,8 +234,8 @@ query ExecModStarter($appId: BigInt!) {
   }
 }
 
-mutation ExecModBuild($appId: BigInt!, $crate: ExecBuildCrateInput!) {
-  execModBuild(appId: $appId, crate: $crate) {
+mutation ExecModBuild($appId: BigInt!, $crate: ExecBuildCrateInput!, $studio: ExecStudioSourceInput) {
+  execModBuild(appId: $appId, crate: $crate, studio: $studio) {
     ...ExecBuildFields
   }
 }
@@ -382,6 +386,8 @@ fragment ExecModClientFields on ExecModClient {
   capabilityHash
   tickIntervalMs
   updatedAt
+  studioProjectId
+  studioRevision
 }
 
 fragment ExecGridClientModFields on ExecGridClientMod {
@@ -402,8 +408,20 @@ fragment ExecGridClientModFields on ExecGridClientMod {
   updatedAt
 }
 
-mutation ExecModClientBuild($appId: BigInt!, $crate: ExecBuildCrateInput!) {
-  execModClientBuild(appId: $appId, crate: $crate) {
+query ExecModClientStarter($appId: BigInt!) {
+  execModClientStarter(appId: $appId) {
+    crate
+    nodeType
+    description
+    files {
+      path
+      content
+    }
+  }
+}
+
+mutation ExecModClientBuild($appId: BigInt!, $crate: ExecBuildCrateInput!, $studio: ExecStudioSourceInput) {
+  execModClientBuild(appId: $appId, crate: $crate, studio: $studio) {
     ...ExecBuildFields
   }
 }

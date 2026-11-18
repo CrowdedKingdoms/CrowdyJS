@@ -1264,3 +1264,85 @@ test('a CLIENT-only project\u2019s Logs read the mod its CLIENT half rides', asy
   assert.equal(controller.getState().logs[0].moduleName, 'weather-client');
   controller.destroy();
 });
+
+test("a draft test's builds name the project and the saved revision they are", async () => {
+  const { CrowdyStudioController } = await loadSdk();
+  const studios = [];
+  const mods = execMods([], {
+    async modBuild(_appId, _crate, studio) {
+      studios.push(['SERVER', studio]);
+      return { buildId: 'b1', status: 'queued', log: null, artifacts: [] };
+    },
+    async modClientBuild(_appId, _crate, studio) {
+      studios.push(['CLIENT', studio]);
+      return { buildId: 'cb1', status: 'queued', kind: 'client', log: null, artifacts: [] };
+    },
+  });
+  const controller = new CrowdyStudioController(
+    options(providerFor(execProject('FULL_STACK')), {
+      mods,
+      brokerFactory: () => ({ async start() {}, stop() {} }),
+    }),
+  );
+  await controller.initialize();
+  const result = await controller.testDraft();
+  assert.equal(result.projectRevisionId, 'r1');
+  const source = { projectId: 'project-1', revision: 'r1' };
+  assert.deepEqual(studios, [['CLIENT', source], ['SERVER', source]]);
+  controller.destroy();
+});
+
+test("a new CLIENT target starts from the platform's CLIENT half starter, and from this SDK's on a 503", async () => {
+  const { CrowdyStudioController, CrowdyGraphQLError } = await loadSdk();
+  const calls = [];
+  const PLATFORM_CARGO = '[package]\nname = "client-half"\nversion = "0.1.0"\n\n[dependencies]\ncrowdy-client-sdk = "0.1.0"\n';
+  const PLATFORM_LIB = "use crowdy_client_sdk as crowdy;\n// the platform's\n";
+  let answer = 'starter';
+  const mods = execMods(calls, {
+    async modClientStarter(appId) {
+      calls.push(['clientStarter', appId]);
+      if (answer === '503') {
+        throw new CrowdyGraphQLError([
+          { message: 'this API instance has no CLIENT half starter', extensions: { code: 'INTERNAL_SERVER_ERROR', httpStatus: 503 } },
+        ]);
+      }
+      if (answer === 'forbidden') {
+        throw new CrowdyGraphQLError([{ message: 'no access', extensions: { code: 'FORBIDDEN', httpStatus: 403 } }]);
+      }
+      return {
+        crate: 'client-half',
+        nodeType: 'client',
+        description: 'A CLIENT half',
+        files: [
+          { path: 'Cargo.toml', content: PLATFORM_CARGO },
+          { path: 'src/lib.rs', content: PLATFORM_LIB },
+        ],
+      };
+    },
+  });
+  const controller = new CrowdyStudioController(options(providerFor(), { mods }));
+  await controller.initialize();
+  const fileOf = (p, path) => p.files.find((file) => file.path === path).content;
+
+  const hud = await controller.createProject({ name: 'Weather HUD', kind: 'CLIENT' });
+  assert.deepEqual(calls, [['clientStarter', '42']]);
+  assert.equal(fileOf(hud, 'Cargo.toml'), PLATFORM_CARGO.replace('client-half', 'weather-hud-client'));
+  assert.equal(fileOf(hud, 'src/lib.rs'), PLATFORM_LIB);
+  assert.deepEqual(hud.files.map((file) => file.target), ['CLIENT', 'CLIENT']);
+
+  // A full-stack project asks for both starters.
+  calls.length = 0;
+  await controller.createProject({ name: 'Weather', kind: 'FULL_STACK' });
+  assert.deepEqual(calls, [['starter', '42'], ['clientStarter', '42']]);
+
+  // An API host whose toolchain predates the starter: this SDK's copy, the same crate.
+  answer = '503';
+  const fallback = await controller.createProject({ name: 'Weather HUD', kind: 'CLIENT' });
+  assert.match(fileOf(fallback, 'Cargo.toml'), /^name = "weather-hud-client"$/m);
+  assert.match(fileOf(fallback, 'src/lib.rs'), /crowdy::register_module!/);
+
+  // Any other refusal is the caller's to see.
+  answer = 'forbidden';
+  await assert.rejects(controller.createProject({ name: 'Weather HUD', kind: 'CLIENT' }), /no access/);
+  controller.destroy();
+});
