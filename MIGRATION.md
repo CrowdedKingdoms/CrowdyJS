@@ -130,7 +130,7 @@ before the SDK on each tier.
 `exec.modClientBuild(appId, crate, studio?)` take an optional `ExecStudioSource`
 (`{ projectId, revision }`): a Studio project of yours in the app, at a saved revision it has
 reached (`revision` is the project's `revision.id`). Another player's project is `NOT_FOUND`;
-a revision past the project's is `BAD_USER_INPUT`. The build reports it (`ExecBuild.studioProjectId`,
+a revision past the project's is `BAD_REQUEST`. The build reports it (`ExecBuild.studioProjectId`,
 `studioRevision`), and so does what is deployed from it: the `ExecMod` of that version
 (`modDeploy`, `mods`, `myMods`, `modSetEnabled`) and the attached `ExecModClient`. An install,
 a build that named none, and a version deployed before v2.73.0 report null. `CrowdyStudioController`
