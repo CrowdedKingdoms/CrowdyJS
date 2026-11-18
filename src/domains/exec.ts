@@ -47,6 +47,7 @@ import {
   ExecModSetEnabledDocument,
   ExecModSetSwitchDocument,
   ExecModStarterDocument,
+  ExecModClientStarterDocument,
   type ExecModSwitchFieldsFragment,
   ExecModSwitchesDocument,
   ExecModUnpublishDocument,
@@ -945,6 +946,16 @@ export interface ExecSourceFile {
 }
 
 /**
+ * The Crowdy Studio project and saved revision a mod build is made from: a project of yours in
+ * the app, at a revision it has reached (`revision` is the project's, a decimal string). The
+ * build reports it back, and so do the mod version and the CLIENT half deployed from it.
+ */
+export interface ExecStudioSource {
+  projectId: string;
+  revision: string;
+}
+
+/**
  * A CLIENT half's capability summary, which the build derives from the module and its author
  * cannot declare: the module's imports, the client host calls it can reach, their capability
  * groups, its presentation hooks and exports. Visitors consent to its hash.
@@ -1414,10 +1425,16 @@ export class ExecAPI {
   /**
    * Builds a mod from one `ckx-sdk` crate, as {@link build} does a developer's. Returns at
    * once; wait with {@link waitForModBuild}, then {@link modDeploy}. One build at a time per
-   * player. Requires `write_server_code` in the app.
+   * player. `studio` names the Studio project and saved revision the crate is; the mod version
+   * deployed from the build reports them (`studioProjectId`, `studioRevision`). Requires
+   * `write_server_code` in the app.
    */
-  async modBuild(appId: string, crate: ExecCrate): Promise<ExecBuild> {
-    const data = await this.graphql.request(ExecModBuildDocument, { appId, crate: crateInput(crate) });
+  async modBuild(appId: string, crate: ExecCrate, studio?: ExecStudioSource): Promise<ExecBuild> {
+    const data = await this.graphql.request(ExecModBuildDocument, {
+      appId,
+      crate: crateInput(crate),
+      ...(studio ? { studio: { projectId: studio.projectId, revision: studio.revision } } : {}),
+    });
     return build(data.execModBuild);
   }
 
@@ -1560,11 +1577,29 @@ export class ExecAPI {
    * `crowdy-client-sdk`, `serde` and `serde_json`, and `[package.metadata.crowdy]
    * tick_interval_ms`. Returns at once with the build queued (`kind` `client`); wait with
    * {@link waitForModBuild}, then attach it with {@link modClientDeploy}. One build, server or
-   * CLIENT, at a time per player. Requires `write_client_code` in the app.
+   * CLIENT, at a time per player. `studio` names the Studio project and saved revision the
+   * crate is; the CLIENT half attached from the build reports them. Requires
+   * `write_client_code` in the app.
    */
-  async modClientBuild(appId: string, crate: ExecCrate): Promise<ExecBuild> {
-    const data = await this.graphql.request(ExecModClientBuildDocument, { appId, crate: crateInput(crate) });
+  async modClientBuild(appId: string, crate: ExecCrate, studio?: ExecStudioSource): Promise<ExecBuild> {
+    const data = await this.graphql.request(ExecModClientBuildDocument, {
+      appId,
+      crate: crateInput(crate),
+      ...(studio ? { studio: { projectId: studio.projectId, revision: studio.revision } } : {}),
+    });
     return build(data.execModClientBuild);
+  }
+
+  /**
+   * The CLIENT half starter (`client-half`), a `crowdy-client-sdk` crate that logs, keeps a tick
+   * count and shows it on the HUD, to build with {@link modClientBuild} once its package is
+   * renamed to the CLIENT module. Requires access to the app. An API host whose toolchain
+   * predates it answers with `extensions.httpStatus` 503.
+   */
+  async modClientStarter(appId: string): Promise<ExecStarter> {
+    const data = await this.graphql.request(ExecModClientStarterDocument, { appId });
+    const s = data.execModClientStarter;
+    return { crate: s.crate, nodeType: s.nodeType, description: s.description, files: s.files.map(strip) };
   }
 
   /**
