@@ -47,7 +47,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '18.32.0';
+export const VERSION = '18.33.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -445,6 +445,7 @@ export {
   type ExecDeployOptions,
   type ExecCrate,
   type ExecSourceFile,
+  type ExecStudioSource,
   type ExecBuild,
   type ExecBuildArtifact,
   type ExecStarter,
@@ -471,7 +472,7 @@ export {
   type ExecModClientArtifact,
   type ExecModClientArtifactBytes,
 } from './domains/exec.js';
-export { CrowdyStudioAPI } from './domains/crowdyStudio.js';
+export { CrowdyStudioAPI, type CrowdyStudioLinks } from './domains/crowdyStudio.js';
 export { PlayerWalletAPI } from './domains/playerWallet.js';
 export { MarketplaceAPI } from './domains/marketplace.js';
 export {
