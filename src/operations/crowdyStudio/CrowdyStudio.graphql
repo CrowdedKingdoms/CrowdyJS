@@ -166,3 +166,10 @@ mutation CrowdyStudioProjectImportFile($input: ImportCrowdyStudioProjectFileInpu
     ...CrowdyStudioProjectFields
   }
 }
+
+query CrowdyStudioLinks {
+  crowdyStudioLinks {
+    origin
+    walletUrl
+  }
+}

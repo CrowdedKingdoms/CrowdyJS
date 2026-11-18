@@ -944,9 +944,9 @@ export type App = {
   hasSafetyModerator: Maybe<Scalars['Boolean']['output']>;
   /** The app's own gameplay idle timeout in seconds, when it sets one: 0 turns the timeout off, otherwise 60 to 86400. null uses the platform default (effectiveIdleTimeoutSeconds). Set with updateApp (manage_apps). */
   idleTimeoutSeconds: Maybe<Scalars['Int']['output']>;
-  /** True for first-party/trusted apps: portal entry skips the consent screen. The Overworld (app 1) is trusted. Studio admins cannot set this; it is platform-controlled. */
+  /** True for a trusted app: createPortalAuthorizationCode (Studio's hosted sign-in, or a launcher's PKCE handoff) issues its code without the player's consent grant, so no consent screen is shown. Set by Crowded Kingdoms; studio admins cannot set it. mintAppToken, which a client holding the session calls directly, never asks for consent. */
   isTrusted: Scalars['Boolean']['output'];
-  /** Browser destination (origin/URL) a player is redirected to when they portal into this app from the Overworld. Used to route the player and to validate portal redirect URIs. */
+  /** Browser destination (origin/URL) of this app: where a player is sent to enter it from another page, and the page Crowdy Studio's Live code opens. Also accepted, by origin, as a redirect URI for hosted sign-in. */
   launchUrl: Maybe<Scalars['String']['output']>;
   /** Whether the organization lets its org-managed players build and run mods (and use the Studio agent) in this app, paying for their mod compute, egress, storage and model tokens itself. False by default, and false on a tier that does not serve org-managed players. Set with setAppManagedPlayerMods (manage_billing). Players with a Crowded Kingdoms account are unaffected. */
   managedPlayerModsEnabled: Scalars['Boolean']['output'];
@@ -1034,7 +1034,7 @@ export type AppAccessTier = {
   updatedAt: Scalars['DateTime']['output'];
 };
 
-/** A user's standing consent for an app to receive app-scoped tokens via the Overworld portal (the “connected apps” list). */
+/** A user's standing consent for an app to receive app-scoped tokens through a portal authorization code (the “connected apps” list). */
 export type AppAuthorizationGrant = {
   __typename?: 'AppAuthorizationGrant';
   appId: Scalars['ID']['output'];
@@ -1291,17 +1291,17 @@ export type AppSharedSubscription = {
   status: Scalars['String']['output'];
 };
 
-/** Lifecycle state of an app. Independent of AppVisibility; the public marketplace requires status=LIVE. */
+/** Lifecycle state of an app. Independent of AppVisibility; the public marketplace lists only LIVE apps. Only ARCHIVED changes who may play; otherwise the app's access tiers decide. */
 export enum AppStatus {
-  /** Soft-deleted via archiveApp: retained but read-only and excluded from the marketplace. Reversible by setting status back to DRAFT or LIVE. */
+  /** Soft-deleted via archiveApp: retained but read-only and excluded from the marketplace. While archived, players are refused app tokens and refreshes; holders of manage_apps or moderate_safety on its organization still get one. Reversible by setting status back to DRAFT or LIVE. */
   Archived = 'ARCHIVED',
-  /** Work-in-progress: invisible to non-members and never listed in the marketplace. Selectable manually via updateApp; new apps default to LIVE. */
+  /** Work in progress: never listed in the marketplace. It refuses no player; to keep players out, remove the app's free default access tier and grant access explicitly. Set via updateApp; new apps default to LIVE. */
   Draft = 'DRAFT',
-  /** Published and purchasable/playable; eligible for the public marketplace when visibility=PUBLIC. */
+  /** Published; listed in the public marketplace when visibility=PUBLIC. */
   Live = 'LIVE'
 }
 
-/** A short-lived, app-scoped gameplay token (Overworld portal). Confined to a single app: usable only against that app's Game API + Buddy realtime surface (plus read-only `me` and same-app `refreshAppToken`). It CANNOT perform management operations and CANNOT mint tokens for other apps, so a game stack that receives it never gets the player's full identity session. */
+/** A short-lived, app-scoped gameplay token (portal). Confined to a single app: usable only against that app's Game API + Buddy realtime surface (plus read-only `me` and same-app `refreshAppToken`). It CANNOT perform management operations and CANNOT mint tokens for other apps, so a game stack that receives it never gets the player's full identity session. */
 export type AppTokenResponse = {
   __typename?: 'AppTokenResponse';
   /** The app this token is confined to, as a String. */
@@ -1310,7 +1310,7 @@ export type AppTokenResponse = {
   authorizedServer: Maybe<ServerStatus>;
   /** Stable entry origin, resolving to every datacenter, that always reaches SOME healthy instance. Use it to re-discover endpoints when `gameApiUrl` stops answering: a token-holding client cannot re-mint, because that needs the identity session it does not have. Never a per-datacenter or per-instance address. */
   discoveryUrl: Maybe<Scalars['String']['output']>;
-  /** ISO-8601 UTC expiry. Call `refreshAppToken` (same app) before this, or re-portal through the Overworld for a different app. */
+  /** ISO-8601 UTC expiry. Call `refreshAppToken` (same app) before this. A different app needs its own token: a hosted sign-in for that app, or mintAppToken with the session. */
   expiresAt: Scalars['String']['output'];
   /** Base HTTPS URL of the Game API that serves this app — its OWN datacenter's endpoint when a placement exists, because that is where the app's shards are. Null if the app has no dedicated/shared game-api route yet. Use this for gameplay; use `discoveryUrl` to recover if it stops answering. */
   gameApiUrl: Maybe<Scalars['String']['output']>;
@@ -1335,6 +1335,10 @@ export type AppUsageProjection = {
   currentEgressBytes: Scalars['String']['output'];
   /** Ingress bytes recorded so far this calendar month (from app_monthly_egress.ingress_bytes): bytes clients sent the service over UDP replication and GraphQL, measured on the same basis as egress. Billed once, as aggregate_data_ingress above its own monthly allowance; never counted toward the egress figure or allowance. */
   currentIngressBytes: Scalars['String']['output'];
+  /** What this month's data out has cost so far, in cents, at its rate bands and after the free allowance (before any billing exemption). Null with dataOutRateBands. */
+  dataOutPricedCents: Maybe<Scalars['Float']['output']>;
+  /** This month's data out split by delivery-rate band, as the ledger last priced it. Null when the app's month is not priced by delivery rate, or has no data out yet. */
+  dataOutRateBands: Maybe<Array<DataOutRateBand>>;
   /** Fractional UTC days elapsed since the calendar month started. */
   daysElapsed: Scalars['Float']['output'];
   /** Per-app free monthly egress allowance in bytes (5 decimal GB). */
@@ -1345,6 +1349,8 @@ export type AppUsageProjection = {
   onTrackToExceed: Maybe<Scalars['Boolean']['output']>;
   /** Projected end-of-month egress bytes (linear extrapolation), or null when insufficient data. */
   projectedBytes: Maybe<Scalars['String']['output']>;
+  /** Projected end-of-month data-out cost in cents: this month's mix of rate bands scaled to the projected egress and priced the same way. Null when there is insufficient data or no rate bands. */
+  projectedDataOutCents: Maybe<Scalars['Float']['output']>;
   /** Projected end-of-month stored input logs in byte-hours (linear extrapolation), or null when insufficient data. */
   projectedInputLogByteHours: Maybe<Scalars['String']['output']>;
   /** Projected usage as a percentage of the free allowance, or null when insufficient data. */
@@ -1431,13 +1437,13 @@ export type AppUserAccessEdge = {
   node: AppUserAccess;
 };
 
-/** Controls where an app can be discovered. Independent of AppStatus (the marketplace additionally requires status=LIVE). */
+/** Whether an app is listed in the public marketplace. Independent of AppStatus: the marketplace lists only PUBLIC, LIVE apps. Visibility never decides who may play; the app's access tiers do (a free default tier admits every player, and without one a player needs a grant). */
 export enum AppVisibility {
-  /** Hidden from the marketplace; visible only to org members and users with an access grant. */
+  /** Not listed in the marketplace. It hides the app from listings only: appBySlug and app(appId) still return it, and it refuses no player (the app's access tiers decide who may play). */
   Private = 'PRIVATE',
   /** Listed in the public marketplace (when status=LIVE) and resolvable by slug. */
   Public = 'PUBLIC',
-  /** Hidden from marketplace listings but accessible to anyone who knows the direct org/app slug link. */
+  /** Not listed in the marketplace; anyone with its org and app slugs can look it up (appBySlug). */
   Unlisted = 'UNLISTED'
 }
 
@@ -1508,7 +1514,7 @@ export type AuthResponse = {
   user: User;
 };
 
-/** Approve (consent to) an app receiving app-scoped tokens via the Overworld portal. */
+/** Approve (consent to) an app receiving app-scoped tokens through a portal authorization code. */
 export type AuthorizeAppInput = {
   /** App to authorize. */
   appId: Scalars['BigInt']['input'];
@@ -2330,7 +2336,7 @@ export type CreateActorInput = {
 
 /** Input payload for creating a new app. */
 export type CreateAppInput = {
-  /** Datacenter the app will live in, e.g. 'or' or 'va'. Query placeableDatacenters for the accepted codes and whether each can currently hold an app. REQUIRED and permanent: an app is distributed on app_id, so all of its data lives on one node in one datacenter and that is fixed when the id is minted. Creation FAILS if the datacenter is unknown to this deployment or holds no capacity, rather than creating an app that cannot be routed. There is no default — the instance answering this call may be in a different datacenter from the one you want. Moving an app afterwards is an operator action. */
+  /** Datacenter the app will live in, e.g. 'va'. Query placeableDatacenters for the accepted codes and whether each can currently hold an app. REQUIRED and permanent: an app is distributed on app_id, so all of its data lives on one node in one datacenter and that is fixed when the id is minted. Creation FAILS if the datacenter is unknown to this deployment or holds no capacity, rather than creating an app that cannot be routed. There is no default — the instance answering this call may be in a different datacenter from the one you want. Moving an app afterwards is an operator action. */
   datacenter: Scalars['String']['input'];
   /** Optional short plain-text description for listings. */
   description?: InputMaybe<Scalars['String']['input']>;
@@ -2500,7 +2506,7 @@ export type CreateOrganizationInput = {
   slug: Scalars['String']['input'];
 };
 
-/** Input for createPortalAuthorizationCode: the Overworld (identity origin, holding the session token) mints a one-time code the destination game exchanges for an app token. Browser handoff path; pair with a PKCE verifier held by the destination game origin. */
+/** Input for createPortalAuthorizationCode: the identity origin holding the session token (Studio's hosted sign-in, or a native launcher) mints a one-time code the destination game exchanges for an app token. Browser handoff path; pair with a PKCE verifier held by the destination game origin. */
 export type CreatePortalAuthorizationCodeInput = {
   /** Numeric id of the target app the player is portaling into. */
   appId: Scalars['BigInt']['input'];
@@ -2508,7 +2514,7 @@ export type CreatePortalAuthorizationCodeInput = {
   codeChallenge: Scalars['String']['input'];
   /** PKCE method: "S256" (default, recommended) or "plain". */
   codeChallengeMethod?: InputMaybe<Scalars['String']['input']>;
-  /** Where to redirect the player after issuing the code. Must match the target app's configured launch_url origin when set. */
+  /** Where to redirect the player after issuing the code. Must match, by origin, one of the target app's registered redirect URIs or its launch URL; an app with neither refuses every code. */
   redirectUri: Scalars['String']['input'];
 };
 
@@ -3551,6 +3557,15 @@ export type CrowdyStudioLibraryFile = {
   updatedAt: Scalars['DateTime']['output'];
 };
 
+/** This tier’s Crowdy Studio, for a Studio dock in a game: where it opens its popups and where it sends a player for funds. */
+export type CrowdyStudioLinks = {
+  __typename?: 'CrowdyStudioLinks';
+  /** Studio’s origin on this tier, e.g. https://studio.dev.crowdedkingdoms.com: the only origin a dock opens a popup to. */
+  origin: Scalars['String']['output'];
+  /** Studio’s wallet page, where a dock sends a player when the model needs funds (`AGENT_FUNDS_NEEDED`). */
+  walletUrl: Scalars['String']['output'];
+};
+
 /** The player's model spend in this app today plus their most recent requests. */
 export type CrowdyStudioModelUsage = {
   __typename?: 'CrowdyStudioModelUsage';
@@ -3721,6 +3736,19 @@ export type CurrentServerInput = {
   ip4: Scalars['String']['input'];
 };
 
+/** One delivery-rate band of an app's data out this calendar month, as the ledger last priced it: each connection's minute is split at the band edges, and data out that belongs to no connection (API responses, module egress) is the first band. */
+export type DataOutRateBand = {
+  __typename?: 'DataOutRateBand';
+  /** Bytes of data out in this band so far this month. */
+  bytes: Scalars['String']['output'];
+  /** Of those bytes, how many the free monthly allowance covered (it is spent from the first band up). */
+  freeBytes: Scalars['String']['output'];
+  /** This band's price in cents per decimal GB, fixed for the month at the app's first data out in it. */
+  priceCents: Scalars['Float']['output'];
+  /** This band's exclusive upper edge in bits per second, as a decimal string; null on the last band. */
+  upToBitsPerSecond: Maybe<Scalars['String']['output']>;
+};
+
 /** Whether a datacenter currently has a ck-api instance able to serve clients. Three-valued on purpose: "nothing is serving there" and "the liveness signal could not be read" look identical through a boolean and call for opposite reactions. */
 export enum DatacenterServingStatus {
   /** The signal was readable and reported no instance able to take a client there. An app placed here would be created and stored correctly, and its players would be told the app is temporarily offline until an instance returns. */
@@ -3889,6 +3917,10 @@ export type ExecBuild = {
   startedAt: Maybe<Scalars['DateTime']['output']>;
   /** `queued`, `building`, `succeeded` or `failed`. */
   status: Scalars['String']['output'];
+  /** The Crowdy Studio project the build was made from (`execModBuild` / `execModClientBuild` `studio`); null when it named none. */
+  studioProjectId: Maybe<Scalars['String']['output']>;
+  /** That project’s revision the build was made from; null when it named none. */
+  studioRevision: Maybe<Scalars['BigInt']['output']>;
 };
 
 /** One module a ck-exec build produced. */
@@ -4094,6 +4126,10 @@ export type ExecMod = {
   ownerId: Scalars['BigInt']['output'];
   /** Whether an instance of it runs now. */
   running: Scalars['Boolean']['output'];
+  /** The Crowdy Studio project its version was deployed from, when that build named one (`execModBuild` `studio`); null otherwise, an install or a version from when the grid changed hands included. */
+  studioProjectId: Maybe<Scalars['String']['output']>;
+  /** That project’s revision its version was deployed from; null when `studioProjectId` is. */
+  studioRevision: Maybe<Scalars['BigInt']['output']>;
   updatedAt: Scalars['DateTime']['output'];
   version: Scalars['Int']['output'];
 };
@@ -4119,6 +4155,10 @@ export type ExecModClient = {
   ownerId: Scalars['BigInt']['output'];
   /** The module’s size in bytes. */
   sizeBytes: Scalars['Int']['output'];
+  /** The Crowdy Studio project its build was made from (`execModClientBuild` `studio`); null when it named none, or for an install. */
+  studioProjectId: Maybe<Scalars['String']['output']>;
+  /** That project’s revision its build was made from; null when `studioProjectId` is. */
+  studioRevision: Maybe<Scalars['BigInt']['output']>;
   /** How often, in milliseconds, browsers tick it (16-1000, from its Cargo.toml). */
   tickIntervalMs: Scalars['Int']['output'];
   /** When it was last attached. */
@@ -4239,6 +4279,14 @@ export type ExecStarterPack = {
   mod: Maybe<ExecStarter>;
   /** One entry per node type of the manifest: a crate that serves two types appears twice, so build each crate once. */
   starters: Array<ExecStarter>;
+};
+
+/** The Crowdy Studio project and saved revision a player’s build is made from. The build, and the mod version or CLIENT half deployed from it, report them back, so any client can read which revision a grid runs. */
+export type ExecStudioSourceInput = {
+  /** A Studio project of yours in this app (`crowdyStudioProject`). */
+  projectId: Scalars['String']['input'];
+  /** The project revision the crate is, at most the project’s current `revision`. */
+  revision: Scalars['BigInt']['input'];
 };
 
 /** A deployed version of an app’s ck-exec topology. */
@@ -5228,7 +5276,7 @@ export type Mutation = {
   assignGridOwnership: GridOwnership;
   /** Grant runtime permission keys to a group (optionally scoped to a single group role) on a grid by writing the `grid_group_grants` input table, then recompute the materialized effective ACL so every affected member gains the keys. Requires app-admin ('manage_apps'). Returns the grid's current group grants for the group. Use `grantGridPermissions` for per-user grants instead. */
   assignGroupToGrid: Array<GridGroupGrant>;
-  /** Record the user's consent for an (untrusted) app to receive app-scoped tokens via the portal. Called from the Overworld consent screen before createPortalAuthorizationCode. Idempotent. Requires a SESSION token. */
+  /** Record the user's consent for an (untrusted) app to receive app-scoped tokens via the portal. Called from the consent screen (Studio's hosted sign-in shows one) before createPortalAuthorizationCode. Idempotent. Requires a SESSION token. */
   authorizeApp: AppAuthorizationGrant;
   /** Ban a user from a channel: their membership (or a new row, for someone not yet in it) becomes 'banned', their roles go, Buddy stops routing the channel to and from them, and joining, requesting to join and being added are refused with GROUP_MEMBER_BANNED until unbanChannelMember. Leaving or removing does not lift a ban. Requires the 'manage_members' channel permission (app admins bypass). Never the channel's owner, never yourself. */
   banChannelMember: GroupMember;
@@ -5276,7 +5324,7 @@ export type Mutation = {
   createAccessTier: AppAccessTier;
   /** Creates an actor (a player’s presence/instance in an app world) owned by the authenticated user and returns the persisted row (including the server-set `createdAt`). Requires a valid game token. If `input.avatarId` is set it must reference an avatar the caller owns (throws Unauthorized otherwise). `input.uuid` must be the 32-character ASCII actor id used on the UDP wire (NOT a hyphenated RFC-4122 UUID). */
   createActor: Actor;
-  /** Create a new app within an organization. Requires the 'manage_apps' permission on the target org (input.orgId); super admins bypass. REQUIRES A DATACENTER (input.datacenter): the app is distributed on its app_id, so all of its data lives in one datacenter, and the id is chosen at creation so that it does. Query placeableDatacenters first for the codes this deployment accepts. Creation FAILS — rather than producing an unroutable app — if the named datacenter is unknown to this deployment or holds no shards. SIDE EFFECTS: also provisions a free, open-by-default "Default" access tier granting baseline runtime permissions and notifies the game API. Elevated capabilities such as use_studio_agent are NOT granted by default and require an explicit tier grant. Slug must be unique within the org (a duplicate slug fails). New apps default to visibility=PUBLIC and status=DRAFT unless overridden in the input. */
+  /** Create a new app within an organization. Requires the 'manage_apps' permission on the target org (input.orgId); super admins bypass. REQUIRES A DATACENTER (input.datacenter): the app is distributed on its app_id, so all of its data lives in one datacenter, and the id is chosen at creation so that it does. Query placeableDatacenters first for the codes this deployment accepts. Creation FAILS — rather than producing an unroutable app — if the named datacenter is unknown to this deployment or holds no shards. SIDE EFFECTS: also provisions a free, open-by-default "Default" access tier granting baseline runtime permissions and notifies the game API. Elevated capabilities such as use_studio_agent are NOT granted by default and require an explicit tier grant. Slug must be unique within the org (a duplicate slug fails). New apps default to visibility=PUBLIC and status=LIVE unless overridden in the input. Neither setting decides who may play; the access tiers do. */
   createApp: App;
   /** Creates a new avatar owned by the authenticated user and returns it. Requires a valid game token; the new avatar is always owned by the caller. `input.name` is optional and defaults to "Default Avatar". */
   createAvatar: Avatar;
@@ -5296,7 +5344,7 @@ export type Mutation = {
   createOrgToken: OrgTokenWithSecret;
   /** Creates a new organization and makes the authenticated caller its owner (with full permissions). Requires a valid session token. Once developers accept their own documents (developerLegalDocuments not empty), refused with LEGAL_ACCEPTANCE_REQUIRED until recordDeveloperConsents, and to an account under 18 (AGE_REQUIREMENT_NOT_MET) or with no age (AGE_REQUIRED); administering an organization or app asks the same. */
   createOrganization: Organization;
-  /** Create a one-time, PKCE-bound portal authorization code (browser handoff). The Overworld identity origin (holding the SESSION token) calls this; redirect the player to the destination game carrying the code, which the game exchanges via exchangePortalCode. Refused like mintAppToken before any code exists: TERRITORY_NOT_SUPPORTED, AGE_REQUIRED, AGE_REQUIREMENT_NOT_MET, LEGAL_ACCEPTANCE_REQUIRED and EMAIL_CONFIRMATION_REQUIRED, and for a player under 18 SAFETY_LOG_REQUIRED (the app keeps no safety log) then SAFETY_MODERATOR_REQUIRED (its organization has no safety moderator), with the same neutral messages. Requires a SESSION token. */
+  /** Create a one-time, PKCE-bound portal authorization code (browser handoff). The identity origin that holds the player's SESSION token (Studio's hosted sign-in, or a native launcher) calls this; redirect the player to the destination game carrying the code, which the game exchanges via exchangePortalCode. An untrusted app needs the player's consent grant first (authorizeApp), else FORBIDDEN prefixed CONSENT_REQUIRED. Refused like mintAppToken before any code exists: TERRITORY_NOT_SUPPORTED, AGE_REQUIRED, AGE_REQUIREMENT_NOT_MET, LEGAL_ACCEPTANCE_REQUIRED and EMAIL_CONFIRMATION_REQUIRED, and for a player under 18 SAFETY_LOG_REQUIRED (the app keeps no safety log) then SAFETY_MODERATOR_REQUIRED (its organization has no safety moderator), with the same neutral messages. Requires a SESSION token. */
   createPortalAuthorizationCode: PortalAuthorizationCode;
   /** Create a team. Whether the caller may create one is governed by the per-app team policy (app_group_policies: admin | member | anyone). The caller becomes the owner and is granted a system 'leader' role holding every team permission. New teams default to the app's default membership policy unless overridden. */
   createTeam: Group;
@@ -5392,9 +5440,9 @@ export type Mutation = {
   execConsentClientMod: Scalars['Boolean']['output'];
   /** Deploy a new version of an app's ck-exec topology: the manifest and any modules it names that were not uploaded before. The execution manager checks the manifest's tree and bounds and each module's digest, stores them, and makes the version active. Running instances of the types it keeps pick it up when they next start; those of a type it drops are persisted and stopped at once, and the type leaves the switched-off list. Requires the org 'manage_compute' permission. */
   execDeploy: ExecDeployResult;
-  /** Build a mod from one ckx-sdk crate, as `execBuild` builds a developer's crates. Returns at once with the build queued; poll `execModBuildStatus`, then pass its id to `execModDeploy`. One build at a time per player. Requires the 'write_server_code' permission in the app. */
+  /** Build a mod from one ckx-sdk crate, as `execBuild` builds a developer's crates. Returns at once with the build queued; poll `execModBuildStatus`, then pass its id to `execModDeploy`. One build at a time per player. `studio` names the Crowdy Studio project and revision the crate is (yours, at a revision it has reached); the mod version deployed from the build reports them. Requires the 'write_server_code' permission in the app. */
   execModBuild: ExecBuild;
-  /** Build the CLIENT half of a mod from one crowdy-client-sdk crate: compiled for wasm32-unknown-unknown in the build sandbox, fuel-metered and optimized there, checked against the client ABI and at most 512 KiB, with its capability summary derived from the module. Returns at once with the build queued (`kind` `client`); poll `execModBuildStatus`, then attach it with `execModClientDeploy`. One build, server or CLIENT, at a time per player. Requires the 'write_client_code' permission in the app. */
+  /** Build the CLIENT half of a mod from one crowdy-client-sdk crate: compiled for wasm32-unknown-unknown in the build sandbox, fuel-metered and optimized there, checked against the client ABI and at most 512 KiB, with its capability summary derived from the module. Returns at once with the build queued (`kind` `client`); poll `execModBuildStatus`, then attach it with `execModClientDeploy`. One build, server or CLIENT, at a time per player. `studio` names the Crowdy Studio project and revision the crate is (yours, at a revision it has reached); the CLIENT half attached from the build reports them. Requires the 'write_client_code' permission in the app. */
   execModClientBuild: ExecBuild;
   /** Detach the CLIENT half of a mod on your grid, with every visitor's consent to it; the mod itself keeps running. Requires being the grid's current owner and 'write_client_code' on both the app tier and the grid. */
   execModClientDelete: Scalars['Boolean']['output'];
@@ -5484,7 +5532,7 @@ export type Mutation = {
   recordPlayerAge: User;
   /** Store acceptance of the platform's current player documents (playerLegalDocuments) and, with appId, of the app's own (appRequiredDocuments), recorded with the app and the method. acceptLegal must be true. attestAgeOfMajority must be true too while the platform still uses the age-of-majority attestation (the player then counts as 18 or older); once players give a birth date instead (recordPlayerAge) it is ignored. A refused call stores nothing (LEGAL_ACCEPTANCE_REQUIRED). Idempotent for a version already stored. Requires a session token. Gameplay tokens stay refused until this has succeeded for the current documents. */
   recordPlayerConsents: Scalars['Boolean']['output'];
-  /** Rotate the calling app token for a fresh one (same app, extended TTL) and revoke the old. Call before the current token expires to keep playing without bouncing back through the Overworld. Allowed for app-scoped tokens; re-checks entitlement. NATIVE CLIENTS: pass `currentServer` (the ip4 + clientPort serverWithLeastClients gave you) and the new token is authorized on that same Buddy -- read `authorizedServer` on the response: when it is set, keep your UDP session and just switch tokens; when it is null, call serverWithLeastClients for a fresh placement. `authorizedServer` is null when the node is gone, draining, Full, on the wrong shard -- or when it is NearCapacity / running hot and a Ready sibling has room: a refresh is the cheapest moment to rebalance a resident, so expect to be moved occasionally under load. Without `currentServer` the new token is not known to any Buddy until you call serverWithLeastClients. */
+  /** Rotate the calling app token for a fresh one (same app, extended TTL) and revoke the old. Call before the current token expires to keep playing without signing in again. Allowed for app-scoped tokens; re-checks entitlement. NATIVE CLIENTS: pass `currentServer` (the ip4 + clientPort serverWithLeastClients gave you) and the new token is authorized on that same Buddy -- read `authorizedServer` on the response: when it is set, keep your UDP session and just switch tokens; when it is null, call serverWithLeastClients for a fresh placement. `authorizedServer` is null when the node is gone, draining, Full, on the wrong shard -- or when it is NearCapacity / running hot and a Ready sibling has room: a refresh is the cheapest moment to rebalance a resident, so expect to be moved occasionally under load. Without `currentServer` the new token is not known to any Buddy until you call serverWithLeastClients. */
   refreshAppToken: AppTokenResponse;
   /** Registers a new email + password account: creates the (initially unconfirmed) account, emails a confirmation link, and returns an AuthResponse with a session `token` for immediate use (send as `Authorization: Bearer <token>`). Since 2026-11-11 a gameplay token (mintAppToken, the hosted sign-in) is refused with EMAIL_CONFIRMATION_REQUIRED until the account confirms its address (confirmEmail with the emailed link); dev and test accounts made with a provisioning token are not asked. If an account already exists for the email it is refused with extensions.code EMAIL_ALREADY_REGISTERED (409) and no session is returned: an account that already has a password is left exactly as it was (sign in, or use the emailed reset), and only a password-less account (created via magic link/social) gets the password attached pending email confirmation. It is a routine outcome rather than a fault, and it reached clients as INTERNAL_SERVER_ERROR before v1.60.0, which is why several of them match it by its message text. A browser request (Origin header present) must send acceptLegal and attestAgeOfMajority both true or it is refused with LEGAL_ACCEPTANCE_REQUIRED before an account is created; a request with no Origin may omit them, and gameplay tokens stay refused until the documents are stored. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited. */
   register: AuthResponse;
@@ -5592,11 +5640,11 @@ export type Mutation = {
   setAppReservedThroughput: SetAppReservedThroughputResult;
   /** Sets per-app hourly/daily spend caps (in cents) and returns the re-evaluated runtime state. Pass null for a limit to clear that cap. Exceeding a cap denies the app's runtime (runtimeDenialReason = spend_cap). Requires the 'manage_billing' permission on the app's org. */
   setAppSpendCaps: AppRuntimeState;
-  /** Super admin only (also requires the management API to be enabled for this deployment). Overrides an app visibility platform-wide, e.g. to take down (PRIVATE/UNLISTED) or relist (PUBLIC) an app. Throws ForbiddenException for non-super-admins or when management APIs are disabled. Throws if the app id does not exist. */
+  /** Super admin only (also requires the management API to be enabled for this deployment). Overrides an app's visibility platform-wide, to hide it from the marketplace (PRIVATE/UNLISTED) or relist it (PUBLIC). It does not stop play: players keep getting app tokens. Archiving the app (archiveApp) or suspending players' access does that. Throws ForbiddenException for non-super-admins or when management APIs are disabled. Throws if the app id does not exist. */
   setAppVisibility: App;
   /** Enables or disables off-session auto-billing for an org and updates its thresholds. When enabled and the wallet falls to lowWaterThresholdCents, the saved payment method is charged rechargeAmountCents (requires setupSharedPaymentMethod first). Pass limitCents=null for no per-period cap. Requires the 'manage_billing' org permission. */
   setAutoBilling: OrgAutoBilling;
-  /** OPERATOR ONLY. Sets a metered dimension's price, the UNIT that price is quoted in, its free allowances, or any combination, and returns the new row alongside the values that moved. THIS IS THE ONLY SANCTIONED WAY TO CHANGE A PRICE OR A UNIT: the schema seeds use ON CONFLICT DO NOTHING, so a rate reaches a tier once at install and a unit corrected in the declaration never reaches a tier that already exists. Refuses an unknown or unmetered metric (a rate for a dimension nothing meters bills nobody while appearing configured), refuses a negative price, refuses unitLabel without unitQuantity (which would restate the rate card while the arithmetic kept the old divisor), and refuses a call that would change nothing. A unit change that also moves the money needs acknowledgeRepricing: true, so restating a price and cutting it cannot be confused. priceBands sets a graduated schedule (SHARED aggregate_data_volume only; band 1 becomes priceCents) and clearPriceBands returns the dimension to one flat price; while a dimension is banded a bare priceCents or a unit change is refused. NOT RETROACTIVE: the ledger keeps the rate and allowance in force when a (payer, dimension, period) is first charged, so a change applies from each dimension's next period and nothing already charged is repriced. Takes effect within about a minute — the settlement reloads the card on every run, so no restart is needed. */
+  /** OPERATOR ONLY. Sets a metered dimension's price, the UNIT that price is quoted in, its free allowances, or any combination, and returns the new row alongside the values that moved. THIS IS THE ONLY SANCTIONED WAY TO CHANGE A PRICE OR A UNIT: the schema seeds use ON CONFLICT DO NOTHING, so a rate reaches a tier once at install and a unit corrected in the declaration never reaches a tier that already exists. Refuses an unknown or unmetered metric (a rate for a dimension nothing meters bills nobody while appearing configured), refuses a negative price, refuses unitLabel without unitQuantity (which would restate the rate card while the arithmetic kept the old divisor), and refuses a call that would change nothing. A unit change that also moves the money needs acknowledgeRepricing: true, so restating a price and cutting it cannot be confused. priceBands sets a graduated schedule (SHARED aggregate_data_volume only; band 1 becomes priceCents), priceBandBasis says whether its edges are on volume or on each connection's delivery rate (RATE takes edges in upToBitsPerSecond), and clearPriceBands returns the dimension to one flat price; while a dimension is banded a bare priceCents or a unit change is refused. NOT RETROACTIVE: the ledger keeps the rate and allowance in force when a (payer, dimension, period) is first charged, so a change applies from each dimension's next period and nothing already charged is repriced. Takes effect within about a minute — the settlement reloads the card on every run, so no restart is needed. */
   setBillingRate: SetRateCardResult;
   /** Replace a member's channel roles with the given set (not additive — roles not listed are removed). Requires the 'manage_roles' channel permission (app admins bypass). Re-pushes the member's effective send permission to Buddy so their ability to post updates immediately. */
   setChannelMemberRoles: GroupMember;
@@ -6221,12 +6269,14 @@ export type MutationExecDeployArgs = {
 export type MutationExecModBuildArgs = {
   appId: Scalars['BigInt']['input'];
   crate: ExecBuildCrateInput;
+  studio?: InputMaybe<ExecStudioSourceInput>;
 };
 
 
 export type MutationExecModClientBuildArgs = {
   appId: Scalars['BigInt']['input'];
   crate: ExecBuildCrateInput;
+  studio?: InputMaybe<ExecStudioSourceInput>;
 };
 
 
@@ -7679,7 +7729,7 @@ export type PlaceableDatacenter = {
   __typename?: 'PlaceableDatacenter';
   /** How many shards of the app colocation group this datacenter currently holds. This is the placement odds: createApp mints candidate app ids until one hashes into the requested datacenter, so a datacenter holding half the shards is satisfied in about two attempts. Zero means unplaceable. Always 0 on a deployment that distributes nothing, where the number does not exist and `placeable` is true regardless — read `placeable`, not this, to decide whether a choice is offerable. */
   appShardCount: Scalars['Int']['output'];
-  /** Datacenter code, e.g. 'or' or 'va'. Pass this verbatim as createApp's input.datacenter; it is compared lowercase. */
+  /** Datacenter code, e.g. 'va'. Pass this verbatim as createApp's input.datacenter; it is compared lowercase. */
   code: Scalars['String']['output'];
   /** HTTPS GraphQL origin clients of an app in this datacenter should use. Null only where no topology has been pushed, which on a Citus deployment means the datacenter cannot yet be reached and on a single-node one means there is nothing to route. Informational for a picker: createApp does not need it, and appDiscovery is what a client reads per app. */
   gameApiUrl: Maybe<Scalars['String']['output']>;
@@ -8093,7 +8143,7 @@ export type PortalAuthorizationCode = {
   redirectUri: Scalars['String']['output'];
 };
 
-/** Whether portaling into an app requires a consent prompt on the Overworld. */
+/** Whether portaling into an app requires a consent prompt from the identity origin (Studio’s hosted sign-in, or a launcher holding the session). */
 export type PortalConsentState = {
   __typename?: 'PortalConsentState';
   /** True if the user already has an active grant for this app. */
@@ -8102,11 +8152,17 @@ export type PortalConsentState = {
   appId: Scalars['String']['output'];
   /** App display name. */
   appName: Maybe<Scalars['String']['output']>;
-  /** True if the Overworld must show a consent screen (untrusted app, not yet granted) before creating a portal code. */
+  /** True if the identity origin must show a consent screen (untrusted app, not yet granted) before creating a portal code. */
   consentRequired: Scalars['Boolean']['output'];
-  /** True for first-party/trusted apps (consent is always skipped). */
+  /** True for a trusted app (set by Crowded Kingdoms): consent is never asked. */
   trusted: Scalars['Boolean']['output'];
 };
+
+/** What a graduated price's band edges measure. VOLUME: the period's running total, so each unit is priced at the band the total has reached (edges in upToUnits). RATE: the rate one connection was served at in one minute, so each minute's bytes are split at the edges and each part is priced at its band (edges in upToBitsPerSecond). Both are graduated: a unit's price never rises as the total or the rate grows. */
+export enum PriceBandBasis {
+  Rate = 'RATE',
+  Volume = 'VOLUME'
+}
 
 export type ProvisionManagedPlayersInput = {
   /** The organization (an org token's own, if one is used). */
@@ -8140,7 +8196,9 @@ export type PublicRateCardEntryType = {
   freeUnits: Maybe<Scalars['BigInt']['output']>;
   /** The metered dimension, e.g. "graphql_recv_ops" or "player_wasm_compute_units". This is the key your usage is aggregated under, so it is what to match a bill line against. */
   metric: Scalars['String']['output'];
-  /** The graduated price, band by band, or null when the dimension has one flat price. Egress (aggregate_data_volume) is priced this way per app per calendar month: each GB is charged at the band the app's month-to-date total has reached, and priceCents is the first band's price. */
+  /** What priceBands' edges measure: RATE (each connection's rate, minute by minute, in bits per second) or VOLUME (the app's running total for the month). Null on a flat row. */
+  priceBandBasis: Maybe<PriceBandBasis>;
+  /** The graduated price, band by band, or null when the dimension has one flat price. Egress (aggregate_data_volume) is priced this way. On a RATE schedule each connection's data out is priced minute by minute at the rate it was served at: the part of a minute below the first edge at the first band, the part between the first and second edges at the second, and so on, while data out that belongs to no connection (API responses, module egress) is priced at the first band. On a VOLUME schedule each GB is charged at the band the app's month-to-date total has reached. priceCents is the first band's price, and the free monthly allowance comes out of the first band. */
   priceBands: Maybe<Array<RateCardBandType>>;
   /** Cents charged per unitQuantity raw units, above the free allowance. Fractional values are permitted. 0 means metered but not charged. */
   priceCents: Scalars['Float']['output'];
@@ -8345,6 +8403,8 @@ export type Query = {
   crowdyStudioGitHubTree: CrowdyStudioGitHubTree;
   /** List the authenticated player’s private reusable Crowdy Studio source files in one app. Requires an app-scoped token for appId; cross-user entries are never visible, including to grid owners or Crowdy Studio operators. The bounded result defaults to 50. */
   crowdyStudioLibraryFiles: Array<CrowdyStudioLibraryFile>;
+  /** This tier’s Crowdy Studio origin and wallet page, so a Studio dock in a game needs no release when Studio moves. Public. */
+  crowdyStudioLinks: CrowdyStudioLinks;
   /** Whether this player may draft_test or deploy_live. Requires use_studio_agent and an enabled agent policy. A missing policy row, a kill switch, or a missing permission refuses. The dock calls this before either action. The Studio Test button does not. */
   crowdyStudioLiveModding: Scalars['Boolean']['output'];
   /** The caller's own model usage in this app: today's request count and rate-carded charge against the policy ceiling, the payer (PLAYER wallet by default, ORG when the app elected it, PLATFORM while platform-funded), and the most recent requests. Counts and charges only; no prompts or provider bodies exist to return. Requires 'use_studio_agent'. */
@@ -8383,6 +8443,8 @@ export type Query = {
   execModBuildStatus: ExecBuild;
   /** A served CLIENT half's module, for the browser broker. Served only to a player holding 'run_client_code' in the app, standing in the mod's grid now, who consented to it at its current hash or trusts its author at a union no wider; every refusal answers NOT_FOUND. At most 12 fetches a minute per player and mod on each API instance (RATE_LIMITED); the module never changes for its digest, so cache it. */
   execModClientArtifact: ExecModClientArtifact;
+  /** The CLIENT half starter: a crowdy-client-sdk crate (`Cargo.toml` and `src/lib.rs`) that logs, keeps a tick count and shows it on the HUD, to pass to `execModClientBuild`. Its crate is `client-half`; rename the package to the CLIENT module. Requires access to the app. */
+  execModClientStarter: ExecStarter;
   /** The app's mod marketplace: listed mods, most installed first. Requires access to the app. */
   execModListings: Array<ExecModListing>;
   /** A mod of yours' guest log lines (`ctx.log`), newest first, kept for 24 hours. */
@@ -8568,7 +8630,7 @@ export type Query = {
   playerWalletBalance: PlayerWallet;
   /** The caller's player-wallet ledger, newest first: top-ups, usage debits (per app, the app's markup included), auto-recharges, refunds, purchases, payouts and adjustments. Each usage debit names its dimension and period, and an over-charge credited back appears as an adjustment. */
   playerWalletTransactions: Array<PlayerWalletTransaction>;
-  /** Whether portaling the calling user into an app needs a consent prompt. Trusted (first-party) apps and already-granted apps return consentRequired=false. The Overworld calls this before createPortalAuthorizationCode. Requires a SESSION token. */
+  /** Whether portaling the calling user into an app needs a consent prompt. Trusted apps and already-granted apps return consentRequired=false. The identity origin (Studio's hosted sign-in, or a launcher holding the session) calls this before createPortalAuthorizationCode. Requires a SESSION token. */
   portalConsent: PortalConsentState;
   /** Lists the app-scoped quota rules explicitly configured for an app (excludes org-, tier-, and free-tier-default quotas). Use `effectiveQuota` to resolve the limit actually applied for a given metric. Requires the 'view_usage' app permission. */
   quotasForApp: Array<ServiceQuota>;
@@ -9106,6 +9168,11 @@ export type QueryExecModClientArtifactArgs = {
 };
 
 
+export type QueryExecModClientStarterArgs = {
+  appId: Scalars['BigInt']['input'];
+};
+
+
 export type QueryExecModListingsArgs = {
   appId: Scalars['BigInt']['input'];
 };
@@ -9636,16 +9703,20 @@ export type RangedChannelMessageInput = {
 export type RateCardBandInput = {
   /** Cents per the row's unitQuantity raw units inside this band: >= 0, at most six decimals, and never more than the band below it. */
   priceCents: Scalars['Float']['input'];
-  /** Exclusive upper edge of this band on the period's running total, in raw metric units, as a BigInt decimal string. Every band but the last needs one, strictly above the band before; the last band must leave it null. */
+  /** RATE schedules: exclusive upper edge of this band in bits per second, as a BigInt decimal string, under the same rules as upToUnits. A band gives one edge or the other, never both, and one schedule uses one of them throughout. */
+  upToBitsPerSecond?: InputMaybe<Scalars['BigInt']['input']>;
+  /** VOLUME schedules: exclusive upper edge of this band on the period's running total, in raw metric units, as a BigInt decimal string. Every band but the last needs one edge, strictly above the band before; the last band must leave it null. */
   upToUnits?: InputMaybe<Scalars['BigInt']['input']>;
 };
 
-/** One band of a graduated price. Each unit of the period's running total is priced at the band its position falls in, so the price of the next unit never rises as the total grows. Bands are edges on the whole total and count from zero: the free allowance fills the first band first. */
+/** One band of a graduated price. On a VOLUME schedule each unit of the period's running total is priced at the band its position falls in; on a RATE schedule each minute of one connection's data out is split at the edges, so the part below the first edge is priced at the first band, the part between the first and second edges at the second, and so on. Either way the price of the next unit never rises, and the free allowance fills the first band first. */
 export type RateCardBandType = {
   __typename?: 'RateCardBandType';
   /** Cents charged per the row's unitQuantity raw units for the units inside this band. Fractional values are permitted. */
   priceCents: Scalars['Float']['output'];
-  /** Exclusive upper edge of this band on the period's running total, in raw metric units, as a BigInt decimal string. A band covers units from the previous band's edge up to this one. Null on the last band, which has no upper edge. */
+  /** RATE schedules: exclusive upper edge of this band in bits per second, as a BigInt decimal string. A connection's data out in one calendar minute, times 8 and divided by 60 seconds, is its rate; the bytes below this edge's share of the minute (edge x 60 / 8 bytes) are priced at this band or a lower one. Null on the last band and on every band of a VOLUME schedule. */
+  upToBitsPerSecond: Maybe<Scalars['BigInt']['output']>;
+  /** VOLUME schedules: exclusive upper edge of this band on the period's running total, in raw metric units, as a BigInt decimal string. A band covers units from the previous band's edge up to this one. Null on the last band, which has no upper edge, and on every band of a RATE schedule (read upToBitsPerSecond). */
   upToUnits: Maybe<Scalars['BigInt']['output']>;
 };
 
@@ -9666,7 +9737,9 @@ export type RateCardEntryType = {
   freeUnits: Maybe<Scalars['BigInt']['output']>;
   /** The metered dimension, e.g. "graphql_recv_ops" or "player_wasm_compute_units". Matches a key the billing tick aggregates. */
   metric: Scalars['String']['output'];
-  /** The graduated price, band by band, or null when the dimension has one flat price. When present the bands price the period total and priceCents is the first band's price. aggregate_data_volume (egress) is the dimension priced this way. */
+  /** What priceBands' edges measure: VOLUME (the period's running total) or RATE (each connection's rate, minute by minute). Null on a flat row. */
+  priceBandBasis: Maybe<PriceBandBasis>;
+  /** The graduated price, band by band, or null when the dimension has one flat price. When present the bands price the period's usage on priceBandBasis and priceCents is the first band's price. aggregate_data_volume (egress) is the dimension priced this way. */
   priceBands: Maybe<Array<RateCardBandType>>;
   /** Cents charged per unitQuantity raw units, above the free allowance. Fractional values are permitted (the column is NUMERIC(20,6)). 0 means metered but not charged. */
   priceCents: Scalars['Float']['output'];
@@ -9681,7 +9754,7 @@ export type RateCardEntryType = {
 /** One field that moved, with the value it held before. Reported so a price change is auditable from the response rather than reconstructed afterwards. */
 export type RateChangeType = {
   __typename?: 'RateChangeType';
-  /** One of "priceCents", "priceBands", "unitLabel", "unitQuantity", "freeUnits", "freePeriod" or "freePerMonth". */
+  /** One of "priceCents", "priceBands", "priceBandBasis", "unitLabel", "unitQuantity", "freeUnits", "freePeriod" or "freePerMonth". */
   field: Scalars['String']['output'];
   metric: Scalars['String']['output'];
   /** The value before this call, as a decimal string; for priceBands the schedule as JSON. "none" when there was no allowance row, or no bands. */
@@ -10497,7 +10570,9 @@ export type SetRateCardInput = {
   freeUnits?: InputMaybe<Scalars['BigInt']['input']>;
   /** The metered dimension to reprice. Refused unless the platform actually meters it: a rate for an unmetered metric bills nobody while appearing configured. */
   metric: Scalars['String']['input'];
-  /** A whole graduated schedule, replacing the one the dimension holds: 1 to 10 bands, ascending edges, the last band open, no band dearer than the one below. Band 1's price becomes priceCents (supply priceCents only if it is the same). Accepted for SHARED aggregate_data_volume only. Like every price, it applies from a dimension's next period where a period has already been charged. */
+  /** What priceBands' edges measure: VOLUME (edges in upToUnits on the period's running total) or RATE (edges in upToBitsPerSecond on each connection's per-minute rate; SHARED aggregate_data_volume only). Only with priceBands, because it changes what every edge means. Omit to keep the dimension's current basis; clearPriceBands returns it to VOLUME. Like every price, it applies from a dimension's next period where a period has already been charged. */
+  priceBandBasis?: InputMaybe<PriceBandBasis>;
+  /** A whole graduated schedule, replacing the one the dimension holds: 1 to 10 bands, ascending edges (upToUnits on a VOLUME schedule, upToBitsPerSecond on a RATE one, per priceBandBasis), the last band open, no band dearer than the one below. Band 1's price becomes priceCents (supply priceCents only if it is the same). Accepted for SHARED aggregate_data_volume only. Like every price, it applies from a dimension's next period where a period has already been charged. */
   priceBands?: InputMaybe<Array<RateCardBandInput>>;
   /** New price in cents per unitQuantity raw units. Must be >= 0; 0 means meter but do not charge. Omit to leave the price unchanged. Fractional values are accepted (the column is NUMERIC(20,6)). */
   priceCents?: InputMaybe<Scalars['Float']['input']>;
@@ -10910,7 +10985,7 @@ export enum UdpErrorCode {
   PasswordTooLong = 'PASSWORD_TOO_LONG',
   /** Password failed minimum-length validation. */
   PasswordTooShort = 'PASSWORD_TOO_SHORT',
-  /** The app-scoped gameplay token has expired. Refresh it (same app, via refreshAppToken) before it lapses, or re-portal through the Overworld for a fresh token, then re-authorize the realtime session. */
+  /** The app-scoped gameplay token has expired. Refresh it (same app, via refreshAppToken) before it lapses, or sign in again for a fresh token (hosted sign-in, or mintAppToken with the session), then re-authorize the realtime session. */
   TokenExpired = 'TOKEN_EXPIRED',
   /** The caller lacks the runtime/grid permission required for this action. A message sent right after connecting or entering a new region waits for that permission to load rather than being refused, so this means the permission is missing or could not be confirmed in time; after a move or a new session, one retry is enough to tell the two apart. */
   Unauthorized = 'UNAUTHORIZED',

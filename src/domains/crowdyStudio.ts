@@ -32,6 +32,7 @@ import {
   CrowdyStudioImportSource,
   CrowdyStudioLibraryFilesDocument,
   CrowdyStudioLibrarySaveDocument,
+  CrowdyStudioLinksDocument,
   CrowdyStudioPairingPreference as CrowdyStudioPairingPreferenceEnum,
   CrowdyStudioProjectSource as CrowdyStudioProjectSourceEnum,
   CrowdyStudioProjectCreateDocument,
@@ -52,6 +53,15 @@ type ProjectSummaryDto =
 type LibraryDto =
   CrowdyStudioLibraryFilesQuery['crowdyStudioLibraryFiles'][number];
 type CommonDto = CrowdyStudioCommonFilesQuery['crowdyStudioCommonFiles'][number];
+
+/**
+ * This tier's Crowdy Studio, for a Studio dock in a game: `origin` is the only origin a dock opens
+ * a popup to, and `walletUrl` is where it sends a player when the model needs funds.
+ */
+export interface CrowdyStudioLinks {
+  origin: string;
+  walletUrl: string;
+}
 
 /**
  * Schema-coupled Game API adapter for private Crowdy Studio projects and
@@ -75,6 +85,12 @@ export class CrowdyStudioAPI implements CrowdyStudioProjectProvider {
 
   constructor(private readonly graphql: GraphQLClient) {
     this.github = new CrowdyStudioGitHubTransport(graphql);
+  }
+
+  /** This tier's Studio origin and wallet page (`crowdyStudioLinks`, public; Game API v2.73.0). */
+  async links(): Promise<CrowdyStudioLinks> {
+    const data = await this.request(CrowdyStudioLinksDocument, {});
+    return { origin: data.crowdyStudioLinks.origin, walletUrl: data.crowdyStudioLinks.walletUrl };
   }
 
   async listProjects(
