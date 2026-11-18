@@ -10,6 +10,8 @@ import type {
   ExecConnection,
   ExecLogLine,
   ExecModClientArtifactBytes,
+  ExecStarter,
+  ExecStudioSource,
 } from '../domains/exec.js';
 import { CrowdyError, CrowdyGraphQLError } from '../errors.js';
 import type { PlayerWalletAPI } from '../domains/playerWallet.js';
@@ -224,7 +226,8 @@ export type CrowdyStudioMods = Pick<
   | 'consentClientMod'
   | 'modClientArtifactBytes'
   | 'connect'
->;
+> &
+  Partial<Pick<ExecAPI, 'modClientStarter'>>;
 
 /** As ck-exec's mod names. */
 const MOD_NAME = /^[a-z0-9_-]{1,48}$/;
@@ -545,13 +548,16 @@ export class CrowdyStudioController {
     if (this.state.project && !(await this.saveNow())) {
       throw new Error('Resolve or retry the current project save before creating another');
     }
-    const modStarter = projectTargets(options.kind).includes('SERVER')
+    const targets = projectTargets(options.kind);
+    const modStarter = targets.includes('SERVER')
       ? await this.mods.modStarter(this.options.appId)
       : undefined;
+    const clientStarter = targets.includes('CLIENT') ? await this.clientStarter() : undefined;
     const input = createCrowdyStudioStarterProject({
       ...options,
       ...this.scope(),
       ...(modStarter ? { modStarter } : {}),
+      ...(clientStarter ? { clientStarter } : {}),
     });
     const project = await this.options.projectProvider.createProject(input);
     this.installProject(project);
@@ -561,6 +567,20 @@ export class CrowdyStudioController {
       saveMessage: undefined,
     });
     return project;
+  }
+
+  /**
+   * The platform's CLIENT half starter, or none (this SDK's copy) when `mods` has no
+   * `modClientStarter` or the API host's toolchain predates it (HTTP status 503).
+   */
+  private async clientStarter(): Promise<ExecStarter | undefined> {
+    if (!this.mods.modClientStarter) return undefined;
+    try {
+      return await this.mods.modClientStarter(this.options.appId);
+    } catch (error) {
+      if (error instanceof CrowdyGraphQLError && error.extensions?.httpStatus === 503) return undefined;
+      throw error;
+    }
   }
 
   async switchProject(projectId: string): Promise<void> {
@@ -1740,9 +1760,11 @@ export class CrowdyStudioController {
         message: `Submitting ${name}`,
       },
     });
+    // The saved revision these files are, so the mod and CLIENT half report it.
+    const studio = { projectId: project.projectId, revision: project.revision.id };
     return target === 'SERVER'
-      ? this.buildMod(name, files, operation)
-      : this.buildClientHalf(name, files, operation);
+      ? this.buildMod(name, files, operation, studio)
+      : this.buildClientHalf(name, files, operation, studio);
   }
 
   /**
@@ -1754,15 +1776,17 @@ export class CrowdyStudioController {
     name: string,
     files: readonly { path: string; content: string }[],
     operation: number,
+    studio: ExecStudioSource,
   ): Promise<CompiledTarget | null> {
     const mods = this.mods;
     const problem = modNameProblem(this.requireProject());
     if (problem) throw new Error(problem);
     const { appId, gridId } = this.scope();
-    const queued = await mods.modBuild(appId, {
-      name: crateName(name),
-      files: crateFiles(files),
-    });
+    const queued = await mods.modBuild(
+      appId,
+      { name: crateName(name), files: crateFiles(files) },
+      studio,
+    );
     this.checkOperation(operation);
     const built = await this.awaitModBuild('SERVER', name, queued.buildId, operation);
     if (!built) return null;
@@ -1780,6 +1804,7 @@ export class CrowdyStudioController {
     name: string,
     files: readonly { path: string; content: string }[],
     operation: number,
+    studio: ExecStudioSource,
   ): Promise<CompiledTarget | null> {
     const problem = modNameProblem(this.requireProject());
     if (problem) throw new Error(problem);
@@ -1795,10 +1820,11 @@ export class CrowdyStudioController {
       });
       return null;
     }
-    const queued = await this.mods.modClientBuild(this.options.appId, {
-      name: crateName(name),
-      files: crateFiles(files),
-    });
+    const queued = await this.mods.modClientBuild(
+      this.options.appId,
+      { name: crateName(name), files: crateFiles(files) },
+      studio,
+    );
     this.checkOperation(operation);
     const built = await this.awaitModBuild('CLIENT', name, queued.buildId, operation);
     return built ? { target: 'CLIENT', name, versionId: built.buildId } : null;

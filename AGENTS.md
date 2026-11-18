@@ -30,6 +30,18 @@ directly. So, before adding a wrapper:
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
 
+**18.33.0: a mod knows the Studio revision it runs (2026-11-18, the Unreal SDK's dev request of
+2026-11-17).** ck-api v2.73.0 takes an optional `studio: { projectId, revision }` on
+`execModBuild` / `execModClientBuild` and reports it on `ExecBuild`, `ExecMod` and `ExecModClient`
+(`ExecBuildFields`, `ExecModFields`, `ExecModClientFields` select both fields, so every mod read
+needs v2.73.0). `compileTarget` sends the open project and `revision.id` it saved. New:
+`exec.modClientStarter` (`execModClientStarter`; a 503 means the host's toolchain predates
+v1.18.0, and `createProject` then uses `clientHalfStarterFiles`, which must stay byte for byte the
+platform's `compute-toolchain/client-starters/client-half` with the package renamed) and
+`crowdyStudio.links()` (`crowdyStudioLinks`). `CrowdyStudioMods.modClientStarter` is optional.
+Tests: `test/unit/crowdy-studio-dock-platform.test.mjs` and the two cases at the end of
+`crowdy-studio-controller.test.mjs`.
+
 **18.32.0: a voxel's time is its chunk's whole-chunk write (2026-11-13, OI-2026-11-13-003).**
 ck-api v2.70.0 supersedes every edit recorded at or before a whole-chunk write (`updateChunk`,
 `world.set_chunk`) and reports it as `Chunk.voxelsUpdatedAt`; chunk-state and LOD writes move only
