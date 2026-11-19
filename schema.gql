@@ -1439,7 +1439,7 @@ type App {
   """
   runtimeStatus: String!
   """
-  When runtimeStatus is not "active", why the runtime is gated: "insufficient_funds", "spend_cap", "subscription_lapsed", or "payment_method_required" (the free-tier card requirement applies and the organization has no saved card, no spendable wallet balance and no exemption). Null when active. Historical rows may carry "free_allowance", which the gate no longer produces -- an app over its allowance with no way to pay is denied as "insufficient_funds".
+  When runtimeStatus is not "active", why the runtime is gated: "insufficient_funds", "spend_cap", "subscription_lapsed", or "payment_method_required" (the free-tier card requirement applies to the organization and it has no saved card and no exemption). Null when active. Historical rows may carry "free_allowance", which the gate no longer produces -- an app over its allowance with no way to pay is denied as "insufficient_funds".
   """
   runtimeDenialReason: String
   """
@@ -2289,7 +2289,7 @@ type AppRuntimeState {
   """Current runtime gate decision (active / grace / denied / suspended)."""
   runtimeStatus: AppRuntimeStatus!
   """
-  insufficient_funds | spend_cap | subscription_lapsed | payment_method_required when not active. payment_method_required: the free-tier card requirement (freeTierCardRequirement) applies, and the organization has no saved card, no spendable wallet balance and no exemption. Historical rows may carry free_allowance, which the gate no longer produces.
+  insufficient_funds | spend_cap | subscription_lapsed | payment_method_required when not active. payment_method_required: the free-tier card requirement (freeTierCardRequirement) applies to the organization, and it has no saved card and no exemption. Historical rows may carry free_allowance, which the gate no longer produces.
   """
   runtimeDenialReason: String
   """Owning org wallet balance, in cents."""
@@ -2699,39 +2699,41 @@ type AllowancePoolSettings {
 }
 
 """
-The free-tier card requirement on this tier: from requiredFrom, an organization's apps use the free allowance only while the organization has a saved card (saving one charges nothing), a spendable wallet balance or an exemption; otherwise they are paused with runtimeDenialReason payment_method_required. Organizations only; player wallets are not asked.
+The free-tier card requirement on this tier: from requiredFrom, an organization's apps run only while the organization has a saved card (saving one charges nothing) or an exemption, whatever its wallet holds; otherwise they are paused with runtimeDenialReason payment_method_required. An organization created before requiredFrom is asked existingOrganizationGraceDays later. Organizations only; player wallets are not asked.
 """
 type FreeTierCardRequirement {
   """
-  The instant the requirement applies from. Null while it is off on this tier.
+  The instant the requirement applies from, for an organization created from then on. Null while it is off on this tier.
   """
   requiredFrom: DateTime
-  """Whether the requirement applies now."""
+  """
+  Whether the requirement applies now to an organization created from requiredFrom on.
+  """
   requiredNow: Boolean!
+  """
+  How many days after requiredFrom the requirement applies to an organization created before it.
+  """
+  existingOrganizationGraceDays: Int!
 }
 
 """
-Where one organization stands against the free-tier card requirement. met is what the usage gate asks: a saved card, a spendable wallet balance, or an exemption (CK's own organizations, and billing-exempt ones).
+Where one organization stands against the free-tier card requirement. met is what the usage gate asks: a saved card or an exemption (CK's own organizations, and billing-exempt ones). Wallet funds do not count.
 """
 type OrgCardRequirement {
   """
-  The instant the requirement applies from on this tier; null while it is off.
+  The instant the requirement applies to this organization: the tier's start, or the start plus existingOrganizationGraceDays for an organization created before it. Null while it is off.
   """
   requiredFrom: DateTime
-  """Whether the requirement applies now."""
+  """Whether the requirement applies to this organization now."""
   requiredNow: Boolean!
   """The organization has an active saved card (orgPaymentMethods)."""
   cardOnFile: Boolean!
-  """
-  The organization wallet holds a spendable balance (balance less holds, above zero).
-  """
-  walletFunded: Boolean!
   """
   The organization is exempt: on the exemption list or exempt from billing.
   """
   exempt: Boolean!
   """
-  cardOnFile, walletFunded or exempt. While the requirement applies and this is false, the organization's apps are paused once they use the free allowance (payment_method_required).
+  cardOnFile or exempt. While the requirement applies and this is false, the organization's apps are paused (payment_method_required).
   """
   met: Boolean!
 }
@@ -8147,11 +8149,11 @@ type Query {
   """
   allowancePool: AllowancePoolSettings!
   """
-  PUBLIC: no authentication required. Whether this tier asks an organization for a saved card before its apps use the free allowance, and from when. Read-only.
+  PUBLIC: no authentication required. Whether this tier asks an organization for a saved card before its apps run, from when, and how much later for an organization created before then. Read-only.
   """
   freeTierCardRequirement: FreeTierCardRequirement!
   """
-  Where an organization stands against the free-tier card requirement: whether it applies, and whether the organization has a saved card, a spendable wallet balance or an exemption. Studio reads it to ask for a card. Requires the 'view_billing' org permission.
+  Where an organization stands against the free-tier card requirement: from when it applies to this organization, and whether the organization has a saved card or an exemption. Studio reads it to ask for a card. Requires the 'view_billing' org permission.
   """
   orgCardRequirement(
     """Organization id (BigInt)."""
@@ -10484,7 +10486,7 @@ type Mutation {
   """
   setAllowancePool(input: SetAllowancePoolInput!): AllowancePoolSettings! @requiresPermission(scope: "operator", permission: "is_operator")
   """
-  Operator only. Sets when the free-tier card requirement applies on this tier, or switches it off, and records the change in billing_rate_changes (scope SHARED, metric free_tier_card). The usage gate applies it within about a minute.
+  Operator only. Sets when the free-tier card requirement applies on this tier (or switches it off) and the grace for organizations created before then, and records each change in billing_rate_changes (scope SHARED, metric free_tier_card). The usage gate applies it within about a minute.
   """
   setFreeTierCardRequirement(input: SetFreeTierCardRequirementInput!): FreeTierCardRequirement! @requiresPermission(scope: "operator", permission: "is_operator")
   """
@@ -12770,14 +12772,18 @@ input SetAllowancePoolInput {
   reason: String!
 }
 
-"""A change to the free-tier card requirement: a start instant, or off."""
+"""
+A change to the free-tier card requirement: its start, off, or the grace for organizations created before the start.
+"""
 input SetFreeTierCardRequirementInput {
-  """
-  The instant the requirement applies from. Omit with off: true to switch it off.
-  """
+  """The instant the requirement applies from. Not with off: true."""
   requiredFrom: DateTime
   """True switches the requirement off. Not with requiredFrom."""
   off: Boolean
+  """
+  Days after requiredFrom that the requirement applies to an organization created before it, 0 to 365. Omit to leave unchanged (30 by default).
+  """
+  existingOrganizationGraceDays: Int
   """Why, for the audit (billing_rate_changes)."""
   reason: String!
 }
