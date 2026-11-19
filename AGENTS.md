@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.25.0** (18.0.0 was published only as
+**Current package:** `package.json` is **18.34.0** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -29,6 +29,14 @@ directly. So, before adding a wrapper:
 - 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
+
+**18.34.0: a full channel or team names its cap; the card requirement takes a card alone
+(2026-11-19, cks-biz BIZ-031 and BIZ-028).** ck-api v2.77.0 refuses a join, an add (including
+approving a request) or a creation past `maxMembers` / `maxGroupsPerUser` with
+`GROUP_LIMIT_REACHED` (409): `groupLimitReachedOf` returns `{ limit, max }`
+(`GROUP_LIMIT_REACHED_CODE`). `AppPauseReason` names `payment_method_required` (#337, unreleased
+before this), which from v2.77.0 wallet funds no longer meet. Schema at cks-game-api
+`dev/v2.77.0`. Tests: the `GROUP_LIMIT_REACHED` case in `test/unit/refusals.test.mjs`.
 
 **18.33.0: a mod knows the Studio revision it runs (2026-11-18, the Unreal SDK's dev request of
 2026-11-17).** ck-api v2.73.0 takes an optional `studio: { projectId, revision }` on

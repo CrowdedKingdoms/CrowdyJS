@@ -992,7 +992,7 @@ export type App = {
   reservedGraphqlOpsPerSec: Scalars['BigInt']['output'];
   /** Reserved realtime (UDP) capacity in bytes/s. Guarantees a minimum the platform provisions for you; it is not a limit on what you may send. Billed monthly whether or not used, IN ADDITION TO metered usage -- a reservation buys capacity, not volume, so reserving 5 MB/s does not make the first 5 MB/s free. Independent of reservedGraphqlOpsPerSec. 0 = none. */
   reservedUdpBytesPerSec: Scalars['BigInt']['output'];
-  /** When runtimeStatus is not "active", why the runtime is gated: "insufficient_funds", "spend_cap", or "subscription_lapsed". Null when active. Historical rows may carry "free_allowance", which the gate no longer produces -- an app over its allowance with no way to pay is denied as "insufficient_funds". */
+  /** When runtimeStatus is not "active", why the runtime is gated: "insufficient_funds", "spend_cap", "subscription_lapsed", or "payment_method_required" (the free-tier card requirement applies to the organization and it has no saved card and no exemption). Null when active. Historical rows may carry "free_allowance", which the gate no longer produces -- an app over its allowance with no way to pay is denied as "insufficient_funds". */
   runtimeDenialReason: Maybe<Scalars['String']['output']>;
   /** Shared-environment runtime gate, mirrored to the game DB and enforced by game-api + Buddy: "active", "grace", "denied", or "suspended". */
   runtimeStatus: Scalars['String']['output'];
@@ -1244,7 +1244,7 @@ export type AppRequiredDocumentInput = {
 /** The app's runtime gate as a player's client may read it. When status is not ACTIVE the app's realtime traffic and hubs are paused: replication delivers nothing and refuses sends with APP_PAUSED, and hub calls are refused. Clients should tell the player the world is paused rather than show an empty one. Readable with the player's own app token; carries no billing figures. */
 export type AppRuntimeGate = {
   __typename?: 'AppRuntimeGate';
-  /** Why the app is paused: insufficient_funds, spend_cap or subscription_lapsed. Null while ACTIVE. */
+  /** Why the app is paused: insufficient_funds, spend_cap, subscription_lapsed or payment_method_required. Null while ACTIVE. */
   reason: Maybe<Scalars['String']['output']>;
   /** ACTIVE when the app runs; anything else means paused. */
   status: AppRuntimeStatus;
@@ -1265,7 +1265,7 @@ export type AppRuntimeState = {
   deploymentTarget: AppDeploymentTarget;
   /** Per-app hourly spend cap in cents (set via setAppSpendCaps). Null = no cap. */
   hourlyLimitCents: Maybe<Scalars['BigInt']['output']>;
-  /** insufficient_funds | spend_cap | subscription_lapsed when not active. Historical rows may carry free_allowance, which the gate no longer produces. */
+  /** insufficient_funds | spend_cap | subscription_lapsed | payment_method_required when not active. payment_method_required: the free-tier card requirement (freeTierCardRequirement) applies to the organization, and it has no saved card and no exemption. Historical rows may carry free_allowance, which the gate no longer produces. */
   runtimeDenialReason: Maybe<Scalars['String']['output']>;
   /** Current runtime gate decision (active / grace / denied / suspended). */
   runtimeStatus: AppRuntimeStatus;
@@ -1700,6 +1700,19 @@ export type BuddyLiveRates = {
   serverId: Scalars['String']['output'];
   /** Timestamp of the heartbeat these rates came from. */
   updatedAt: Scalars['DateTime']['output'];
+};
+
+/** An organization the free-tier card requirement never refuses. */
+export type CardRequirementExemption = {
+  __typename?: 'CardRequirementExemption';
+  createdAt: Scalars['DateTime']['output'];
+  /** The operator who exempted it. */
+  exemptedBy: Maybe<Scalars['BigInt']['output']>;
+  orgId: Scalars['BigInt']['output'];
+  /** The organization's name. */
+  orgName: Maybe<Scalars['String']['output']>;
+  /** Why it is exempt. */
+  reason: Scalars['String']['output'];
 };
 
 /** Channel audio from another member of a channel you belong to (party or guild voice), delivered over the udpNotifications subscription wherever you are. The payload is opaque to the server: your app (or an SDK voice helper) defines its format and codec. */
@@ -3881,7 +3894,7 @@ export type ExecAppStatus = {
   __typename?: 'ExecAppStatus';
   /** The active version; null before the first deploy. */
   activeVersion: Maybe<Scalars['Int']['output']>;
-  /** Why the app is paused: insufficient_funds, spend_cap, subscription_lapsed or compute_budget. Null when it is not paused (or the manager predates reasons). */
+  /** Why the app is paused: insufficient_funds, spend_cap, subscription_lapsed, payment_method_required or compute_budget. Null when it is not paused (or the manager predates reasons). */
   budgetPauseReason: Maybe<Scalars['String']['output']>;
   /** Paused while the app's runtime gate is not active (no funds, a spend cap, a lapsed subscription) or it is over its compute budget; it resumes by itself once the cause clears. */
   budgetPaused: Scalars['Boolean']['output'];
@@ -4379,6 +4392,17 @@ export type FreePlayWindowInfo = {
   isCurrentlyActive: Scalars['Boolean']['output'];
   /** ISO-8601 start time of the next free-play window, or null if none. */
   nextWindowStart: Maybe<Scalars['String']['output']>;
+};
+
+/** The free-tier card requirement on this tier: from requiredFrom, an organization's apps run only while the organization has a saved card (saving one charges nothing) or an exemption, whatever its wallet holds; otherwise they are paused with runtimeDenialReason payment_method_required. An organization created before requiredFrom is asked existingOrganizationGraceDays later. Organizations only; player wallets are not asked. */
+export type FreeTierCardRequirement = {
+  __typename?: 'FreeTierCardRequirement';
+  /** How many days after requiredFrom the requirement applies to an organization created before it. */
+  existingOrganizationGraceDays: Scalars['Int']['output'];
+  /** The instant the requirement applies from, for an organization created from then on. Null while it is off on this tier. */
+  requiredFrom: Maybe<Scalars['DateTime']['output']>;
+  /** Whether the requirement applies now to an organization created from requiredFrom on. */
+  requiredNow: Scalars['Boolean']['output'];
 };
 
 /** Startup contract for browser game clients. Fetch this after login to initialize protocol/version checks and UDP proxy state in one round trip. */
@@ -5669,6 +5693,8 @@ export type Mutation = {
   setCrowdyStudioAgentPolicy: CrowdyStudioAgentPolicy;
   /** Sets the per-user early-access override flag, forcing early access on or off regardless of the global free-play window. Requires a super-admin bearer game token (and the management API enabled). */
   setEarlyAccessOverride: User;
+  /** Operator only. Sets when the free-tier card requirement applies on this tier (or switches it off) and the grace for organizations created before then, and records each change in billing_rate_changes (scope SHARED, metric free_tier_card). The usage gate applies it within about a minute. */
+  setFreeTierCardRequirement: FreeTierCardRequirement;
   /** Open a grid to every player: replace the permission keys it grants each player with active access to the app (writes the `grid_open_permissions` input table), then recompute the grid's materialized effective ACL for all of them. The most specific grid covering a chunk decides a voxel write there, so a zone inside the world grid that everyone may build in must grant `update_voxel_data` itself. The grid's limits still cap these keys; players who get access later receive them when they connect. Pass an empty array to close the grid. Refuses the app's world grid (already open), the four player-code keys, and a 33rd open grid in one app. Requires app-admin ('manage_apps'). */
   setGridOpenPermissions: GridOpenPermissions;
   /** Replace the whitelist of permission keys allowed on a grid (writes the `grid_permission_limits` input table), then recompute the grid's materialized effective ACL so any keys no longer on the whitelist are dropped for all users. Pass an empty array to remove all limits. Requires app-admin ('manage_apps'). DESTRUCTIVE: narrowing the whitelist can strip effective permissions from existing users on the grid. */
@@ -5687,6 +5713,8 @@ export type Mutation = {
   setOperator: User;
   /** OPERATOR ONLY. Sets or clears an organization billing exemption. When true, org-wallet debits and money-driven runtime denials are skipped; usage is still metered and every waived amount is written to org_billing_waivers. Does not waive player-wallet charges, failure breakers, or the per-minute compute budget. reason is required when setting true. SIDE EFFECT: re-evaluates the runtime gate for every shared app in the org, so clearing the exemption re-denies immediately instead of waiting for the next hourly tick. */
   setOrgBillingExempt: BillingExemptOrgType;
+  /** Operator only. Exempts an organization from the free-tier card requirement, or ends its exemption, records the change in billing_rate_changes (scope SHARED, metric free_tier_card), and re-evaluates the organization's apps at once. For CK's own organizations; reason is required. */
+  setOrgCardRequirementExempt: OrgCardRequirement;
   /** OPERATOR ONLY. Enable or disable an organization's org-managed players and set its limits. Disabling refuses new sign-ins; sessions already running last until they lapse (end them with endManagedPlayerSessions). Enabling does not accept the addendum: an admin of the organization does that (acceptManagedPlayerTerms). */
   setOrgManagedPlayerSettings: OrgManagedPlayerSettings;
   /** Super admin only. Freeze ('frozen') or unfreeze ('active') an organization platform-wide. A FROZEN organization grants its members NO org permission (super admins excepted, so it is reversible): they cannot spend its wallet, create or manage apps, or change members, and every such refusal names the freeze; its API tokens stop authenticating; the org itself still resolves by id and slug so Studio can show the state. Takes exactly 'active' or 'frozen'; 'retired' is refused in either direction — retirement is retireOrganization, which writes a tombstone. */
@@ -6900,6 +6928,11 @@ export type MutationSetEarlyAccessOverrideArgs = {
 };
 
 
+export type MutationSetFreeTierCardRequirementArgs = {
+  input: SetFreeTierCardRequirementInput;
+};
+
+
 export type MutationSetGridOpenPermissionsArgs = {
   input: SetGridOpenPermissionsInput;
 };
@@ -6943,6 +6976,13 @@ export type MutationSetOperatorArgs = {
 
 
 export type MutationSetOrgBillingExemptArgs = {
+  exempt: Scalars['Boolean']['input'];
+  orgId: Scalars['BigInt']['input'];
+  reason: Scalars['String']['input'];
+};
+
+
+export type MutationSetOrgCardRequirementExemptArgs = {
   exempt: Scalars['Boolean']['input'];
   orgId: Scalars['BigInt']['input'];
   reason: Scalars['String']['input'];
@@ -7354,6 +7394,21 @@ export type OrgAutoBilling = {
   period: Scalars['String']['output'];
   /** Amount to top up the wallet by on each auto-recharge, in cents. */
   rechargeAmountCents: Scalars['BigInt']['output'];
+};
+
+/** Where one organization stands against the free-tier card requirement. met is what the usage gate asks: a saved card or an exemption (CK's own organizations, and billing-exempt ones). Wallet funds do not count. */
+export type OrgCardRequirement = {
+  __typename?: 'OrgCardRequirement';
+  /** The organization has an active saved card (orgPaymentMethods). */
+  cardOnFile: Scalars['Boolean']['output'];
+  /** The organization is exempt: on the exemption list or exempt from billing. */
+  exempt: Scalars['Boolean']['output'];
+  /** cardOnFile or exempt. While the requirement applies and this is false, the organization's apps are paused (payment_method_required). */
+  met: Scalars['Boolean']['output'];
+  /** The instant the requirement applies to this organization: the tier's start, or the start plus existingOrganizationGraceDays for an organization created before it. Null while it is off. */
+  requiredFrom: Maybe<Scalars['DateTime']['output']>;
+  /** Whether the requirement applies to this organization now. */
+  requiredNow: Scalars['Boolean']['output'];
 };
 
 /** An organization's org-managed player settings, and where it stands on the Org-Managed Players Addendum. A Crowded Kingdoms operator sets the settings; an admin of the organization accepts the addendum. */
@@ -8388,6 +8443,8 @@ export type Query = {
   billingRateCard: Array<RateCardEntryType>;
   /** Amounts the platform could not bill this org for, with the reason (an exempt org, a provider with no generation record, a process that died with metered usage in memory). Requires 'view_billing' on the org. */
   billingWriteOffs: Array<BillingWriteOff>;
+  /** Operator only. The organizations the free-tier card requirement never refuses. Billing-exempt organizations are not listed: the usage gate never refuses them for money. */
+  cardRequirementExemptions: Array<CardRequirementExemption>;
   /** Fetch one channel by id. Errors if the id is not a channel. */
   channel: Group;
   /** List the members of a channel (the subscriber set, including pending requests), each with their status and roles. */
@@ -8502,6 +8559,8 @@ export type Query = {
   exportPlayerData: PlayerDataExport;
   /** Reports whether a free-play window is active now, a human-readable schedule description, and the ISO-8601 start of the next window. PUBLIC: no authentication required. Takes no arguments; computed from server config and the current clock. */
   freePlayWindowInfo: FreePlayWindowInfo;
+  /** PUBLIC: no authentication required. Whether this tier asks an organization for a saved card before its apps run, from when, and how much later for an organization created before then. Read-only. */
+  freeTierCardRequirement: FreeTierCardRequirement;
   /** Single startup payload for browser game clients: the authenticated user, server/min-client version requirements, current UDP proxy status, realtime protocol details (subprotocol + subscription name), and the spatial send limits/constants (maxReplicationDistance, maxDecayRate, sequenceNumberModulo). Requires a bearer game token. Read-only: does not open a UDP proxy session. Call this once after login to initialize a play session. */
   gameClientBootstrap: GameClientBootstrap;
   /** Returns the single elected host user for an app (game). Deterministic across all game-api replicas behind the LB: the user whose earliest still-connected actor row was created first wins, with a uuid tiebreaker. Returns null when no actors exist for the app. Stale actors (no recent actorHeartbeat) are excluded once HOST_ACTOR_FRESHNESS_SECONDS is enabled. Clients should poll; there is no host-change subscription in v1. */
@@ -8608,6 +8667,8 @@ export type Query = {
   nearbyGrids: Array<NearbyGrid>;
   /** An org's off-session auto-billing configuration (enabled flag, recharge amount, low-water threshold, per-period cap, and last error). Requires the 'view_billing' org permission. */
   orgAutoBilling: OrgAutoBilling;
+  /** Where an organization stands against the free-tier card requirement: from when it applies to this organization, and whether the organization has a saved card or an exemption. Studio reads it to ask for a card. Requires the 'view_billing' org permission. */
+  orgCardRequirement: OrgCardRequirement;
   /**
    * An org's free shared-app slot quota and how much of it is used. The slots are a count only: they never change what is free or billed, and apps beyond the quota still publish. Caller must be a member of the org.
    * @deprecated Free app slots are retired. From allowancePool.effectiveFrom an organization's apps share one free allowance a month; read orgUsageProjection.allowancePools. Before then each app has its own allowance whatever its slot.
@@ -9478,6 +9539,11 @@ export type QueryNearbyGridsArgs = {
 
 
 export type QueryOrgAutoBillingArgs = {
+  orgId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryOrgCardRequirementArgs = {
   orgId: Scalars['BigInt']['input'];
 };
 
@@ -10525,6 +10591,18 @@ export type SetCrowdyStudioProviderConsentInput = {
   appId: Scalars['BigInt']['input'];
   /** True to accept, false to revoke. */
   consented: Scalars['Boolean']['input'];
+};
+
+/** A change to the free-tier card requirement: its start, off, or the grace for organizations created before the start. */
+export type SetFreeTierCardRequirementInput = {
+  /** Days after requiredFrom that the requirement applies to an organization created before it, 0 to 365. Omit to leave unchanged (30 by default). */
+  existingOrganizationGraceDays?: InputMaybe<Scalars['Int']['input']>;
+  /** True switches the requirement off. Not with requiredFrom. */
+  off?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Why, for the audit (billing_rate_changes). */
+  reason: Scalars['String']['input'];
+  /** The instant the requirement applies from. Not with off: true. */
+  requiredFrom?: InputMaybe<Scalars['DateTime']['input']>;
 };
 
 /** Set the permission keys a grid grants every player with active access to the app (writes the grid_open_permissions input table): an open build area, a public arena. */
