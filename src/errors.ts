@@ -399,6 +399,11 @@ export const ACCOUNT_BLOCKED_CODE = 'ACCOUNT_BLOCKED';
  */
 export const GROUP_MEMBER_BANNED_CODE = 'GROUP_MEMBER_BANNED';
 /**
+ * `extensions.code` for "a channel or team cap refuses this" (HTTP 409), on a join, an add or a
+ * creation (ck-api v2.77.0); see {@link groupLimitReachedOf}.
+ */
+export const GROUP_LIMIT_REACHED_CODE = 'GROUP_LIMIT_REACHED';
+/**
  * `extensions.code` for "an org-managed player cannot do this" (HTTP 403): it has no wallet,
  * and its mods are refused where its organization has not switched them on for the app; see
  * {@link managedPlayerNotAllowedOf}.
@@ -503,12 +508,16 @@ export interface MissingLegalDocument {
 
 /**
  * Why an app is paused, as `extensions.reason` on `APP_PAUSED` and
- * `AppRuntimeGate.reason` carry it. Open union: the server may add one.
+ * `AppRuntimeGate.reason` carry it. `payment_method_required` (ck-api v2.76.0): the
+ * environment asks an organization for a saved card before its apps run, and the app's
+ * organization has none and no exemption (from v2.77.0 wallet funds do not count). Open union:
+ * the server may add one.
  */
 export type AppPauseReason =
   | 'insufficient_funds'
   | 'spend_cap'
   | 'subscription_lapsed'
+  | 'payment_method_required'
   | (string & {});
 
 /** The first error entry carrying `code`, from an error or a raw payload. */
@@ -581,6 +590,25 @@ export function accountBlockedOf(value: unknown): { blockedUntil: string | null 
 /** Whether an error is a `GROUP_MEMBER_BANNED` refusal (HTTP 403); only an unban lifts it. */
 export function groupMemberBannedOf(value: unknown): boolean {
   return errorWithCode(value, GROUP_MEMBER_BANNED_CODE) !== null;
+}
+
+/**
+ * A `GROUP_LIMIT_REACHED` refusal (HTTP 409), or `null`: the app's policy for the group type
+ * (`channelPolicy` / `teamPolicy`) caps it. `limit` is `maxMembers` (the group is full) or
+ * `maxGroupsPerUser` (the user is in as many groups of the type as the app allows), and `max`
+ * the cap; either is `null` when the server did not say. Not fixed by retrying: wait for a member
+ * to leave, leave a group, or raise the cap.
+ */
+export function groupLimitReachedOf(
+  value: unknown,
+): { limit: 'maxMembers' | 'maxGroupsPerUser' | (string & {}) | null; max: number | null } | null {
+  const entry = errorWithCode(value, GROUP_LIMIT_REACHED_CODE);
+  if (!entry) return null;
+  const { limit, max } = entry.extensions ?? {};
+  return {
+    limit: typeof limit === 'string' && limit.length > 0 ? limit : null,
+    max: typeof max === 'number' && Number.isFinite(max) ? max : null,
+  };
 }
 
 /**

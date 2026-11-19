@@ -46,6 +46,11 @@ test('appPausedOf reads the reason, also from a later entry', () => {
   ]);
   assert.deepEqual(errors.appPausedOf(error), { reason: 'spend_cap' });
   assert.deepEqual(errors.appPausedOf(gqlError({ code: 'APP_PAUSED' })), { reason: null });
+  // ck-api v2.76.0: the free-tier card requirement's reason reads like any other.
+  assert.deepEqual(
+    errors.appPausedOf(gqlError({ code: 'APP_PAUSED', reason: 'payment_method_required' })),
+    { reason: 'payment_method_required' },
+  );
   assert.equal(errors.appPausedOf(gqlError({ code: 'APP_UNAVAILABLE' })), null);
 });
 
@@ -107,4 +112,23 @@ test('ACCOUNT_BLOCKED and GROUP_MEMBER_BANNED are read from an error or a raw pa
   assert.equal(accountBlockedOf({ extensions: { code: 'FORBIDDEN' } }), null);
   assert.equal(groupMemberBannedOf({ extensions: { code: 'GROUP_MEMBER_BANNED' } }), true);
   assert.equal(groupMemberBannedOf({ extensions: { code: 'ACCESS_SUSPENDED' } }), false);
+});
+
+test('GROUP_LIMIT_REACHED names the cap, from an error or a raw payload', async () => {
+  const { groupLimitReachedOf, GROUP_LIMIT_REACHED_CODE, CrowdyGraphQLError } = await import('../../dist/index.js');
+  assert.equal(GROUP_LIMIT_REACHED_CODE, 'GROUP_LIMIT_REACHED');
+  assert.deepEqual(
+    groupLimitReachedOf({ extensions: { code: 'GROUP_LIMIT_REACHED', limit: 'maxMembers', max: 50 } }),
+    { limit: 'maxMembers', max: 50 },
+  );
+  assert.deepEqual(
+    groupLimitReachedOf(
+      new CrowdyGraphQLError([
+        { message: 'refused', extensions: { code: 'GROUP_LIMIT_REACHED', limit: 'maxGroupsPerUser', max: 5 } },
+      ]),
+    ),
+    { limit: 'maxGroupsPerUser', max: 5 },
+  );
+  assert.deepEqual(groupLimitReachedOf({ extensions: { code: 'GROUP_LIMIT_REACHED' } }), { limit: null, max: null });
+  assert.equal(groupLimitReachedOf({ extensions: { code: 'GROUP_MEMBER_BANNED' } }), null);
 });
