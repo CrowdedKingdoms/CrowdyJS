@@ -911,6 +911,17 @@ export enum AllowancePeriod {
   Month = 'MONTH'
 }
 
+/** The organization allowance pool: from the first calendar month starting on or after effectiveFrom, an organization's apps share one free allowance per meter, factor times one app's allowance on the rate card, instead of each app having its own. One app may use the whole pool. */
+export type AllowancePoolSettings = {
+  __typename?: 'AllowancePoolSettings';
+  /** The pool applies to calendar months starting on or after this instant; earlier months keep an allowance per app. */
+  effectiveFrom: Scalars['DateTime']['output'];
+  /** How many apps' allowances the pool is worth: each meter's pool is this times the rate card's allowance for one app. */
+  factor: Scalars['Int']['output'];
+  /** Whether the current calendar month is pooled on this tier (its start is on or after effectiveFrom). */
+  pooledNow: Scalars['Boolean']['output'];
+};
+
 /** A publishable application (game/experience) owned by an organization. Its discoverability is controlled by visibility and its lifecycle by status. */
 export type App = {
   __typename?: 'App';
@@ -1329,6 +1340,8 @@ export type AppTokenResponse = {
 /** End-of-month egress projection for one shared app from linear extrapolation of calendar-month usage so far. */
 export type AppUsageProjection = {
   __typename?: 'AppUsageProjection';
+  /** True when this month's free allowance is the organization's pool, shared by all its apps (allowancePool), rather than this app's own. */
+  allowancePooled: Scalars['Boolean']['output'];
   /** App id (as a string). */
   appId: Scalars['String']['output'];
   /** Egress bytes recorded so far this calendar month (from app_monthly_egress). Egress only -- bytes the service delivered to clients, measured as wire bytes at the network interface. Ingress is metered separately and does not count toward this figure or the allowance it is compared against. */
@@ -1341,7 +1354,7 @@ export type AppUsageProjection = {
   dataOutRateBands: Maybe<Array<DataOutRateBand>>;
   /** Fractional UTC days elapsed since the calendar month started. */
   daysElapsed: Scalars['Float']['output'];
-  /** Per-app free monthly egress allowance in bytes (5 decimal GB). */
+  /** This app's free monthly egress allowance in bytes: 5 decimal GB of its own, or, in a month its organization's allowance is pooled (allowancePooled), what it holds of the pool plus what the pool has left. */
   freeAllowanceBytes: Scalars['String']['output'];
   /** Stored input logs this calendar month so far, in byte-hours (input_log_storage_byte_hours, which has no free allowance). Recordings keep accruing after replay logging is turned off, until they age out at the end of the retention; 0 when nothing was held this month. */
   inputLogByteHours: Scalars['String']['output'];
@@ -2376,7 +2389,7 @@ export type CreateChannelInput = {
 };
 
 export type CreateCheckoutInput = {
-  /** Charge amount in minor currency units (cents) of `currency`, as a BigInt decimal string. Required for ORG_WALLET_TOPUP. */
+  /** Charge amount in minor currency units (cents) of `currency`, as a BigInt decimal string. Required for ORG_WALLET_TOPUP and PLAYER_WALLET_TOPUP, and at least the wallet’s smallest top-up: 1000 ($10) for ORG_WALLET_TOPUP and 500 ($5) for PLAYER_WALLET_TOPUP (walletTopUpMinimums); less is refused with TOP_UP_BELOW_MINIMUM. */
   amountCents?: InputMaybe<Scalars['BigInt']['input']>;
   /** Target app (BigInt as a decimal string). Required for APP_ACCESS_PURCHASE and SHARED_APP_SUBSCRIPTION. */
   appId?: InputMaybe<Scalars['BigInt']['input']>;
@@ -5332,7 +5345,7 @@ export type Mutation = {
   createChannel: Group;
   /** Create a custom (non-system) channel role granting the given channel permission keys (e.g. send_messages for posting rights). Requires the 'manage_roles' channel permission (app admins bypass). */
   createChannelRole: GroupRole;
-  /** Creates a Checkout row, opens a hosted payment session with the selected provider, and returns the row with `externalUrl` set — redirect the user there to pay. Status starts PENDING and is reconciled to COMPLETED/FAILED later via provider webhooks (this call does not itself capture funds). The side effect applied on completion depends on `purpose` (e.g. ORG_WALLET_TOPUP credits the org wallet, APP_ACCESS_PURCHASE grants app access). Requires an authenticated user; ORG_WALLET_TOPUP additionally requires the 'manage_billing' org permission. Purposes DONATION and PROPERTY_TOKENS are rejected. Pass `input.idempotencyKey` to make retries safe (a replay returns the first checkout instead of opening a second provider session). */
+  /** Creates a Checkout row, opens a hosted payment session with the selected provider, and returns the row with `externalUrl` set — redirect the user there to pay. Status starts PENDING and is reconciled to COMPLETED/FAILED later via provider webhooks (this call does not itself capture funds). The side effect applied on completion depends on `purpose` (e.g. ORG_WALLET_TOPUP credits the org wallet, APP_ACCESS_PURCHASE grants app access). Requires an authenticated user; ORG_WALLET_TOPUP additionally requires the 'manage_billing' org permission. A wallet top-up below the wallet's smallest top-up ($10 for ORG_WALLET_TOPUP, $5 for PLAYER_WALLET_TOPUP; walletTopUpMinimums) is refused with TOP_UP_BELOW_MINIMUM. Purposes DONATION and PROPERTY_TOKENS are rejected. Pass `input.idempotencyKey` to make retries safe (a replay returns the first checkout instead of opening a second provider session). */
   createCheckout: Checkout;
   /** Create a grid: a named 3D box of chunks that runtime/world (voxel) permissions are scoped to. The box must fit within one of the app's grid assignments (its buildable regions); it MAY be nested inside a broader containing grid such as the open-by-default world grid, but must not partially overlap a peer grid. Requires app-admin ('manage_apps'). Returns a hybrid response — on success `grid` is populated and `error` is NO_ERROR; on failure `grid` is null and `error` is a UDP-style error code (e.g. NO_MATCHING_GRID_ASSIGNMENT, GRID_OUTSIDE_ASSIGNMENT, GRID_OVERLAPS_EXISTING, GRID_ALREADY_EXISTS). */
   createGrid: CreateGridResponse;
@@ -5622,6 +5635,8 @@ export type Mutation = {
   sendVideoPacket: Scalars['Boolean']['output'];
   /** Send a single voxel (block) update for spatial replication to nearby chunks. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — NOT confirmation that the world applied the change. There is NO separate per-request success response: the change fans out to nearby clients (the sender included) as a VoxelUpdateNotification carrying the same sequenceNumber (VoxelUpdateResponse is legacy and is never emitted). Failures arrive ASYNCHRONOUSLY as a GenericErrorResponse; both are correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). Throws FORBIDDEN synchronously, before anything is sent, without the voxel edit permission updateVoxel checks for the chunk (app access, the tier's update_voxel_data, and update_voxel_data on the most specific grid covering the chunk), and for a chunk only the app's world grid covers while the app's wilderness is closed (App.wildernessWritesOpen false). */
   sendVoxelUpdate: Scalars['Boolean']['output'];
+  /** Operator only. Moves the start of the organization allowance pool or its size on this tier, and records each change in billing_rate_changes (scope SHARED, metric allowance_pool). A month already settled keeps the allowance it was settled with. */
+  setAllowancePool: AllowancePoolSettings;
   /** Creates or updates an app's monthly spend cap (idempotent upsert keyed by org + app) and returns the resulting budget. This only records the cap used to monitor/limit overspend; it does not move money, charge a card, or alter the wallet balance. Requires the 'manage_billing' app permission. */
   setAppBudget: AppBudget;
   /** Register/update an app's portal client settings (redirect_uris, client_type, launch_url). Requires manage_apps on the app and a SESSION token. */
@@ -6779,6 +6794,11 @@ export type MutationSendVoxelUpdateArgs = {
 };
 
 
+export type MutationSetAllowancePoolArgs = {
+  input: SetAllowancePoolInput;
+};
+
+
 export type MutationSetAppBudgetArgs = {
   appId: Scalars['BigInt']['input'];
   idempotencyKey?: InputMaybe<Scalars['String']['input']>;
@@ -7287,6 +7307,17 @@ export type NearbyGridsInput = {
   lowChunk: ChunkCoordinatesInput;
 };
 
+/** One meter of an organization's pooled free allowance this month: how large the pool is and how much of it its apps have used. */
+export type OrgAllowancePool = {
+  __typename?: 'OrgAllowancePool';
+  /** The priced meter: aggregate_data_volume (bytes out), aggregate_data_ingress (bytes in), compute_cpu_ms (CPU milliseconds), durable_storage_byte_hours (byte-hours stored) or wasm_write_bytes (bytes written by compute modules). */
+  meter: Scalars['String']['output'];
+  /** The pool, in the meter's raw units: the rate card's allowance for one app times allowancePool.factor. */
+  poolUnits: Scalars['String']['output'];
+  /** How much of the pool its apps hold this month, in the same units; usage beyond the pool is billed. */
+  usedUnits: Scalars['String']['output'];
+};
+
 /** Per-app projection row within an org rollup. */
 export type OrgAppUsageProjectionRow = {
   __typename?: 'OrgAppUsageProjectionRow';
@@ -7533,6 +7564,10 @@ export type OrgTokenWithSecret = {
 /** Org-level rollup of per-app monthly egress projections for all shared apps. */
 export type OrgUsageProjection = {
   __typename?: 'OrgUsageProjection';
+  /** True when this month's free allowance is one pool shared by the organization's apps (allowancePool). */
+  allowancePooled: Scalars['Boolean']['output'];
+  /** In a pooled month, each pooled meter with its pool and what the apps have used of it; empty otherwise. */
+  allowancePools: Array<OrgAllowancePool>;
   /** Per-app projection breakdown. */
   apps: Array<OrgAppUsageProjectionRow>;
   /** Fractional UTC days elapsed since the calendar month started. */
@@ -7543,7 +7578,7 @@ export type OrgUsageProjection = {
   sufficientData: Scalars['Boolean']['output'];
   /** True when org total projected egress exceeds the combined free tier, so the org should expect a metered bill. Note that a capacity reservation is NOT a remedy for this: reservations buy provisioned capacity and are charged in addition to metered usage, so they do not reduce an egress bill. What this signals is that the org needs a funded wallet or auto-billing. */
   suggestReservedThroughput: Scalars['Boolean']['output'];
-  /** Total free monthly egress allowance across all shared apps in the org (apps × 5 GB). */
+  /** Total free monthly egress allowance for the org's shared apps: apps × 5 GB, or the size of its pool in a pooled month (allowancePooled). */
   totalFreeAllowanceBytes: Scalars['String']['output'];
   /** Sum of projected end-of-month egress across shared apps, or null when insufficient data. */
   totalProjectedBytes: Maybe<Scalars['String']['output']>;
@@ -8210,13 +8245,13 @@ export type PublicRateCardEntryType = {
   unitQuantity: Scalars['BigInt']['output'];
 };
 
-/** Result of publishing an app to the shared environment. All paths publish immediately. Usage above the free allowances is wallet-billed: each app has a per-dimension hourly allowance and, for client egress, 5 decimal GB per calendar month. */
+/** Result of publishing an app to the shared environment. All paths publish immediately. Usage above the free allowances is billed from the organization wallet: each app has the rate card's monthly allowances until allowancePool.effectiveFrom, and from then the organization's apps share one allowance. */
 export type PublishAppResult = {
   __typename?: 'PublishAppResult';
   appId: Scalars['BigInt']['output'];
   /** @deprecated Always null — subscriptions replaced by wallet billing. */
   checkout: Maybe<Checkout>;
-  /** True when the app uses a free org app-slot (under the quota). */
+  /** True when the app uses a free org app-slot (under the quota). A count only: it does not change what is free or billed (see orgFreeAppQuota). */
   free: Scalars['Boolean']['output'];
 };
 
@@ -8272,6 +8307,8 @@ export type Query = {
   agentRateCards: Array<AgentRateCardEntryType>;
   /** RETIRED 2026-10-29: Crowded Kingdoms no longer hosts games and every tier runs with hosting off, so this answers []. Host your build on your own origin. OPERATOR: every hosted game on the tier, whatever its status or listing. */
   allHostedGames: Array<HostedGame>;
+  /** PUBLIC: no authentication required. When this tier pools an organization's free allowance across its apps, and how large each pool is. Read-only. */
+  allowancePool: AllowancePoolSettings;
   /** Convenience for UI: returns true when the authenticated caller is the currently elected host for the given app (same election as gameHost), otherwise false (including when no host is elected). Not authoritative for server-side decisions. Requires a valid bearer game token (same auth as gameHost). */
   amIGameHost: Scalars['Boolean']['output'];
   /** Fetch a single app by its numeric id. Requires authentication (any signed-in user); does NOT enforce org/app permissions, so it can read apps the caller does not own, of any visibility/status. Returns null if the id does not exist. Prefer appBySlug for slug-based marketplace lookups. */
@@ -8571,7 +8608,10 @@ export type Query = {
   nearbyGrids: Array<NearbyGrid>;
   /** An org's off-session auto-billing configuration (enabled flag, recharge amount, low-water threshold, per-period cap, and last error). Requires the 'view_billing' org permission. */
   orgAutoBilling: OrgAutoBilling;
-  /** An org's free shared-app slot quota and how much of it is used. Apps beyond the quota still publish; metered usage is billed from the org wallet. Caller must be a member of the org. */
+  /**
+   * An org's free shared-app slot quota and how much of it is used. The slots are a count only: they never change what is free or billed, and apps beyond the quota still publish. Caller must be a member of the org.
+   * @deprecated Free app slots are retired. From allowancePool.effectiveFrom an organization's apps share one free allowance a month; read orgUsageProjection.allowancePools. Before then each app has its own allowance whatever its slot.
+   */
   orgFreeAppQuota: FreeAppQuota;
   /** The organization's org-managed player settings: whether it may sign its own players in, its cap, sign-in rate and sign-in lifetimes, how many players it holds, and whether it has accepted the current Org-Managed Players Addendum. Requires manage_players on the org (super-admins and operators bypass). */
   orgManagedPlayerSettings: OrgManagedPlayerSettings;
@@ -8692,6 +8732,8 @@ export type Query = {
   voxelUpdateHistoryConnection: VoxelUpdateHistoryConnection;
   /** Returns the organization's wallet, creating an empty zero-balance wallet on first access if one does not yet exist (so it never returns null). Use it to read the current balance and currency before charging usage or topping up. Requires the 'view_billing' org permission. */
   walletBalance: OrgWallet;
+  /** The smallest wallet top-ups and auto-recharge amounts this tier accepts, for a top-up form in Studio or a game. Public. */
+  walletTopUpMinimums: WalletTopUpMinimums;
   /** Lists the organization's wallet transactions (credits and debits), ordered newest first. Use it to audit how the balance changed over time. Requires the 'view_billing' org permission. */
   walletTransactions: Array<WalletTransaction>;
   /** Lists the organization's wallet transactions (credits and debits), ordered newest first. Use it to audit how the balance changed over time. Requires the 'view_billing' org permission. Relay cursor connection; prefer this over the offset-based walletTransactions. */
@@ -10297,6 +10339,16 @@ export type ServiceQuota = {
   updatedAt: Scalars['DateTime']['output'];
 };
 
+/** A change to the organization allowance pool. */
+export type SetAllowancePoolInput = {
+  /** The first instant whose calendar months are pooled. Applies to months that have not been settled yet: a unit already settled this month keeps the allowance it was settled with. Omit to leave unchanged. */
+  effectiveFrom?: InputMaybe<Scalars['DateTime']['input']>;
+  /** How many apps' allowances each pool is worth, at least 1. Applies to pools first claimed from after the change. Omit to leave unchanged. */
+  factor?: InputMaybe<Scalars['Int']['input']>;
+  /** Why, for the audit (billing_rate_changes). */
+  reason: Scalars['String']['input'];
+};
+
 /** Register/update an app's OAuth client settings for the portal handoff (requires manage_apps on the app). */
 export type SetAppClientSettingsInput = {
   appId: Scalars['BigInt']['input'];
@@ -11603,6 +11655,17 @@ export type VoxelUpdatesByDistanceResponse = {
   limit: Maybe<Scalars['Int']['output']>;
   /** The chunk `skip` applied to this page: the one asked for, or 0. */
   skip: Maybe<Scalars['Int']['output']>;
+};
+
+/** The smallest wallet top-ups createCheckout accepts, and the smallest auto-recharge amounts. A smaller amount is refused with TOP_UP_BELOW_MINIMUM. */
+export type WalletTopUpMinimums = {
+  __typename?: 'WalletTopUpMinimums';
+  /** The currency both are in: usd. */
+  currency: Scalars['String']['output'];
+  /** An organization wallet (ORG_WALLET_TOPUP, setAutoBilling), in USD cents. */
+  orgWalletCents: Scalars['BigInt']['output'];
+  /** A player wallet (PLAYER_WALLET_TOPUP, setPlayerAutoBilling), in USD cents. */
+  playerWalletCents: Scalars['BigInt']['output'];
 };
 
 export type WalletTransaction = {
