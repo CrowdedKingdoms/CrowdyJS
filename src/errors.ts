@@ -503,12 +503,15 @@ export interface MissingLegalDocument {
 
 /**
  * Why an app is paused, as `extensions.reason` on `APP_PAUSED` and
- * `AppRuntimeGate.reason` carry it. Open union: the server may add one.
+ * `AppRuntimeGate.reason` carry it. `payment_method_required` (ck-api v2.76.0): the
+ * environment asks for a saved card before the free allowance, and the app's organization has
+ * no card, no funds and no exemption. Open union: the server may add one.
  */
 export type AppPauseReason =
   | 'insufficient_funds'
   | 'spend_cap'
   | 'subscription_lapsed'
+  | 'payment_method_required'
   | (string & {});
 
 /** The first error entry carrying `code`, from an error or a raw payload. */
