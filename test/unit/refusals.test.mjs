@@ -46,6 +46,11 @@ test('appPausedOf reads the reason, also from a later entry', () => {
   ]);
   assert.deepEqual(errors.appPausedOf(error), { reason: 'spend_cap' });
   assert.deepEqual(errors.appPausedOf(gqlError({ code: 'APP_PAUSED' })), { reason: null });
+  // ck-api v2.76.0: the free-tier card requirement's reason reads like any other.
+  assert.deepEqual(
+    errors.appPausedOf(gqlError({ code: 'APP_PAUSED', reason: 'payment_method_required' })),
+    { reason: 'payment_method_required' },
+  );
   assert.equal(errors.appPausedOf(gqlError({ code: 'APP_UNAVAILABLE' })), null);
 });
 
