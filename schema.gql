@@ -1583,6 +1583,22 @@ type AppsConnection {
 }
 
 """
+How many apps an organization has against the cap for organizations that have not funded their wallet: at most 10 that are not archived while the wallet has no spendable balance and auto-billing is off. A funded (or billing-exempt) organization has no cap. Creating or restoring an app past it is refused with APP_LIMIT_REACHED; no existing app is removed.
+"""
+type OrgAppLimit {
+  """The organization's apps that are not archived."""
+  apps: Int!
+  """
+  True when the organization has a spendable wallet balance, auto-billing on, or a billing exemption: then it has no cap.
+  """
+  funded: Boolean!
+  """
+  The most apps it may have that are not archived, or null when it has no cap (funded).
+  """
+  max: Int
+}
+
+"""
 An active or revoked app code-admission entry. Admission controls execution only; it never grants source access.
 """
 type AppCodeAdmission {
@@ -2488,7 +2504,7 @@ type RateCardEntryType {
   """
   freePerHour: BigInt
   """
-  Raw metric units free per UTC calendar month, as a BigInt decimal string. On the PLAYER card this is the pooled monthly trial budget per (player, app), and player_wasm_compute_units is its canonical key. Null when this dimension has no monthly allowance.
+  Raw metric units free per UTC calendar month, as a BigInt decimal string. On the PLAYER card this is the monthly trial budget of a player: in each app, or one across the apps of an organization from playerTrialPool.perOrganizationFrom; player_wasm_compute_units is its canonical key. Null when this dimension has no monthly allowance.
   """
   freePerMonth: BigInt
   """
@@ -2591,7 +2607,7 @@ type PublicRateCardEntryType {
   """
   freePerHour: BigInt
   """
-  Raw metric units free per UTC calendar month, as a BigInt decimal string. On the PLAYER card this is the pooled monthly trial budget per (player, app). Null when this dimension has no monthly allowance.
+  Raw metric units free per UTC calendar month, as a BigInt decimal string. On the PLAYER card this is the monthly trial budget of a player: in each app, or one across the apps of an organization from playerTrialPool.perOrganizationFrom. Null when this dimension has no monthly allowance.
   """
   freePerMonth: BigInt
   """
@@ -2699,6 +2715,24 @@ type AllowancePoolSettings {
 }
 
 """
+The player compute trial: each player's monthly trial budget, and from when it is one trial per player across an organization's apps instead of one in each app.
+"""
+type PlayerTrialPoolSettings {
+  """
+  The monthly trial budget in compute units (player_free_monthly_allowances, player_wasm_compute_units).
+  """
+  budgetUnits: BigInt!
+  """
+  Calendar months starting on or after this instant give a player one trial across an organization's apps; earlier months give one in each app. Null: not switched on, so every month gives one in each app.
+  """
+  perOrganizationFrom: DateTime
+  """
+  Whether the current calendar month gives one trial per player across an organization (its start is on or after perOrganizationFrom).
+  """
+  perOrganizationNow: Boolean!
+}
+
+"""
 The free-tier card requirement on this tier: from requiredFrom, an organization's apps run only while the organization has a saved card (saving one charges nothing) or an exemption, whatever its wallet holds; otherwise they are paused with runtimeDenialReason payment_method_required. An organization created before requiredFrom is asked existingOrganizationGraceDays later. Organizations only; player wallets are not asked.
 """
 type FreeTierCardRequirement {
@@ -2748,6 +2782,181 @@ type CardRequirementExemption {
   """The operator who exempted it."""
   exemptedBy: BigInt
   createdAt: DateTime!
+}
+
+"""One rung of the free tier ladder."""
+type FreeTierLevelRung {
+  level: FreeTierLevel!
+  """
+  Free data out and free data in, each, a month, in GB (1 GB = 1,000,000,000 bytes).
+  """
+  gigabytes: Int!
+}
+
+"""
+An organization's free tier level, which sets its free data out and data in a month. A level earned or agreed applies from the start of the next month.
+"""
+enum FreeTierLevel {
+  """Every organization: the pool's own size (15 GB today)."""
+  BASE
+  """
+  A member has confirmed an email address at the domain the organization gives as its own; free email providers' domains do not count. 100 GB.
+  """
+  DOMAIN
+  """The organization has completed its project profile. 200 GB."""
+  PROFILE
+  """
+  One of the organization's apps had at least 10 different player accounts play on at least 3 of the last 7 UTC days; the organization's own members do not count. 500 GB.
+  """
+  MEASURED
+  """
+  A written agreement with Crowded Kingdoms sets the amount for whole months.
+  """
+  AGREEMENT
+}
+
+"""
+The free tier ladder on this tier: what each earned level gives an organization's data out and data in a month. A daily check sets each organization's level for the next month.
+"""
+type FreeTierLevels {
+  """
+  The first month levels size organizations' pools on this tier. Null while they size none.
+  """
+  effectiveFrom: DateTime
+  """BASE, DOMAIN, PROFILE and MEASURED, lowest first."""
+  levels: [FreeTierLevelRung!]!
+  """MEASURED: distinct player accounts a day."""
+  measuredMinAccounts: Int!
+  """MEASURED: days with that many."""
+  measuredMinDays: Int!
+  """MEASURED: out of the last this many UTC days."""
+  measuredWindowDays: Int!
+}
+
+"""An organization's free tier level for one month."""
+type OrgFreeTierMonth {
+  """The month, as its first instant (UTC)."""
+  periodStart: DateTime!
+  level: FreeTierLevel!
+  """
+  Free data out and free data in, each, that month, in GB. For the current month, the pool's size once the organization's apps have drawn on it.
+  """
+  gigabytes: Int!
+}
+
+"""One earned level and whether its condition is met now."""
+type OrgFreeTierCondition {
+  level: FreeTierLevel!
+  gigabytes: Int!
+  met: Boolean!
+}
+
+"""A written agreement for a larger free allowance."""
+type OrgFreeTierAgreement {
+  """The first month it covers."""
+  startMonth: DateTime!
+  """The last month it covers."""
+  endMonth: DateTime!
+  """Free data out and data in, each, a month, in GB."""
+  gigabytes: Int!
+}
+
+"""
+Where an organization stands on the free tier ladder: this month's level, next month's, and which conditions it meets now. A level it reaches applies from the start of the next month.
+"""
+type OrgFreeTier {
+  orgId: BigInt!
+  """
+  The first month levels size pools on this tier (freeTierLevels.effectiveFrom).
+  """
+  effectiveFrom: DateTime
+  thisMonth: OrgFreeTierMonth!
+  """
+  Next month, as the latest check decided it. The daily check, and saving the profile or the domain, update it.
+  """
+  nextMonth: OrgFreeTierMonth!
+  """The level the conditions met now earn."""
+  earnedLevel: FreeTierLevel!
+  """DOMAIN, PROFILE and MEASURED, with whether each is met now."""
+  conditions: [OrgFreeTierCondition!]!
+  """The domain the organization gives as its own."""
+  ownDomain: String
+  """
+  MEASURED: the most days in the window on which one of the organization's apps had enough distinct player accounts.
+  """
+  measuredQualifyingDays: Int!
+  """Written agreements covering this month or later."""
+  agreements: [OrgFreeTierAgreement!]!
+  """When the daily check last looked at the organization."""
+  checkedAt: DateTime
+}
+
+"""
+The organization's six-question project profile. Complete, it earns the PROFILE free tier level.
+"""
+type OrgProjectProfile {
+  orgId: BigInt!
+  """What the game is."""
+  whatBuilding: String
+  worldShape: ProjectWorldShape
+  """Players in one world at launch."""
+  playersPerWorldLaunch: Int
+  """Players each one sees at launch."""
+  playersInViewLaunch: Int
+  """Players in one world a year on."""
+  playersPerWorldYear1: Int
+  """Players each one sees a year on."""
+  playersInViewYear1: Int
+  stage: ProjectStage
+  """The planned launch date."""
+  launchDate: DateTime
+  """The engine."""
+  engine: String
+  logicLocation: ProjectLogicLocation
+  """The networking it uses today."""
+  currentNetworking: String
+  """What that networking costs a month, in US cents."""
+  currentNetworkingMonthlyCostCents: Int
+  """Whether Crowded Kingdoms may name the studio as a reference."""
+  referenceConsent: Boolean
+  """When every answer was in; null while any is missing."""
+  completedAt: DateTime
+  updatedAt: DateTime
+}
+
+"""
+Whether the game is one world with everyone in it or many copies of a small one.
+"""
+enum ProjectWorldShape {
+  ONE_WORLD
+  MANY_COPIES
+  UNSURE
+}
+
+"""The project's stage."""
+enum ProjectStage {
+  PROTOTYPE
+  PRE_PRODUCTION
+  PRODUCTION
+  BETA
+  LIVE
+}
+
+"""
+Where the game's logic runs: on the clients, in light server code, or in a full server simulation.
+"""
+enum ProjectLogicLocation {
+  CLIENTS
+  LIGHT_SERVER_CODE
+  FULL_SERVER_SIMULATION
+}
+
+"""What a free tier check did."""
+type FreeTierCheckResult {
+  checked: Int!
+  """Organizations whose next month's level moved."""
+  changed: Int!
+  failed: Int!
 }
 
 """
@@ -2862,6 +3071,68 @@ type WalletTopUpMinimums {
   currency: String!
 }
 
+"""Operator only. The Twenty sync's state in this environment."""
+type CrmSyncStatus {
+  mode: CrmSyncMode!
+  """The mode the drain runs in: LIVE needs the CRM key here."""
+  effectiveMode: CrmSyncMode!
+  """Whether this environment has the CRM key."""
+  configured: Boolean!
+  """Whether the signed webhook is accepted."""
+  webhookEnabled: Boolean!
+  """
+  When the first LIVE backfill was queued; the daily reconcile waits for it.
+  """
+  backfillDoneAt: DateTime
+  """Records waiting to be sent."""
+  pending: Int!
+  """Records given up on in the last 7 days."""
+  failedLast7Days: Int!
+  sentLast24Hours: Int!
+  lastSentAt: DateTime
+  lastError: String
+  """
+  Fields or picklist values the CRM workspace lacks for LIVE (empty without a key); run scripts/twenty/ensure-schema.mjs.
+  """
+  missingFields: [String!]!
+}
+
+"""
+Operator only. The Twenty sync's mode: OFF queues nothing; SHADOW queues and builds each record and sends nothing; LIVE writes to the CRM (and acts as SHADOW where this environment has no key).
+"""
+enum CrmSyncMode {
+  OFF
+  SHADOW
+  LIVE
+}
+
+"""
+Operator only. An organization the CRM backfill would add or leave out (BIZ-028 Q12).
+"""
+type CrmBackfillEntry {
+  orgId: String!
+  name: String!
+  ownerEmail: String
+  """The domain its Company is matched on; null when a new Company is made."""
+  matchDomain: String
+  """Why it is left out; null when it is added."""
+  reason: String
+}
+
+"""
+Operator only. The two lists the first CRM backfill is checked against before it runs (BIZ-028 Q12).
+"""
+type CrmBackfillPreview {
+  included: [CrmBackfillEntry!]!
+  excluded: [CrmBackfillEntry!]!
+}
+
+"""Operator only. What a CRM backfill queued."""
+type CrmBackfillResult {
+  organizations: Int!
+  records: Int!
+}
+
 type ServiceQuota {
   """Unique quota rule id (BigInt as a decimal string)."""
   quotaId: BigInt!
@@ -2900,7 +3171,7 @@ type ServiceQuota {
 }
 
 """
-The caller's player wallet: one platform-scoped balance, across every org and app they play in, that pays for the player's mods past their monthly trial (250,000 compute units in each app) and for any Agentic Studio model requests charged to them. Out-of-band from org wallets — player usage never touches an org's money.
+The caller's player wallet: one platform-scoped balance, across every org and app they play in, that pays for the player's mods past their monthly trial (250,000 compute units a month in each app, or one trial across an organization's apps from playerTrialPool.perOrganizationFrom) and for any Agentic Studio model requests charged to them. Out-of-band from org wallets — player usage never touches an org's money.
 """
 type PlayerWallet {
   """Wallet id."""
@@ -6726,13 +6997,29 @@ type ExecAppStatus {
   """
   budgetPauseReason: String
   """
-  The most instances the app may have placed in this datacenter. The free hub tier (an organization that has not funded the app) allows 16; null means the manager's default.
+  The most instances the app may have placed in this datacenter. The free hub tier (an organization that has not funded its wallet) allows 16, shared with the organization's other apps (orgMaxInstances); null means the manager's default.
   """
   maxInstances: Int
   """
-  The most memory, in MB, the app's placed instances may reserve in this datacenter (each instance reserves its type's memory). The free hub tier allows 1,024; null means no memory limit beyond the instance count.
+  The most memory, in MB, the app's placed instances may reserve in this datacenter (each instance reserves its type's memory). The free hub tier allows 1,024, shared with the organization's other apps (orgMaxReservedMb); null means no memory limit beyond the instance count.
   """
   maxReservedMb: Int
+  """
+  The most instances all of the organization's apps together may have placed in this datacenter while it has not funded its wallet: 16. Null when the organization is funded (no shared ceiling) or the manager predates ck-exec 0.22.
+  """
+  orgMaxInstances: Int
+  """
+  The most memory, in MB, all of the organization's apps' placed instances together may reserve in this datacenter while it has not funded its wallet: 1,024. Null when the organization is funded or the manager predates ck-exec 0.22.
+  """
+  orgMaxReservedMb: Int
+  """
+  Instances of all of the organization's apps placed and not yet stopped in this datacenter now (what orgMaxInstances limits). Null without a shared ceiling.
+  """
+  orgInstances: Int
+  """
+  Memory, in MB, all of the organization's apps' instances reserve in this datacenter now (what orgMaxReservedMb limits). Null without a shared ceiling.
+  """
+  orgReservedMb: Int
   """
   The instance limit in force: maxInstances, or the manager’s default when that is null. Null from a manager older than ck-exec 0.15.
   """
@@ -7872,6 +8159,13 @@ type Query {
     orgSlug: String!
   ): [App!]!
   """
+  Where an organization stands against the cap for organizations without a funded wallet or auto-billing: its apps that are not archived, whether it is funded, and the cap (10, or null when funded). Requires the 'manage_apps' permission on the organization; super admins bypass.
+  """
+  orgAppLimit(
+    """Organization id (BigInt)."""
+    orgId: BigInt!
+  ): OrgAppLimit! @requiresPermission(scope: "org", permission: "manage_apps", scopeArg: "orgId")
+  """
   Read an app's player-code admission mode. Requires 'view_compute_diagnostics'. IMPLICIT_ALLOW (the default) admits lawful player code without curation; ALLOW_LIST requires every running server/client artifact, including self-authored code, to match an active code, author, or org admission.
   """
   appCodeAdmissionMode(
@@ -8149,6 +8443,10 @@ type Query {
   """
   allowancePool: AllowancePoolSettings!
   """
+  PUBLIC: no authentication required. The player compute trial on this tier: its monthly budget, and from when it is one trial per player across an organization's apps. Read-only.
+  """
+  playerTrialPool: PlayerTrialPoolSettings!
+  """
   PUBLIC: no authentication required. Whether this tier asks an organization for a saved card before its apps run, from when, and how much later for an organization created before then. Read-only.
   """
   freeTierCardRequirement: FreeTierCardRequirement!
@@ -8163,6 +8461,24 @@ type Query {
   Operator only. The organizations the free-tier card requirement never refuses. Billing-exempt organizations are not listed: the usage gate never refuses them for money.
   """
   cardRequirementExemptions: [CardRequirementExemption!]! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  PUBLIC: no authentication required. The free tier ladder on this tier: an organization's free data out and data in a month at each earned level, the MEASURED thresholds, and the first month levels apply. Read-only.
+  """
+  freeTierLevels: FreeTierLevels!
+  """
+  Where an organization stands on the free tier ladder: this month's level, next month's as the latest check decided it, the conditions it meets now, its own domain and its agreements. A level reached applies from the start of the next month. Requires the 'view_billing' org permission.
+  """
+  orgFreeTier(
+    """Organization id."""
+    orgId: BigInt!
+  ): OrgFreeTier! @requiresPermission(scope: "org", permission: "view_billing", scopeArg: "orgId")
+  """
+  The organization's project profile, empty until answered. Requires the 'view_billing' org permission.
+  """
+  orgProjectProfile(
+    """Organization id."""
+    orgId: BigInt!
+  ): OrgProjectProfile! @requiresPermission(scope: "org", permission: "view_billing", scopeArg: "orgId")
   """
   Public platform discovery. Returns the shared game-api URL clients use for shared-environment apps (served by the platform shared environment). No auth required.
   """
@@ -8296,6 +8612,14 @@ type Query {
   The smallest wallet top-ups and auto-recharge amounts this tier accepts, for a top-up form in Studio or a game. Public.
   """
   walletTopUpMinimums: WalletTopUpMinimums!
+  """
+  Operator only. The Twenty sync's mode, queue and last error in this environment, and what the CRM workspace lacks for LIVE.
+  """
+  crmSyncStatus: CrmSyncStatus! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Operator only. The organizations the CRM backfill would add, and those it leaves out with why (BIZ-028 Q12). Holds owners' email addresses: for the operator only.
+  """
+  crmBackfillPreview: CrmBackfillPreview! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Lists the org-scoped quota rules explicitly configured for an organization (excludes app-, tier-, and free-tier-default quotas). Use `effectiveQuota` to resolve the limit actually applied for a given metric. Requires the 'view_usage' org permission.
   """
@@ -10064,14 +10388,14 @@ type Mutation {
     idempotencyKey: String
   ): Boolean!
   """
-  Create a new app within an organization. Requires the 'manage_apps' permission on the target org (input.orgId); super admins bypass. REQUIRES A DATACENTER (input.datacenter): the app is distributed on its app_id, so all of its data lives in one datacenter, and the id is chosen at creation so that it does. Query placeableDatacenters first for the codes this deployment accepts. Creation FAILS — rather than producing an unroutable app — if the named datacenter is unknown to this deployment or holds no shards. SIDE EFFECTS: also provisions a free, open-by-default "Default" access tier granting baseline runtime permissions and notifies the game API. Elevated capabilities such as use_studio_agent are NOT granted by default and require an explicit tier grant. Slug must be unique within the org (a duplicate slug fails). New apps default to visibility=PUBLIC and status=LIVE unless overridden in the input. Neither setting decides who may play; the access tiers do.
+  Create a new app within an organization. Requires the 'manage_apps' permission on the target org (input.orgId); super admins bypass. REQUIRES A DATACENTER (input.datacenter): the app is distributed on its app_id, so all of its data lives in one datacenter, and the id is chosen at creation so that it does. Query placeableDatacenters first for the codes this deployment accepts. Creation FAILS — rather than producing an unroutable app — if the named datacenter is unknown to this deployment or holds no shards. SIDE EFFECTS: also provisions a free, open-by-default "Default" access tier granting baseline runtime permissions and notifies the game API. Elevated capabilities such as use_studio_agent are NOT granted by default and require an explicit tier grant. Slug must be unique within the org (a duplicate slug fails). New apps default to visibility=UNLISTED and status=LIVE unless overridden in the input: an app reaches the marketplace only once it is set PUBLIC (updateApp). Neither setting decides who may play; the access tiers do. An organization without a funded wallet or auto-billing may have at most 10 apps that are not archived; one more is refused with APP_LIMIT_REACHED (orgAppLimit says where an organization stands).
   """
   createApp(
     """Details for the app to create."""
     input: CreateAppInput!
   ): App! @requiresPermission(scope: "org", permission: "manage_apps", scopeArg: "input.orgId")
   """
-  Update mutable fields of an existing app (name, description, visibility, status, metadata, wildernessWritesOpen, claimOwnerKeys, replayLoggingEnabled, replayLoggingRecordsMedia, replayLoggingRecordsVoice, replayLoggingRecordsVideo, minPlayerAge, idleTimeoutSeconds); only fields present in the input are changed. Turning replayLoggingEnabled on is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet can spend at least the projected cost of keeping one retention period of the app's recent traffic (extensions.requiredMicrousd and spendableMicrousd say how much), or the org is billing-exempt; recordings already kept go on billing after it is turned off, until they age out. Turning it off is refused with SAFETY_LOG_REQUIRED while the app admits players under 18. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility, or restore an archived app (status back to DRAFT/LIVE). Throws if the app id does not exist.
+  Update mutable fields of an existing app (name, description, visibility, status, metadata, wildernessWritesOpen, claimOwnerKeys, replayLoggingEnabled, replayLoggingRecordsMedia, replayLoggingRecordsVoice, replayLoggingRecordsVideo, minPlayerAge, idleTimeoutSeconds); only fields present in the input are changed. Turning replayLoggingEnabled on is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet can spend at least the projected cost of keeping one retention period of the app's recent traffic (extensions.requiredMicrousd and spendableMicrousd say how much), or the org is billing-exempt; recordings already kept go on billing after it is turned off, until they age out. Turning it off is refused with SAFETY_LOG_REQUIRED while the app admits players under 18. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility (PUBLIC lists the app in the marketplace), or restore an archived app (status back to DRAFT/LIVE); a restore counts against the cap of 10 apps for an organization without a funded wallet or auto-billing (APP_LIMIT_REACHED). Throws if the app id does not exist.
   """
   updateApp(
     """Numeric id of the app to update."""
@@ -10486,6 +10810,10 @@ type Mutation {
   """
   setAllowancePool(input: SetAllowancePoolInput!): AllowancePoolSettings! @requiresPermission(scope: "operator", permission: "is_operator")
   """
+  Operator only. Sets (or switches off) the first calendar month whose player trial is one per player across an organization's apps on this tier, and records the change in billing_rate_changes (scope PLAYER, metric player_trial_pool). A month already settled keeps the trial it was settled with.
+  """
+  setPlayerTrialPool(input: SetPlayerTrialPoolInput!): PlayerTrialPoolSettings! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
   Operator only. Sets when the free-tier card requirement applies on this tier (or switches it off) and the grace for organizations created before then, and records each change in billing_rate_changes (scope SHARED, metric free_tier_card). The usage gate applies it within about a minute.
   """
   setFreeTierCardRequirement(input: SetFreeTierCardRequirementInput!): FreeTierCardRequirement! @requiresPermission(scope: "operator", permission: "is_operator")
@@ -10500,6 +10828,34 @@ type Mutation {
     """Why, for the audit."""
     reason: String!
   ): OrgCardRequirement! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Saves answers to the organization's project profile. An omitted field keeps its answer; null clears it. When every answer is in, the profile is complete and next month's free tier level is checked again at once (PROFILE). Requires the 'manage_billing' org permission.
+  """
+  setOrgProjectProfile(input: SetOrgProjectProfileInput!): OrgProjectProfile! @requiresPermission(scope: "org", permission: "manage_billing", scopeArg: "input.orgId")
+  """
+  Sets the domain the organization gives as its own (studio.com), or clears it with null. A member's confirmed email address at it, or at one of its subdomains, earns the DOMAIN free tier level; a free email provider's domain is refused (FREE_EMAIL_DOMAIN). Next month's level is checked again at once. Requires the 'manage_billing' org permission.
+  """
+  setOrgOwnDomain(
+    """Organization id."""
+    orgId: BigInt!
+    """A host name such as studio.com; null clears it."""
+    domain: String
+  ): OrgFreeTier! @requiresPermission(scope: "org", permission: "manage_billing", scopeArg: "orgId")
+  """
+  Operator only. Sets the first month free tier levels size organizations' pools on this tier (the first instant of a UTC month), or stops them, and records the change in billing_rate_changes (scope SHARED, metric free_tier_levels). A month whose pools are already open keeps their size.
+  """
+  setFreeTierLevels(input: SetFreeTierLevelsInput!): FreeTierLevels! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Operator only. Records a written agreement for a larger free allowance, for whole months starting next month or later, or revokes one (revoke: true with its startMonth). Recorded in billing_rate_changes (scope SHARED, metric free_tier_agreement); next month's level is checked again at once.
+  """
+  setOrgFreeTierAgreement(input: SetOrgFreeTierAgreementInput!): OrgFreeTier! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Operator only. Runs the daily free tier check now, for one organization or all of them, writing next month's levels.
+  """
+  runFreeTierCheck(
+    """One organization; omit for all."""
+    orgId: BigInt
+  ): FreeTierCheckResult! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Publishes an app to the shared game-api environment. Free under the org's app-slot quota (result.free = true); beyond the quota, publish still succeeds and metered usage is charged to the org wallet. Requires the 'manage_apps' permission on the app's org. Blocked when SHARED_GAME_API_URL is not configured.
   """
@@ -10625,6 +10981,23 @@ type Mutation {
     """
     idempotencyKey: String
   ): Checkout!
+  """
+  Operator only. Sets the Twenty sync's mode (OFF, SHADOW, LIVE) and whether its signed webhook is accepted; recorded in crm_sync_changes. LIVE sends studio and developer contacts to the CRM.
+  """
+  setCrmSync(input: SetCrmSyncInput!): CrmSyncStatus! @requiresPermission(scope: "operator", permission: "is_operator")
+  """
+  Operator only. Queues every eligible organization for the Twenty sync (BIZ-028 Q12's backfill) and, in LIVE, records it so the daily reconcile starts. With orgId, queues that organization alone (a canary) and records nothing. Needs confirm: true.
+  """
+  runCrmBackfill(
+    """
+    Must be true: check crmBackfillPreview first, because the backfill sends contacts to the CRM in LIVE.
+    """
+    confirm: Boolean!
+    """
+    One organization to queue alone (a canary); the backfill is not recorded as done. Omit for every eligible organization.
+    """
+    orgId: ID
+  ): CrmBackfillResult! @requiresPermission(scope: "operator", permission: "is_operator")
   """
   Creates or updates a quota enforcement rule (idempotent upsert keyed by org/app/tier + metric + period) and returns it. Scope is inferred from the input ids: an app-scoped rule requires the 'manage_quotas' app permission, an org-scoped rule requires the 'manage_quotas' org permission, and a global rule (no org/app/tier) requires super admin. Changes which limit `effectiveQuota` resolves for the metric; does not retroactively alter past usage.
   """
@@ -12290,7 +12663,9 @@ input CreateAppInput {
   datacenter: String!
   """Optional short plain-text description for listings."""
   description: String
-  """Optional initial visibility. Defaults to PUBLIC when omitted."""
+  """
+  Optional initial visibility. Defaults to UNLISTED when omitted: set PUBLIC to list the app in the marketplace.
+  """
   visibility: AppVisibility
   """Optional initial lifecycle status. Defaults to LIVE when omitted."""
   status: AppStatus
@@ -12722,7 +13097,7 @@ input SetRateCardInput {
   """
   freePeriod: AllowancePeriod
   """
-  New monthly free allowance in raw metric units, as a BigInt decimal string. Must be >= 0. On the PLAYER card with metric player_wasm_compute_units this is the pooled monthly TRIAL BUDGET per (player, app) — the only sanctioned way to change it on a live tier. Omit to leave it unchanged. Like a price, it applies from a dimension's next period where a period has already been charged.
+  New monthly free allowance in raw metric units, as a BigInt decimal string. Must be >= 0. On the PLAYER card with metric player_wasm_compute_units this is the monthly TRIAL BUDGET of a player (in each app, or one across the apps of an organization from playerTrialPool.perOrganizationFrom) — the only sanctioned way to change it on a live tier. Omit to leave it unchanged. Like a price, it applies from a dimension's next period where a period has already been charged.
   """
   freePerMonth: BigInt
   """
@@ -12772,6 +13147,20 @@ input SetAllowancePoolInput {
   reason: String!
 }
 
+"""A change to when the player trial is per organization."""
+input SetPlayerTrialPoolInput {
+  """
+  The first instant whose calendar months give one trial per player across an organization, a UTC month start. A unit already settled this month keeps the trial it was settled with. Omit with off: true to switch it off.
+  """
+  effectiveFrom: DateTime
+  """
+  True to switch it off: months not settled yet give one trial in each app again.
+  """
+  off: Boolean
+  """Why, for the audit (billing_rate_changes)."""
+  reason: String!
+}
+
 """
 A change to the free-tier card requirement: its start, off, or the grace for organizations created before the start.
 """
@@ -12784,6 +13173,64 @@ input SetFreeTierCardRequirementInput {
   Days after requiredFrom that the requirement applies to an organization created before it, 0 to 365. Omit to leave unchanged (30 by default).
   """
   existingOrganizationGraceDays: Int
+  """Why, for the audit (billing_rate_changes)."""
+  reason: String!
+}
+
+"""
+Answers to the project profile. An omitted field keeps its answer; null clears it. Complete when every answer is in.
+"""
+input SetOrgProjectProfileInput {
+  """Organization id."""
+  orgId: BigInt!
+  """What the game is (2,000 characters at most)."""
+  whatBuilding: String
+  worldShape: ProjectWorldShape
+  playersPerWorldLaunch: Int
+  playersInViewLaunch: Int
+  playersPerWorldYear1: Int
+  playersInViewYear1: Int
+  stage: ProjectStage
+  launchDate: DateTime
+  """200 characters at most."""
+  engine: String
+  logicLocation: ProjectLogicLocation
+  """2,000 characters at most."""
+  currentNetworking: String
+  """US cents a month, 0 to 2,000,000,000."""
+  currentNetworkingMonthlyCostCents: Int
+  referenceConsent: Boolean
+}
+
+"""
+Operator only: the first month free tier levels size pools on this tier, or off.
+"""
+input SetFreeTierLevelsInput {
+  """The first instant of a UTC month. Not with off: true."""
+  effectiveFrom: DateTime
+  """True stops levels sizing pools."""
+  off: Boolean
+  """Why, for the audit (billing_rate_changes)."""
+  reason: String!
+}
+
+"""
+Operator only: records a written agreement for a larger free allowance (whole months, starting next month or later), or revokes one.
+"""
+input SetOrgFreeTierAgreementInput {
+  orgId: BigInt!
+  """The first instant of the first UTC month it covers."""
+  startMonth: DateTime!
+  """
+  The first instant of the last UTC month it covers. Required unless revoke.
+  """
+  endMonth: DateTime
+  """
+  Free data out and data in, each, a month, in GB. Required unless revoke.
+  """
+  gigabytes: Int
+  """True revokes the agreement that starts at startMonth."""
+  revoke: Boolean
   """Why, for the audit (billing_rate_changes)."""
   reason: String!
 }
@@ -12843,6 +13290,14 @@ input CreateCheckoutInput {
   Optional idempotency key. Recommended for retries: replaying with the same key and identical input returns the first checkout instead of opening a second provider session; the same key with different input returns IDEMPOTENCY_CONFLICT. Keys expire after 24h.
   """
   idempotencyKey: String
+}
+
+"""Operator only: the Twenty sync's mode and webhook switch."""
+input SetCrmSyncInput {
+  mode: CrmSyncMode
+  webhookEnabled: Boolean
+  """Why, for the audit (crm_sync_changes)."""
+  reason: String!
 }
 
 input SetQuotaInput {

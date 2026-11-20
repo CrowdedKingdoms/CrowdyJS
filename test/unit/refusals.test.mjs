@@ -114,6 +114,23 @@ test('ACCOUNT_BLOCKED and GROUP_MEMBER_BANNED are read from an error or a raw pa
   assert.equal(groupMemberBannedOf({ extensions: { code: 'ACCESS_SUSPENDED' } }), false);
 });
 
+test('APP_LIMIT_REACHED names the cap of apps, from an error or a raw payload', async () => {
+  const { appLimitReachedOf, APP_LIMIT_REACHED_CODE, CrowdyGraphQLError } = await import('../../dist/index.js');
+  assert.equal(APP_LIMIT_REACHED_CODE, 'APP_LIMIT_REACHED');
+  assert.deepEqual(appLimitReachedOf({ extensions: { code: 'APP_LIMIT_REACHED', limit: 'apps', max: 10 } }), {
+    limit: 'apps',
+    max: 10,
+  });
+  assert.deepEqual(
+    appLimitReachedOf(
+      new CrowdyGraphQLError([{ message: 'refused', extensions: { code: 'APP_LIMIT_REACHED', limit: 'apps', max: 10 } }]),
+    ),
+    { limit: 'apps', max: 10 },
+  );
+  assert.deepEqual(appLimitReachedOf({ extensions: { code: 'APP_LIMIT_REACHED' } }), { limit: null, max: null });
+  assert.equal(appLimitReachedOf({ extensions: { code: 'GROUP_LIMIT_REACHED' } }), null);
+});
+
 test('GROUP_LIMIT_REACHED names the cap, from an error or a raw payload', async () => {
   const { groupLimitReachedOf, GROUP_LIMIT_REACHED_CODE, CrowdyGraphQLError } = await import('../../dist/index.js');
   assert.equal(GROUP_LIMIT_REACHED_CODE, 'GROUP_LIMIT_REACHED');
