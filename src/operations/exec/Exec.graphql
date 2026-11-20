@@ -106,6 +106,10 @@ fragment ExecAppStatusFields on ExecAppStatus {
   instanceLimit
   instances
   reservedMb
+  orgMaxInstances
+  orgMaxReservedMb
+  orgInstances
+  orgReservedMb
 }
 
 query ExecAppStatus($appId: BigInt!) {
