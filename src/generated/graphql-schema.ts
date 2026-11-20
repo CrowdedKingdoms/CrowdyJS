@@ -2376,7 +2376,7 @@ export type CreateAppInput = {
   slug: Scalars['String']['input'];
   /** Optional initial lifecycle status. Defaults to LIVE when omitted. */
   status?: InputMaybe<AppStatus>;
-  /** Optional initial visibility. Defaults to PUBLIC when omitted. */
+  /** Optional initial visibility. Defaults to UNLISTED when omitted: set PUBLIC to list the app in the marketplace. */
   visibility?: InputMaybe<AppVisibility>;
 };
 
@@ -2580,6 +2580,62 @@ export type CreatedTierAccessProvisioningToken = {
   provisioningToken: TierAccessProvisioningToken;
   /** The secret. Store it now; it cannot be read again. */
   token: Scalars['String']['output'];
+};
+
+/** Operator only. An organization the CRM backfill would add or leave out (BIZ-028 Q12). */
+export type CrmBackfillEntry = {
+  __typename?: 'CrmBackfillEntry';
+  /** The domain its Company is matched on; null when a new Company is made. */
+  matchDomain: Maybe<Scalars['String']['output']>;
+  name: Scalars['String']['output'];
+  orgId: Scalars['String']['output'];
+  ownerEmail: Maybe<Scalars['String']['output']>;
+  /** Why it is left out; null when it is added. */
+  reason: Maybe<Scalars['String']['output']>;
+};
+
+/** Operator only. The two lists the first CRM backfill is checked against before it runs (BIZ-028 Q12). */
+export type CrmBackfillPreview = {
+  __typename?: 'CrmBackfillPreview';
+  excluded: Array<CrmBackfillEntry>;
+  included: Array<CrmBackfillEntry>;
+};
+
+/** Operator only. What a CRM backfill queued. */
+export type CrmBackfillResult = {
+  __typename?: 'CrmBackfillResult';
+  organizations: Scalars['Int']['output'];
+  records: Scalars['Int']['output'];
+};
+
+/** Operator only. The Twenty sync's mode: OFF queues nothing; SHADOW queues and builds each record and sends nothing; LIVE writes to the CRM (and acts as SHADOW where this environment has no key). */
+export enum CrmSyncMode {
+  Live = 'LIVE',
+  Off = 'OFF',
+  Shadow = 'SHADOW'
+}
+
+/** Operator only. The Twenty sync's state in this environment. */
+export type CrmSyncStatus = {
+  __typename?: 'CrmSyncStatus';
+  /** When the first LIVE backfill was queued; the daily reconcile waits for it. */
+  backfillDoneAt: Maybe<Scalars['DateTime']['output']>;
+  /** Whether this environment has the CRM key. */
+  configured: Scalars['Boolean']['output'];
+  /** The mode the drain runs in: LIVE needs the CRM key here. */
+  effectiveMode: CrmSyncMode;
+  /** Records given up on in the last 7 days. */
+  failedLast7Days: Scalars['Int']['output'];
+  lastError: Maybe<Scalars['String']['output']>;
+  lastSentAt: Maybe<Scalars['DateTime']['output']>;
+  /** Fields or picklist values the CRM workspace lacks for LIVE (empty without a key); run scripts/twenty/ensure-schema.mjs. */
+  missingFields: Array<Scalars['String']['output']>;
+  mode: CrmSyncMode;
+  /** Records waiting to be sent. */
+  pending: Scalars['Int']['output'];
+  sentLast24Hours: Scalars['Int']['output'];
+  /** Whether the signed webhook is accepted. */
+  webhookEnabled: Scalars['Boolean']['output'];
 };
 
 /** Single-use human decision lifecycle for one canonical argument hash. */
@@ -3906,10 +3962,18 @@ export type ExecAppStatus = {
   instanceLimit: Maybe<Scalars['Int']['output']>;
   /** Instances of the app placed and not yet stopped in this datacenter now, mods included. Null from a manager older than ck-exec 0.15. */
   instances: Maybe<Scalars['Int']['output']>;
-  /** The most instances the app may have placed in this datacenter. The free hub tier (an organization that has not funded the app) allows 16; null means the manager's default. */
+  /** The most instances the app may have placed in this datacenter. The free hub tier (an organization that has not funded its wallet) allows 16, shared with the organization's other apps (orgMaxInstances); null means the manager's default. */
   maxInstances: Maybe<Scalars['Int']['output']>;
-  /** The most memory, in MB, the app's placed instances may reserve in this datacenter (each instance reserves its type's memory). The free hub tier allows 1,024; null means no memory limit beyond the instance count. */
+  /** The most memory, in MB, the app's placed instances may reserve in this datacenter (each instance reserves its type's memory). The free hub tier allows 1,024, shared with the organization's other apps (orgMaxReservedMb); null means no memory limit beyond the instance count. */
   maxReservedMb: Maybe<Scalars['Int']['output']>;
+  /** Instances of all of the organization's apps placed and not yet stopped in this datacenter now (what orgMaxInstances limits). Null without a shared ceiling. */
+  orgInstances: Maybe<Scalars['Int']['output']>;
+  /** The most instances all of the organization's apps together may have placed in this datacenter while it has not funded its wallet: 16. Null when the organization is funded (no shared ceiling) or the manager predates ck-exec 0.22. */
+  orgMaxInstances: Maybe<Scalars['Int']['output']>;
+  /** The most memory, in MB, all of the organization's apps' placed instances together may reserve in this datacenter while it has not funded its wallet: 1,024. Null when the organization is funded or the manager predates ck-exec 0.22. */
+  orgMaxReservedMb: Maybe<Scalars['Int']['output']>;
+  /** Memory, in MB, all of the organization's apps' instances reserve in this datacenter now (what orgMaxReservedMb limits). Null without a shared ceiling. */
+  orgReservedMb: Maybe<Scalars['Int']['output']>;
   /** Memory, in MB, those instances reserve now (what maxReservedMb limits). Null from a manager older than ck-exec 0.15. */
   reservedMb: Maybe<Scalars['Int']['output']>;
 };
@@ -4403,6 +4467,52 @@ export type FreeTierCardRequirement = {
   requiredFrom: Maybe<Scalars['DateTime']['output']>;
   /** Whether the requirement applies now to an organization created from requiredFrom on. */
   requiredNow: Scalars['Boolean']['output'];
+};
+
+/** What a free tier check did. */
+export type FreeTierCheckResult = {
+  __typename?: 'FreeTierCheckResult';
+  /** Organizations whose next month's level moved. */
+  changed: Scalars['Int']['output'];
+  checked: Scalars['Int']['output'];
+  failed: Scalars['Int']['output'];
+};
+
+/** An organization's free tier level, which sets its free data out and data in a month. A level earned or agreed applies from the start of the next month. */
+export enum FreeTierLevel {
+  /** A written agreement with Crowded Kingdoms sets the amount for whole months. */
+  Agreement = 'AGREEMENT',
+  /** Every organization: the pool's own size (15 GB today). */
+  Base = 'BASE',
+  /** A member has confirmed an email address at the domain the organization gives as its own; free email providers' domains do not count. 100 GB. */
+  Domain = 'DOMAIN',
+  /** One of the organization's apps had at least 10 different player accounts play on at least 3 of the last 7 UTC days; the organization's own members do not count. 500 GB. */
+  Measured = 'MEASURED',
+  /** The organization has completed its project profile. 200 GB. */
+  Profile = 'PROFILE'
+}
+
+/** One rung of the free tier ladder. */
+export type FreeTierLevelRung = {
+  __typename?: 'FreeTierLevelRung';
+  /** Free data out and free data in, each, a month, in GB (1 GB = 1,000,000,000 bytes). */
+  gigabytes: Scalars['Int']['output'];
+  level: FreeTierLevel;
+};
+
+/** The free tier ladder on this tier: what each earned level gives an organization's data out and data in a month. A daily check sets each organization's level for the next month. */
+export type FreeTierLevels = {
+  __typename?: 'FreeTierLevels';
+  /** The first month levels size organizations' pools on this tier. Null while they size none. */
+  effectiveFrom: Maybe<Scalars['DateTime']['output']>;
+  /** BASE, DOMAIN, PROFILE and MEASURED, lowest first. */
+  levels: Array<FreeTierLevelRung>;
+  /** MEASURED: distinct player accounts a day. */
+  measuredMinAccounts: Scalars['Int']['output'];
+  /** MEASURED: days with that many. */
+  measuredMinDays: Scalars['Int']['output'];
+  /** MEASURED: out of the last this many UTC days. */
+  measuredWindowDays: Scalars['Int']['output'];
 };
 
 /** Startup contract for browser game clients. Fetch this after login to initialize protocol/version checks and UDP proxy state in one round trip. */
@@ -5361,7 +5471,7 @@ export type Mutation = {
   createAccessTier: AppAccessTier;
   /** Creates an actor (a player’s presence/instance in an app world) owned by the authenticated user and returns the persisted row (including the server-set `createdAt`). Requires a valid game token. If `input.avatarId` is set it must reference an avatar the caller owns (throws Unauthorized otherwise). `input.uuid` must be the 32-character ASCII actor id used on the UDP wire (NOT a hyphenated RFC-4122 UUID). */
   createActor: Actor;
-  /** Create a new app within an organization. Requires the 'manage_apps' permission on the target org (input.orgId); super admins bypass. REQUIRES A DATACENTER (input.datacenter): the app is distributed on its app_id, so all of its data lives in one datacenter, and the id is chosen at creation so that it does. Query placeableDatacenters first for the codes this deployment accepts. Creation FAILS — rather than producing an unroutable app — if the named datacenter is unknown to this deployment or holds no shards. SIDE EFFECTS: also provisions a free, open-by-default "Default" access tier granting baseline runtime permissions and notifies the game API. Elevated capabilities such as use_studio_agent are NOT granted by default and require an explicit tier grant. Slug must be unique within the org (a duplicate slug fails). New apps default to visibility=PUBLIC and status=LIVE unless overridden in the input. Neither setting decides who may play; the access tiers do. */
+  /** Create a new app within an organization. Requires the 'manage_apps' permission on the target org (input.orgId); super admins bypass. REQUIRES A DATACENTER (input.datacenter): the app is distributed on its app_id, so all of its data lives in one datacenter, and the id is chosen at creation so that it does. Query placeableDatacenters first for the codes this deployment accepts. Creation FAILS — rather than producing an unroutable app — if the named datacenter is unknown to this deployment or holds no shards. SIDE EFFECTS: also provisions a free, open-by-default "Default" access tier granting baseline runtime permissions and notifies the game API. Elevated capabilities such as use_studio_agent are NOT granted by default and require an explicit tier grant. Slug must be unique within the org (a duplicate slug fails). New apps default to visibility=UNLISTED and status=LIVE unless overridden in the input: an app reaches the marketplace only once it is set PUBLIC (updateApp). Neither setting decides who may play; the access tiers do. An organization without a funded wallet or auto-billing may have at most 10 apps that are not archived; one more is refused with APP_LIMIT_REACHED (orgAppLimit says where an organization stands). */
   createApp: App;
   /** Creates a new avatar owned by the authenticated user and returns it. Requires a valid game token; the new avatar is always owned by the caller. `input.name` is optional and defaults to "Default Avatar". */
   createAvatar: Avatar;
@@ -5635,6 +5745,10 @@ export type Mutation = {
   revokeTierAccessRule: TierAccessRule;
   /** Reverts every voxel edit made by `userId` in `appId` between `from` and `to`, returning one RollbackVoxelEventResult per affected voxel (`applied` tells you whether each was actually changed). DEFAULTS to dryRun=true, which only PREVIEWS the planned reversions without writing; pass dryRun=false to actually apply them (DESTRUCTIVE — mutates world state). A reverted voxel’s edit-log row takes the earlier edit’s type, state and author and the ROLLBACK’s time as its createdAt, so a client reading edits `since` its last sync sees the revert. When the app’s wilderness is closed (`wildernessOpen` false), an applied rollback that would write any chunk of closed, unclaimed wilderness is refused (403) before it writes anything; a dry run is not. Requires a valid bearer token AND the `manage_apps` permission on the org that owns `appId` (super admins bypass). */
   rollbackVoxelUpdates: Array<RollbackVoxelEventResult>;
+  /** Operator only. Queues every eligible organization for the Twenty sync (BIZ-028 Q12's backfill) and, in LIVE, records it so the daily reconcile starts. With orgId, queues that organization alone (a canary) and records nothing. Needs confirm: true. */
+  runCrmBackfill: CrmBackfillResult;
+  /** Operator only. Runs the daily free tier check now, for one organization or all of them, writing next month's levels. */
+  runFreeTierCheck: FreeTierCheckResult;
   /** OPERATOR ONLY. Runs the shared-usage tick once instead of waiting for the ~60s cron: reserved-throughput billing, the itemised statement of the last closed clock hour, and the usage-gate evaluation of every shared app. Metered usage is priced and charged by the ledger's settlement, about once a minute, not by this tick. Backdating usage rows is a local-test fixture, not something this mutation does on a live tier. */
   runSharedUsageBillingTick: Scalars['Boolean']['output'];
   /** Send an actor (player/NPC) state update for spatial replication to nearby chunks. Requires a bearer game token; opens a UDP proxy session automatically if none exists. Returns Boolean! that is true only when the datagram was ACCEPTED FOR SENDING to the game server — it does NOT confirm the world applied the update. There is NO separate per-request success response: the game server fans the update out to every client in the target chunk INCLUDING the sender, so you observe your own applied update as an ActorUpdateNotification carrying the same sequenceNumber (ActorUpdateResponse is legacy and is never emitted). Failures arrive ASYNCHRONOUSLY as a GenericErrorResponse; both are correlated by the request sequenceNumber (correlation only — not an idempotency key; the server does not dedupe replays). Subscribe to udpNotifications before sending so the self-notification/error is not missed. */
@@ -5689,12 +5803,16 @@ export type Mutation = {
   setChannelMemberRoles: GroupMember;
   /** Set who may create channels in an app and the default membership policy for new channels. Requires app-admin ('manage_apps'). Affects future channel creation only, not existing channels. */
   setChannelPolicy: AppGroupPolicy;
+  /** Operator only. Sets the Twenty sync's mode (OFF, SHADOW, LIVE) and whether its signed webhook is accepted; recorded in crm_sync_changes. LIVE sends studio and developer contacts to the CRM. */
+  setCrmSync: CrmSyncStatus;
   /** Create or patch an app's Agentic Crowdy Studio policy. Requires 'manage_compute'. Omitted values stay unchanged; first creation starts disabled, killed, and deny-all. A model/tool/mode/risk list naming anything outside the platform allowlist is REFUSED with AGENT_POLICY_INVALID quoting the platform's current list, rather than silently reduced; a list you do send is stored exactly as sent and can only narrow, and omitting it entirely means 'no narrowing', which inherits the platform's list live on every read. Numeric and retention values are still clamped down to platform limits. Locked ZDR/collection/body-retention rules and the operator app kill cannot be changed. SIDE EFFECTS: increments Management's publication revision and appends a sanitized audit event. NOTHING IS PUSHED TO GAME API: its runtime pulls crowdy.studio-agent-policy/1, obtaining a replica the first time a permitted caller asks about an app that has none, and re-pulling an existing replica once it passes refreshAfter (two thirds of its 60s validity). A change therefore reaches enforcement within about a minute for an app already in use, and not at all until someone asks for one that is not. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT. */
   setCrowdyStudioAgentPolicy: CrowdyStudioAgentPolicy;
   /** Sets the per-user early-access override flag, forcing early access on or off regardless of the global free-play window. Requires a super-admin bearer game token (and the management API enabled). */
   setEarlyAccessOverride: User;
   /** Operator only. Sets when the free-tier card requirement applies on this tier (or switches it off) and the grace for organizations created before then, and records each change in billing_rate_changes (scope SHARED, metric free_tier_card). The usage gate applies it within about a minute. */
   setFreeTierCardRequirement: FreeTierCardRequirement;
+  /** Operator only. Sets the first month free tier levels size organizations' pools on this tier (the first instant of a UTC month), or stops them, and records the change in billing_rate_changes (scope SHARED, metric free_tier_levels). A month whose pools are already open keeps their size. */
+  setFreeTierLevels: FreeTierLevels;
   /** Open a grid to every player: replace the permission keys it grants each player with active access to the app (writes the `grid_open_permissions` input table), then recompute the grid's materialized effective ACL for all of them. The most specific grid covering a chunk decides a voxel write there, so a zone inside the world grid that everyone may build in must grant `update_voxel_data` itself. The grid's limits still cap these keys; players who get access later receive them when they connect. Pass an empty array to close the grid. Refuses the app's world grid (already open), the four player-code keys, and a 33rd open grid in one app. Requires app-admin ('manage_apps'). */
   setGridOpenPermissions: GridOpenPermissions;
   /** Replace the whitelist of permission keys allowed on a grid (writes the `grid_permission_limits` input table), then recompute the grid's materialized effective ACL so any keys no longer on the whitelist are dropped for all users. Pass an empty array to remove all limits. Requires app-admin ('manage_apps'). DESTRUCTIVE: narrowing the whitelist can strip effective permissions from existing users on the grid. */
@@ -5715,8 +5833,14 @@ export type Mutation = {
   setOrgBillingExempt: BillingExemptOrgType;
   /** Operator only. Exempts an organization from the free-tier card requirement, or ends its exemption, records the change in billing_rate_changes (scope SHARED, metric free_tier_card), and re-evaluates the organization's apps at once. For CK's own organizations; reason is required. */
   setOrgCardRequirementExempt: OrgCardRequirement;
+  /** Operator only. Records a written agreement for a larger free allowance, for whole months starting next month or later, or revokes one (revoke: true with its startMonth). Recorded in billing_rate_changes (scope SHARED, metric free_tier_agreement); next month's level is checked again at once. */
+  setOrgFreeTierAgreement: OrgFreeTier;
   /** OPERATOR ONLY. Enable or disable an organization's org-managed players and set its limits. Disabling refuses new sign-ins; sessions already running last until they lapse (end them with endManagedPlayerSessions). Enabling does not accept the addendum: an admin of the organization does that (acceptManagedPlayerTerms). */
   setOrgManagedPlayerSettings: OrgManagedPlayerSettings;
+  /** Sets the domain the organization gives as its own (studio.com), or clears it with null. A member's confirmed email address at it, or at one of its subdomains, earns the DOMAIN free tier level; a free email provider's domain is refused (FREE_EMAIL_DOMAIN). Next month's level is checked again at once. Requires the 'manage_billing' org permission. */
+  setOrgOwnDomain: OrgFreeTier;
+  /** Saves answers to the organization's project profile. An omitted field keeps its answer; null clears it. When every answer is in, the profile is complete and next month's free tier level is checked again at once (PROFILE). Requires the 'manage_billing' org permission. */
+  setOrgProjectProfile: OrgProjectProfile;
   /** Super admin only. Freeze ('frozen') or unfreeze ('active') an organization platform-wide. A FROZEN organization grants its members NO org permission (super admins excepted, so it is reversible): they cannot spend its wallet, create or manage apps, or change members, and every such refusal names the freeze; its API tokens stop authenticating; the org itself still resolves by id and slug so Studio can show the state. Takes exactly 'active' or 'frozen'; 'retired' is refused in either direction — retirement is retireOrganization, which writes a tombstone. */
   setOrgStatus: Organization;
   /** Configure the caller's player-wallet auto-recharge: enable/disable, per-period ceiling, recharge amount, and low-water threshold. Enabling requires a vaulted payment method. */
@@ -5727,6 +5851,8 @@ export type Mutation = {
   setPlayerRateMarkup: Scalars['Int']['output'];
   /** Set (or clear, by passing both limits null) one of the caller's self-set spend caps: a global or per-app daily/monthly ceiling in cents. Hitting a cap pauses that player's mods with PLAYER_SPEND_CAP until the window rolls — play is untouched. Changes replica-sync to the game runtime. */
   setPlayerSpendCap: Array<PlayerSpendCap>;
+  /** Operator only. Sets (or switches off) the first calendar month whose player trial is one per player across an organization's apps on this tier, and records the change in billing_rate_changes (scope PLAYER, metric player_trial_pool). A month already settled keeps the trial it was settled with. */
+  setPlayerTrialPool: PlayerTrialPoolSettings;
   /** Creates or updates a quota enforcement rule (idempotent upsert keyed by org/app/tier + metric + period) and returns it. Scope is inferred from the input ids: an app-scoped rule requires the 'manage_quotas' app permission, an org-scoped rule requires the 'manage_quotas' org permission, and a global rule (no org/app/tier) requires super admin. Changes which limit `effectiveQuota` resolves for the metric; does not retroactively alter past usage. */
   setQuota: ServiceQuota;
   /** ADMIN PRIVILEGE CHANGE: grants or revokes platform super-admin on the target user, changing their privileges across the whole platform. Requires a super-admin bearer game token (and the management API enabled). */
@@ -5777,7 +5903,7 @@ export type Mutation = {
   updateActor: Actor;
   /** Replaces an actor’s `publicState` and/or `privateState` blobs (fields omitted from `input` are left unchanged). OWNER-EXCLUSIVE: only the actor’s owner may write (throws Unauthorized otherwise). Game-plane: requires an app token for the actor’s app (a session token or another app’s token is answered NotFound). `uuid` is the 32-character ASCII actor id; blobs are base64-encoded binary. */
   updateActorState: Actor;
-  /** Update mutable fields of an existing app (name, description, visibility, status, metadata, wildernessWritesOpen, claimOwnerKeys, replayLoggingEnabled, replayLoggingRecordsMedia, replayLoggingRecordsVoice, replayLoggingRecordsVideo, minPlayerAge, idleTimeoutSeconds); only fields present in the input are changed. Turning replayLoggingEnabled on is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet can spend at least the projected cost of keeping one retention period of the app's recent traffic (extensions.requiredMicrousd and spendableMicrousd say how much), or the org is billing-exempt; recordings already kept go on billing after it is turned off, until they age out. Turning it off is refused with SAFETY_LOG_REQUIRED while the app admits players under 18. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility, or restore an archived app (status back to DRAFT/LIVE). Throws if the app id does not exist. */
+  /** Update mutable fields of an existing app (name, description, visibility, status, metadata, wildernessWritesOpen, claimOwnerKeys, replayLoggingEnabled, replayLoggingRecordsMedia, replayLoggingRecordsVoice, replayLoggingRecordsVideo, minPlayerAge, idleTimeoutSeconds); only fields present in the input are changed. Turning replayLoggingEnabled on is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet can spend at least the projected cost of keeping one retention period of the app's recent traffic (extensions.requiredMicrousd and spendableMicrousd say how much), or the org is billing-exempt; recordings already kept go on billing after it is turned off, until they age out. Turning it off is refused with SAFETY_LOG_REQUIRED while the app admits players under 18. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility (PUBLIC lists the app in the marketplace), or restore an archived app (status back to DRAFT/LIVE); a restore counts against the cap of 10 apps for an organization without a funded wallet or auto-billing (APP_LIMIT_REACHED). Throws if the app id does not exist. */
   updateApp: App;
   /** Updates an avatar’s mutable fields (currently `name`) and returns it. OWNER-EXCLUSIVE: only the avatar’s owner may call this (throws Unauthorized otherwise). Requires a valid game token. To change state blobs use `updateAvatarState`. */
   updateAvatar: Avatar;
@@ -6766,6 +6892,17 @@ export type MutationRollbackVoxelUpdatesArgs = {
 };
 
 
+export type MutationRunCrmBackfillArgs = {
+  confirm: Scalars['Boolean']['input'];
+  orgId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type MutationRunFreeTierCheckArgs = {
+  orgId?: InputMaybe<Scalars['BigInt']['input']>;
+};
+
+
 export type MutationSendActorUpdateArgs = {
   input: ActorUpdateRequestInput;
 };
@@ -6917,6 +7054,11 @@ export type MutationSetChannelPolicyArgs = {
 };
 
 
+export type MutationSetCrmSyncArgs = {
+  input: SetCrmSyncInput;
+};
+
+
 export type MutationSetCrowdyStudioAgentPolicyArgs = {
   input: SetCrowdyStudioAgentAppPolicyInput;
 };
@@ -6930,6 +7072,11 @@ export type MutationSetEarlyAccessOverrideArgs = {
 
 export type MutationSetFreeTierCardRequirementArgs = {
   input: SetFreeTierCardRequirementInput;
+};
+
+
+export type MutationSetFreeTierLevelsArgs = {
+  input: SetFreeTierLevelsInput;
 };
 
 
@@ -6989,8 +7136,24 @@ export type MutationSetOrgCardRequirementExemptArgs = {
 };
 
 
+export type MutationSetOrgFreeTierAgreementArgs = {
+  input: SetOrgFreeTierAgreementInput;
+};
+
+
 export type MutationSetOrgManagedPlayerSettingsArgs = {
   input: SetOrgManagedPlayerSettingsInput;
+};
+
+
+export type MutationSetOrgOwnDomainArgs = {
+  domain?: InputMaybe<Scalars['String']['input']>;
+  orgId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationSetOrgProjectProfileArgs = {
+  input: SetOrgProjectProfileInput;
 };
 
 
@@ -7026,6 +7189,11 @@ export type MutationSetPlayerSpendCapArgs = {
   dailyLimitCents?: InputMaybe<Scalars['BigInt']['input']>;
   monthlyLimitCents?: InputMaybe<Scalars['BigInt']['input']>;
   scope: Scalars['String']['input'];
+};
+
+
+export type MutationSetPlayerTrialPoolArgs = {
+  input: SetPlayerTrialPoolInput;
 };
 
 
@@ -7358,6 +7526,17 @@ export type OrgAllowancePool = {
   usedUnits: Scalars['String']['output'];
 };
 
+/** How many apps an organization has against the cap for organizations that have not funded their wallet: at most 10 that are not archived while the wallet has no spendable balance and auto-billing is off. A funded (or billing-exempt) organization has no cap. Creating or restoring an app past it is refused with APP_LIMIT_REACHED; no existing app is removed. */
+export type OrgAppLimit = {
+  __typename?: 'OrgAppLimit';
+  /** The organization's apps that are not archived. */
+  apps: Scalars['Int']['output'];
+  /** True when the organization has a spendable wallet balance, auto-billing on, or a billing exemption: then it has no cap. */
+  funded: Scalars['Boolean']['output'];
+  /** The most apps it may have that are not archived, or null when it has no cap (funded). */
+  max: Maybe<Scalars['Int']['output']>;
+};
+
 /** Per-app projection row within an org rollup. */
 export type OrgAppUsageProjectionRow = {
   __typename?: 'OrgAppUsageProjectionRow';
@@ -7409,6 +7588,58 @@ export type OrgCardRequirement = {
   requiredFrom: Maybe<Scalars['DateTime']['output']>;
   /** Whether the requirement applies to this organization now. */
   requiredNow: Scalars['Boolean']['output'];
+};
+
+/** Where an organization stands on the free tier ladder: this month's level, next month's, and which conditions it meets now. A level it reaches applies from the start of the next month. */
+export type OrgFreeTier = {
+  __typename?: 'OrgFreeTier';
+  /** Written agreements covering this month or later. */
+  agreements: Array<OrgFreeTierAgreement>;
+  /** When the daily check last looked at the organization. */
+  checkedAt: Maybe<Scalars['DateTime']['output']>;
+  /** DOMAIN, PROFILE and MEASURED, with whether each is met now. */
+  conditions: Array<OrgFreeTierCondition>;
+  /** The level the conditions met now earn. */
+  earnedLevel: FreeTierLevel;
+  /** The first month levels size pools on this tier (freeTierLevels.effectiveFrom). */
+  effectiveFrom: Maybe<Scalars['DateTime']['output']>;
+  /** MEASURED: the most days in the window on which one of the organization's apps had enough distinct player accounts. */
+  measuredQualifyingDays: Scalars['Int']['output'];
+  /** Next month, as the latest check decided it. The daily check, and saving the profile or the domain, update it. */
+  nextMonth: OrgFreeTierMonth;
+  orgId: Scalars['BigInt']['output'];
+  /** The domain the organization gives as its own. */
+  ownDomain: Maybe<Scalars['String']['output']>;
+  thisMonth: OrgFreeTierMonth;
+};
+
+/** A written agreement for a larger free allowance. */
+export type OrgFreeTierAgreement = {
+  __typename?: 'OrgFreeTierAgreement';
+  /** The last month it covers. */
+  endMonth: Scalars['DateTime']['output'];
+  /** Free data out and data in, each, a month, in GB. */
+  gigabytes: Scalars['Int']['output'];
+  /** The first month it covers. */
+  startMonth: Scalars['DateTime']['output'];
+};
+
+/** One earned level and whether its condition is met now. */
+export type OrgFreeTierCondition = {
+  __typename?: 'OrgFreeTierCondition';
+  gigabytes: Scalars['Int']['output'];
+  level: FreeTierLevel;
+  met: Scalars['Boolean']['output'];
+};
+
+/** An organization's free tier level for one month. */
+export type OrgFreeTierMonth = {
+  __typename?: 'OrgFreeTierMonth';
+  /** Free data out and free data in, each, that month, in GB. For the current month, the pool's size once the organization's apps have drawn on it. */
+  gigabytes: Scalars['Int']['output'];
+  level: FreeTierLevel;
+  /** The month, as its first instant (UTC). */
+  periodStart: Scalars['DateTime']['output'];
 };
 
 /** An organization's org-managed player settings, and where it stands on the Org-Managed Players Addendum. A Crowded Kingdoms operator sets the settings; an admin of the organization accepts the addendum. */
@@ -7480,6 +7711,38 @@ export type OrgPermission = {
   description: Maybe<Scalars['String']['output']>;
   /** Stable permission key used in role grants (e.g. 'manage_members', 'manage_tokens'). */
   permissionKey: Scalars['ID']['output'];
+};
+
+/** The organization's six-question project profile. Complete, it earns the PROFILE free tier level. */
+export type OrgProjectProfile = {
+  __typename?: 'OrgProjectProfile';
+  /** When every answer was in; null while any is missing. */
+  completedAt: Maybe<Scalars['DateTime']['output']>;
+  /** The networking it uses today. */
+  currentNetworking: Maybe<Scalars['String']['output']>;
+  /** What that networking costs a month, in US cents. */
+  currentNetworkingMonthlyCostCents: Maybe<Scalars['Int']['output']>;
+  /** The engine. */
+  engine: Maybe<Scalars['String']['output']>;
+  /** The planned launch date. */
+  launchDate: Maybe<Scalars['DateTime']['output']>;
+  logicLocation: Maybe<ProjectLogicLocation>;
+  orgId: Scalars['BigInt']['output'];
+  /** Players each one sees at launch. */
+  playersInViewLaunch: Maybe<Scalars['Int']['output']>;
+  /** Players each one sees a year on. */
+  playersInViewYear1: Maybe<Scalars['Int']['output']>;
+  /** Players in one world at launch. */
+  playersPerWorldLaunch: Maybe<Scalars['Int']['output']>;
+  /** Players in one world a year on. */
+  playersPerWorldYear1: Maybe<Scalars['Int']['output']>;
+  /** Whether Crowded Kingdoms may name the studio as a reference. */
+  referenceConsent: Maybe<Scalars['Boolean']['output']>;
+  stage: Maybe<ProjectStage>;
+  updatedAt: Maybe<Scalars['DateTime']['output']>;
+  /** What the game is. */
+  whatBuilding: Maybe<Scalars['String']['output']>;
+  worldShape: Maybe<ProjectWorldShape>;
 };
 
 /** A record of one organization retirement. Retirement is a STATE, not a deletion: every ledger row the organization ever wrote is still present and still references it, so what the org spent stays reconstructable with the same joins as before. This row says who retired it, why, and what it was holding at the time. */
@@ -8138,6 +8401,17 @@ export type PlayerSpendCap = {
   userId: Scalars['BigInt']['output'];
 };
 
+/** The player compute trial: each player's monthly trial budget, and from when it is one trial per player across an organization's apps instead of one in each app. */
+export type PlayerTrialPoolSettings = {
+  __typename?: 'PlayerTrialPoolSettings';
+  /** The monthly trial budget in compute units (player_free_monthly_allowances, player_wasm_compute_units). */
+  budgetUnits: Scalars['BigInt']['output'];
+  /** Calendar months starting on or after this instant give a player one trial across an organization's apps; earlier months give one in each app. Null: not switched on, so every month gives one in each app. */
+  perOrganizationFrom: Maybe<Scalars['DateTime']['output']>;
+  /** Whether the current calendar month gives one trial per player across an organization (its start is on or after perOrganizationFrom). */
+  perOrganizationNow: Scalars['Boolean']['output'];
+};
+
 /** One player usage charge from the hourly cents-era billing: a (player, app, closed clock hour) row. The lossless ledger, on by default, replaced that billing and writes no rows here, so the list ends where the ledger took over; usage since is in playerWalletTransactions as "usage_debit" entries. amountCents = platformCents + markupCents: what the platform charged and what the studio added. */
 export type PlayerUsageCharge = {
   __typename?: 'PlayerUsageCharge';
@@ -8165,7 +8439,7 @@ export type PlayerUsageCharge = {
   userId: Scalars['BigInt']['output'];
 };
 
-/** The caller's player wallet: one platform-scoped balance, across every org and app they play in, that pays for the player's mods past their monthly trial (250,000 compute units in each app) and for any Agentic Studio model requests charged to them. Out-of-band from org wallets — player usage never touches an org's money. */
+/** The caller's player wallet: one platform-scoped balance, across every org and app they play in, that pays for the player's mods past their monthly trial (250,000 compute units a month in each app, or one trial across an organization's apps from playerTrialPool.perOrganizationFrom) and for any Agentic Studio model requests charged to them. Out-of-band from org wallets — player usage never touches an org's money. */
 export type PlayerWallet = {
   __typename?: 'PlayerWallet';
   /**
@@ -8254,6 +8528,29 @@ export enum PriceBandBasis {
   Volume = 'VOLUME'
 }
 
+/** Where the game's logic runs: on the clients, in light server code, or in a full server simulation. */
+export enum ProjectLogicLocation {
+  Clients = 'CLIENTS',
+  FullServerSimulation = 'FULL_SERVER_SIMULATION',
+  LightServerCode = 'LIGHT_SERVER_CODE'
+}
+
+/** The project's stage. */
+export enum ProjectStage {
+  Beta = 'BETA',
+  Live = 'LIVE',
+  PreProduction = 'PRE_PRODUCTION',
+  Production = 'PRODUCTION',
+  Prototype = 'PROTOTYPE'
+}
+
+/** Whether the game is one world with everyone in it or many copies of a small one. */
+export enum ProjectWorldShape {
+  ManyCopies = 'MANY_COPIES',
+  OneWorld = 'ONE_WORLD',
+  Unsure = 'UNSURE'
+}
+
 export type ProvisionManagedPlayersInput = {
   /** The organization (an org token's own, if one is used). */
   orgId: Scalars['BigInt']['input'];
@@ -8278,7 +8575,7 @@ export type PublicRateCardEntryType = {
   currency: Scalars['String']['output'];
   /** Raw metric units free per clock hour before anything is charged, as a BigInt decimal string. Null when this dimension has no allowance row, which for a priced dimension means it bills from the first unit. */
   freePerHour: Maybe<Scalars['BigInt']['output']>;
-  /** Raw metric units free per UTC calendar month, as a BigInt decimal string. On the PLAYER card this is the pooled monthly trial budget per (player, app). Null when this dimension has no monthly allowance. */
+  /** Raw metric units free per UTC calendar month, as a BigInt decimal string. On the PLAYER card this is the monthly trial budget of a player: in each app, or one across the apps of an organization from playerTrialPool.perOrganizationFrom. Null when this dimension has no monthly allowance. */
   freePerMonth: Maybe<Scalars['BigInt']['output']>;
   /** The period freeUnits resets on. Every dimension is billed as its period aggregate crosses each whole cent, within about a minute of the usage arriving. */
   freePeriod: Maybe<AllowancePeriod>;
@@ -8475,6 +8772,10 @@ export type Query = {
   cpCrowdyStudioAgentCatalog: CrowdyStudioAgentCatalog;
   /** Operator only (is_operator or is_super_admin). Read the platform Agentic Studio enablement, global emergency kill, model/tool/mode/risk allowlists, budget ceilings, retention/privacy policy, pilot funding seam, timestamps, and revision. No provider credential or request body is stored or returned. */
   cpCrowdyStudioAgentPlatformPolicy: CrowdyStudioAgentPolicy;
+  /** Operator only. The organizations the CRM backfill would add, and those it leaves out with why (BIZ-028 Q12). Holds owners' email addresses: for the operator only. */
+  crmBackfillPreview: CrmBackfillPreview;
+  /** Operator only. The Twenty sync's mode, queue and last error in this environment, and what the CRM workspace lacks for LIVE. */
+  crmSyncStatus: CrmSyncStatus;
   /** Read Management's fail-closed Agentic Crowdy Studio publication: platform enable/kill, per-app operator kill, app enable/kill, the resolved model/tool/mode/risk lists (models and modes are the platform/app intersection; a tool or risk list the app left empty is inherited from the platform whole, because empty at a layer that can only narrow means no narrowing), minimum budgets/retention, locked privacy, and platform-funded billing seam. Requires 'view_compute_diagnostics'. This is the source publication, not proof of current runtime enforcement: Game API must hold a fresh crowdy.studio-agent-policy/1 replica and independently enforce it; missing/stale/malformed replica or an empty model/mode intersection must disable the agent. */
   crowdyStudioAgentEffectivePolicy: CrowdyStudioAgentPolicy;
   /** Read the app-owned Agentic Crowdy Studio policy row, or a disabled/killed deny-all projection when no row exists. Requires 'view_compute_diagnostics' on the app. This is configuration only: use crowdyStudioAgentEffectivePolicy to see platform clamp and kill precedence. No provider key, prompt, source, header, request/response body, payer reference, or other secret is exposed. */
@@ -8561,6 +8862,8 @@ export type Query = {
   freePlayWindowInfo: FreePlayWindowInfo;
   /** PUBLIC: no authentication required. Whether this tier asks an organization for a saved card before its apps run, from when, and how much later for an organization created before then. Read-only. */
   freeTierCardRequirement: FreeTierCardRequirement;
+  /** PUBLIC: no authentication required. The free tier ladder on this tier: an organization's free data out and data in a month at each earned level, the MEASURED thresholds, and the first month levels apply. Read-only. */
+  freeTierLevels: FreeTierLevels;
   /** Single startup payload for browser game clients: the authenticated user, server/min-client version requirements, current UDP proxy status, realtime protocol details (subprotocol + subscription name), and the spatial send limits/constants (maxReplicationDistance, maxDecayRate, sequenceNumberModulo). Requires a bearer game token. Read-only: does not open a UDP proxy session. Call this once after login to initialize a play session. */
   gameClientBootstrap: GameClientBootstrap;
   /** Returns the single elected host user for an app (game). Deterministic across all game-api replicas behind the LB: the user whose earliest still-connected actor row was created first wins, with a uuid tiebreaker. Returns null when no actors exist for the app. Stale actors (no recent actorHeartbeat) are excluded once HOST_ACTOR_FRESHNESS_SECONDS is enabled. Clients should poll; there is no host-change subscription in v1. */
@@ -8665,6 +8968,8 @@ export type Query = {
   nearbyGridPermissions: Array<NearbyGridPermissions>;
   /** List every grid overlapping a chunk-coordinate bounding box: its gridId, its bounds and the caller's own permission keys on it. Player-safe: another user's keys need nearbyGridPermissions (app admin). The grid that decides a voxel edit in a chunk is the smallest box covering it (the lower gridId on a tie), and the edit needs update_voxel_data there. Requires an app-scoped token for the same app. */
   nearbyGrids: Array<NearbyGrid>;
+  /** Where an organization stands against the cap for organizations without a funded wallet or auto-billing: its apps that are not archived, whether it is funded, and the cap (10, or null when funded). Requires the 'manage_apps' permission on the organization; super admins bypass. */
+  orgAppLimit: OrgAppLimit;
   /** An org's off-session auto-billing configuration (enabled flag, recharge amount, low-water threshold, per-period cap, and last error). Requires the 'view_billing' org permission. */
   orgAutoBilling: OrgAutoBilling;
   /** Where an organization stands against the free-tier card requirement: from when it applies to this organization, and whether the organization has a saved card or an exemption. Studio reads it to ask for a card. Requires the 'view_billing' org permission. */
@@ -8674,6 +8979,8 @@ export type Query = {
    * @deprecated Free app slots are retired. From allowancePool.effectiveFrom an organization's apps share one free allowance a month; read orgUsageProjection.allowancePools. Before then each app has its own allowance whatever its slot.
    */
   orgFreeAppQuota: FreeAppQuota;
+  /** Where an organization stands on the free tier ladder: this month's level, next month's as the latest check decided it, the conditions it meets now, its own domain and its agreements. A level reached applies from the start of the next month. Requires the 'view_billing' org permission. */
+  orgFreeTier: OrgFreeTier;
   /** The organization's org-managed player settings: whether it may sign its own players in, its cap, sign-in rate and sign-in lifetimes, how many players it holds, and whether it has accepted the current Org-Managed Players Addendum. Requires manage_players on the org (super-admins and operators bypass). */
   orgManagedPlayerSettings: OrgManagedPlayerSettings;
   /** Lists the members of an organization. Requires the 'manage_members' permission on the org (super admins bypass). */
@@ -8682,6 +8989,8 @@ export type Query = {
   orgPaymentMethods: Array<SavedPaymentMethod>;
   /** The full seed list of permission keys. Used by the UI to render role editors. */
   orgPermissions: Array<OrgPermission>;
+  /** The organization's project profile, empty until answered. Requires the 'view_billing' org permission. */
+  orgProjectProfile: OrgProjectProfile;
   /** Lists all roles defined in an organization. Requires the 'manage_members' permission on the org (super admins bypass). */
   orgRoles: Array<OrgRole>;
   /** The organization's signing keys for player assertions, newest first, revoked ones included. Requires manage_players on the org. */
@@ -8722,6 +9031,8 @@ export type Query = {
   playerRuntimeStates: Array<PlayerRuntimeState>;
   /** The caller's self-set spend caps (global and per-app) with running counters. The effective runtime limit is min(developer policy, self-cap, wallet balance). */
   playerSpendCaps: Array<PlayerSpendCap>;
+  /** PUBLIC: no authentication required. The player compute trial on this tier: its monthly budget, and from when it is one trial per player across an organization's apps. Read-only. */
+  playerTrialPool: PlayerTrialPoolSettings;
   /**
    * The caller's hourly player-usage charges from the cents-era billing, newest first, optionally filtered by app. Nothing has been added since the lossless ledger took over; current usage charges are the "usage_debit" entries in playerWalletTransactions.
    * @deprecated Reads the hourly cents-era charge rows, which the lossless ledger does not write. Read playerWalletTransactions: each "usage_debit" entry is one charge, per app, markup included.
@@ -9538,6 +9849,11 @@ export type QueryNearbyGridsArgs = {
 };
 
 
+export type QueryOrgAppLimitArgs = {
+  orgId: Scalars['BigInt']['input'];
+};
+
+
 export type QueryOrgAutoBillingArgs = {
   orgId: Scalars['BigInt']['input'];
 };
@@ -9553,6 +9869,11 @@ export type QueryOrgFreeAppQuotaArgs = {
 };
 
 
+export type QueryOrgFreeTierArgs = {
+  orgId: Scalars['BigInt']['input'];
+};
+
+
 export type QueryOrgManagedPlayerSettingsArgs = {
   orgId: Scalars['BigInt']['input'];
 };
@@ -9564,6 +9885,11 @@ export type QueryOrgMembersArgs = {
 
 
 export type QueryOrgPaymentMethodsArgs = {
+  orgId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryOrgProjectProfileArgs = {
   orgId: Scalars['BigInt']['input'];
 };
 
@@ -9837,7 +10163,7 @@ export type RateCardEntryType = {
   description: Maybe<Scalars['String']['output']>;
   /** Raw metric units free per clock hour before anything is charged, as a BigInt decimal string. Null when this dimension has no allowance row, which for a priced dimension means it bills from the first unit. */
   freePerHour: Maybe<Scalars['BigInt']['output']>;
-  /** Raw metric units free per UTC calendar month, as a BigInt decimal string. On the PLAYER card this is the pooled monthly trial budget per (player, app), and player_wasm_compute_units is its canonical key. Null when this dimension has no monthly allowance. */
+  /** Raw metric units free per UTC calendar month, as a BigInt decimal string. On the PLAYER card this is the monthly trial budget of a player: in each app, or one across the apps of an organization from playerTrialPool.perOrganizationFrom; player_wasm_compute_units is its canonical key. Null when this dimension has no monthly allowance. */
   freePerMonth: Maybe<Scalars['BigInt']['output']>;
   /** The period freeUnits resets on. Null when the dimension has no allowance row. */
   freePeriod: Maybe<AllowancePeriod>;
@@ -10471,6 +10797,14 @@ export type SetCommSettingsInput = {
   voiceSend?: InputMaybe<CommScope>;
 };
 
+/** Operator only: the Twenty sync's mode and webhook switch. */
+export type SetCrmSyncInput = {
+  mode?: InputMaybe<CrmSyncMode>;
+  /** Why, for the audit (crm_sync_changes). */
+  reason: Scalars['String']['input'];
+  webhookEnabled?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
 /** Patch an app's Agentic Studio policy. Requires manage_compute. Omitted fields stay unchanged; all supplied authority and limits are clamped to platform policy. */
 export type SetCrowdyStudioAgentAppPolicyInput = {
   /** Replacement exact model allowlist (max 64). On an APP patch every id must already be in the platform allowlist or the whole write is refused with AGENT_POLICY_INVALID naming that list; values are never silently dropped. On the PLATFORM patch this list IS the ceiling. Empty denies all models at either layer. */
@@ -10605,6 +10939,16 @@ export type SetFreeTierCardRequirementInput = {
   requiredFrom?: InputMaybe<Scalars['DateTime']['input']>;
 };
 
+/** Operator only: the first month free tier levels size pools on this tier, or off. */
+export type SetFreeTierLevelsInput = {
+  /** The first instant of a UTC month. Not with off: true. */
+  effectiveFrom?: InputMaybe<Scalars['DateTime']['input']>;
+  /** True stops levels sizing pools. */
+  off?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Why, for the audit (billing_rate_changes). */
+  reason: Scalars['String']['input'];
+};
+
 /** Set the permission keys a grid grants every player with active access to the app (writes the grid_open_permissions input table): an open build area, a public arena. */
 export type SetGridOpenPermissionsInput = {
   /** The app (tenant) that owns the grid. */
@@ -10657,6 +11001,21 @@ export type SetMemberRolesInput = {
   userId: Scalars['BigInt']['input'];
 };
 
+/** Operator only: records a written agreement for a larger free allowance (whole months, starting next month or later), or revokes one. */
+export type SetOrgFreeTierAgreementInput = {
+  /** The first instant of the last UTC month it covers. Required unless revoke. */
+  endMonth?: InputMaybe<Scalars['DateTime']['input']>;
+  /** Free data out and data in, each, a month, in GB. Required unless revoke. */
+  gigabytes?: InputMaybe<Scalars['Int']['input']>;
+  orgId: Scalars['BigInt']['input'];
+  /** Why, for the audit (billing_rate_changes). */
+  reason: Scalars['String']['input'];
+  /** True revokes the agreement that starts at startMonth. */
+  revoke?: InputMaybe<Scalars['Boolean']['input']>;
+  /** The first instant of the first UTC month it covers. */
+  startMonth: Scalars['DateTime']['input'];
+};
+
 export type SetOrgManagedPlayerSettingsInput = {
   defaultSessionTtlSeconds?: InputMaybe<Scalars['Int']['input']>;
   enabled: Scalars['Boolean']['input'];
@@ -10664,6 +11023,39 @@ export type SetOrgManagedPlayerSettingsInput = {
   maxSessionTtlSeconds?: InputMaybe<Scalars['Int']['input']>;
   mintsPerMinute?: InputMaybe<Scalars['Int']['input']>;
   orgId: Scalars['BigInt']['input'];
+};
+
+/** Answers to the project profile. An omitted field keeps its answer; null clears it. Complete when every answer is in. */
+export type SetOrgProjectProfileInput = {
+  /** 2,000 characters at most. */
+  currentNetworking?: InputMaybe<Scalars['String']['input']>;
+  /** US cents a month, 0 to 2,000,000,000. */
+  currentNetworkingMonthlyCostCents?: InputMaybe<Scalars['Int']['input']>;
+  /** 200 characters at most. */
+  engine?: InputMaybe<Scalars['String']['input']>;
+  launchDate?: InputMaybe<Scalars['DateTime']['input']>;
+  logicLocation?: InputMaybe<ProjectLogicLocation>;
+  /** Organization id. */
+  orgId: Scalars['BigInt']['input'];
+  playersInViewLaunch?: InputMaybe<Scalars['Int']['input']>;
+  playersInViewYear1?: InputMaybe<Scalars['Int']['input']>;
+  playersPerWorldLaunch?: InputMaybe<Scalars['Int']['input']>;
+  playersPerWorldYear1?: InputMaybe<Scalars['Int']['input']>;
+  referenceConsent?: InputMaybe<Scalars['Boolean']['input']>;
+  stage?: InputMaybe<ProjectStage>;
+  /** What the game is (2,000 characters at most). */
+  whatBuilding?: InputMaybe<Scalars['String']['input']>;
+  worldShape?: InputMaybe<ProjectWorldShape>;
+};
+
+/** A change to when the player trial is per organization. */
+export type SetPlayerTrialPoolInput = {
+  /** The first instant whose calendar months give one trial per player across an organization, a UTC month start. A unit already settled this month keeps the trial it was settled with. Omit with off: true to switch it off. */
+  effectiveFrom?: InputMaybe<Scalars['DateTime']['input']>;
+  /** True to switch it off: months not settled yet give one trial in each app again. */
+  off?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Why, for the audit (billing_rate_changes). */
+  reason: Scalars['String']['input'];
 };
 
 export type SetQuotaInput = {
@@ -10692,7 +11084,7 @@ export type SetRateCardInput = {
   clearPriceBands?: InputMaybe<Scalars['Boolean']['input']>;
   /** New hourly free allowance in raw metric units, as a BigInt decimal string. Must be >= 0. Omit to leave the allowance unchanged. Like a price, it applies from a dimension's next period where a period has already been charged. */
   freePerHour?: InputMaybe<Scalars['BigInt']['input']>;
-  /** New monthly free allowance in raw metric units, as a BigInt decimal string. Must be >= 0. On the PLAYER card with metric player_wasm_compute_units this is the pooled monthly TRIAL BUDGET per (player, app) — the only sanctioned way to change it on a live tier. Omit to leave it unchanged. Like a price, it applies from a dimension's next period where a period has already been charged. */
+  /** New monthly free allowance in raw metric units, as a BigInt decimal string. Must be >= 0. On the PLAYER card with metric player_wasm_compute_units this is the monthly TRIAL BUDGET of a player (in each app, or one across the apps of an organization from playerTrialPool.perOrganizationFrom) — the only sanctioned way to change it on a live tier. Omit to leave it unchanged. Like a price, it applies from a dimension's next period where a period has already been charged. */
   freePerMonth?: InputMaybe<Scalars['BigInt']['input']>;
   /** New period for the free allowance. Leaves the units as they are unless freeUnits is also given. Moving a dimension to MONTH is how the development quota is stated. */
   freePeriod?: InputMaybe<AllowancePeriod>;
