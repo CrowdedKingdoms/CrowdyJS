@@ -30,6 +30,16 @@ directly. So, before adding a wrapper:
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
 
+**18.35.0: an organization's cap of apps, and its shared compute ceiling (2026-11-20, cks-biz
+BIZ-027 Q43 and Q49).** ck-api v2.80.0 refuses `createApp`, or restoring an archived app, past 10
+apps that are not archived for an organization without a funded wallet or auto-billing, with
+`APP_LIMIT_REACHED` (409): `appLimitReachedOf` returns `{ limit, max }` (`APP_LIMIT_REACHED_CODE`).
+New apps are created `UNLISTED` (set `visibility: PUBLIC` to list one). `ExecAppStatus` adds
+`orgMaxInstances`, `orgMaxReservedMb`, `orgInstances` and `orgReservedMb`, the ceiling an unfunded
+organization's apps share per datacenter (ck-exec 0.22), so `exec.status` needs v2.80.0. Schema at
+cks-game-api `feat/build4` (v2.80.0). Tests: the `APP_LIMIT_REACHED` case in
+`test/unit/refusals.test.mjs`.
+
 **18.34.0: a full channel or team names its cap; the card requirement takes a card alone
 (2026-11-19, cks-biz BIZ-031 and BIZ-028).** ck-api v2.77.0 refuses a join, an add (including
 approving a request) or a creation past `maxMembers` / `maxGroupsPerUser` with
