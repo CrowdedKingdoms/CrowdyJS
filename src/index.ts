@@ -47,7 +47,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '18.33.0';
+export const VERSION = '18.34.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -192,8 +192,10 @@ export {
   ACCESS_SUSPENDED_CODE,
   ACCOUNT_BLOCKED_CODE,
   GROUP_MEMBER_BANNED_CODE,
+  GROUP_LIMIT_REACHED_CODE,
   accountBlockedOf,
   groupMemberBannedOf,
+  groupLimitReachedOf,
   MANAGED_PLAYER_NOT_ALLOWED_CODE,
   ASSERTION_REJECTED_CODE,
   ORG_LEGAL_ACCEPTANCE_REQUIRED_CODE,

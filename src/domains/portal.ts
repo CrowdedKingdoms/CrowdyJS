@@ -54,7 +54,10 @@ import type { AppPauseReason } from '../errors.js';
  */
 export interface AppRuntimeGate {
   status: 'ACTIVE' | 'GRACE' | 'DENIED' | 'SUSPENDED' | (string & {});
-  /** `insufficient_funds`, `spend_cap` or `subscription_lapsed`; null while ACTIVE. */
+  /**
+   * `insufficient_funds`, `spend_cap`, `subscription_lapsed` or `payment_method_required` (an
+   * open set); null while ACTIVE.
+   */
   reason: AppPauseReason | null;
 }
 
