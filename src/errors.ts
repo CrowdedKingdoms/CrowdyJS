@@ -404,6 +404,12 @@ export const GROUP_MEMBER_BANNED_CODE = 'GROUP_MEMBER_BANNED';
  */
 export const GROUP_LIMIT_REACHED_CODE = 'GROUP_LIMIT_REACHED';
 /**
+ * `extensions.code` for "an organization without a funded wallet or auto-billing has as many
+ * apps as it may" (HTTP 409), on `createApp` or restoring an archived app (ck-api v2.80.0); see
+ * {@link appLimitReachedOf}.
+ */
+export const APP_LIMIT_REACHED_CODE = 'APP_LIMIT_REACHED';
+/**
  * `extensions.code` for "an org-managed player cannot do this" (HTTP 403): it has no wallet,
  * and its mods are refused where its organization has not switched them on for the app; see
  * {@link managedPlayerNotAllowedOf}.
@@ -603,6 +609,24 @@ export function groupLimitReachedOf(
   value: unknown,
 ): { limit: 'maxMembers' | 'maxGroupsPerUser' | (string & {}) | null; max: number | null } | null {
   const entry = errorWithCode(value, GROUP_LIMIT_REACHED_CODE);
+  if (!entry) return null;
+  const { limit, max } = entry.extensions ?? {};
+  return {
+    limit: typeof limit === 'string' && limit.length > 0 ? limit : null,
+    max: typeof max === 'number' && Number.isFinite(max) ? max : null,
+  };
+}
+
+/**
+ * An `APP_LIMIT_REACHED` refusal (HTTP 409), or `null`: an organization without a funded wallet
+ * or auto-billing may have at most `max` apps that are not archived (10), and creating or
+ * restoring one more is refused. `limit` is `apps`; either is `null` when the server did not say.
+ * Not fixed by retrying: fund the wallet, turn on auto-billing, or archive an app.
+ */
+export function appLimitReachedOf(
+  value: unknown,
+): { limit: 'apps' | (string & {}) | null; max: number | null } | null {
+  const entry = errorWithCode(value, APP_LIMIT_REACHED_CODE);
   if (!entry) return null;
   const { limit, max } = entry.extensions ?? {};
   return {
