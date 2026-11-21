@@ -5847,7 +5847,7 @@ export type Mutation = {
   setPlayerAutoBilling: PlayerAutoBilling;
   /** Change a listing's catalog status. DELISTED/ACTIVE are owner actions (existing installs keep their pinned versions; delisting only stops new acquisitions). KILLED requires 'manage_compute' on the app (studio/operator). SIDE EFFECTS: audit row + replica sync. */
   setPlayerCodeListingStatus: PlayerCodeListing;
-  /** Set the app's player rate-card markup (0..10000 basis points on the platform base price). Markup income accrues per charge to the org's income line and is paid out via the P4b payout ledger. Requires 'manage_billing'. */
+  /** Set the app's player rate-card markup (0..10000 basis points on the platform base price). Markup income is credited to the organization's wallet with each player charge; wallet credit pays only for Crowded Kingdoms fees and is not paid out (API Terms §4.17). Requires 'manage_billing'. */
   setPlayerRateMarkup: Scalars['Int']['output'];
   /** Set (or clear, by passing both limits null) one of the caller's self-set spend caps: a global or per-app daily/monthly ceiling in cents. Hitting a cap pauses that player's mods with PLAYER_SPEND_CAP until the window rolls — play is untouched. Changes replica-sync to the game runtime. */
   setPlayerSpendCap: Array<PlayerSpendCap>;
@@ -7518,9 +7518,9 @@ export type NearbyGridsInput = {
 /** One meter of an organization's pooled free allowance this month: how large the pool is and how much of it its apps have used. */
 export type OrgAllowancePool = {
   __typename?: 'OrgAllowancePool';
-  /** The priced meter: aggregate_data_volume (bytes out), aggregate_data_ingress (bytes in), compute_cpu_ms (CPU milliseconds), durable_storage_byte_hours (byte-hours stored) or wasm_write_bytes (bytes written by compute modules). */
+  /** The priced meter: aggregate_data_volume (bytes out), aggregate_data_ingress (bytes in), compute_cpu_ms (CPU milliseconds), durable_storage_byte_hours (byte-hours stored), wasm_write_bytes (bytes written by compute modules) or wasm_memory_reserved (byte-seconds of memory reserved by compute modules; 3,600,000,000,000 is one GB-hour). */
   meter: Scalars['String']['output'];
-  /** The pool, in the meter's raw units: the rate card's allowance for one app times allowancePool.factor. */
+  /** The pool, in the meter's raw units: the rate card's allowance for one app times allowancePool.factor, data out and data in sized by the organization's free tier level. wasm_memory_reserved's allowance is the organization's already, so its pool is the rate card's figure. */
   poolUnits: Scalars['String']['output'];
   /** How much of the pool its apps hold this month, in the same units; usage beyond the pool is billed. */
   usedUnits: Scalars['String']['output'];
@@ -8571,6 +8571,8 @@ export type ProvisionManagedPlayersResult = {
 /** One priced dimension of the public rate card: its rate and its free allowances. A dimension with a price of 0 is metered but not charged. */
 export type PublicRateCardEntryType = {
   __typename?: 'PublicRateCardEntryType';
+  /** True when freeUnits is already the whole organization's allowance, shared by its apps: wasm_memory_reserved (reserved compute-module memory). False on every other dimension, whose allowance is one app's; in a pooled month an organization's apps share allowancePool.factor times it. */
+  allowancePerOrganization: Scalars['Boolean']['output'];
   /** ISO currency code. USD today. */
   currency: Scalars['String']['output'];
   /** Raw metric units free per clock hour before anything is charged, as a BigInt decimal string. Null when this dimension has no allowance row, which for a priced dimension means it bills from the first unit. */
@@ -10157,6 +10159,8 @@ export type RateCardBandType = {
 /** One priced dimension: its rate and, where it has one, its free allowance and the period that allowance resets on. A dimension with a price of 0 is metered but not charged. */
 export type RateCardEntryType = {
   __typename?: 'RateCardEntryType';
+  /** True when freeUnits is already the whole organization's allowance, shared by its apps: wasm_memory_reserved (reserved compute-module memory). False on every other dimension, whose allowance is one app's; in a pooled month an organization's apps share allowancePool.factor times it. */
+  allowancePerOrganization: Scalars['Boolean']['output'];
   /** ISO currency code. USD today. */
   currency: Scalars['String']['output'];
   /** Operator note on the seed row; null when unset. */
