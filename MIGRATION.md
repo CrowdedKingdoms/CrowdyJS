@@ -120,6 +120,26 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.36.0: a speaker's own voice and video stop coming back
+
+**What changed on the server.** From Buddy v0.48.0 a session is not sent its own spatial voice
+(`CLIENT_AUDIO_PACKET_2`) or webcam video (`CLIENT_VIDEO_PACKET_2`). The copy was never needed by
+anyone listening, and it was billed as data out. Channel audio never came back to its speaker.
+
+**What to do.** Nothing, unless your game plays back what the server returns to confirm capture
+(an "owner echo" check). Then ask for the copy on the binary relay:
+
+```ts
+const game = new CrowdyClient({
+  // ...
+  realtime: { binaryTransport: true, ownMediaEcho: true },
+});
+```
+
+`ownMediaEcho` adds `ClientCapability.OWN_MEDIA_ECHO` to the capabilities the relay advertises on
+every `ready` and every 15 seconds. The GraphQL transport advertises no capabilities, so on it a
+speaker never gets its own copy; play your own capture locally instead.
+
 ## 18.33.0: a mod knows the Studio revision it runs
 
 **What it needs.** ck-api `v2.73.0`: every exec mod build, mod and CLIENT half read selects
