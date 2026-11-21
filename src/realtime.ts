@@ -404,7 +404,7 @@ export class RealtimeClient {
   private readonly binaryTransport: boolean;
   private readonly bundleSends: boolean;
   private readonly bundleWindowMs: number;
-  private readonly ownMediaEcho: boolean;
+  private ownMediaEcho: boolean;
   /** Mutable alongside wsUrl: re-discovery moves both. */
   private binaryRelayUrl: string;
   private binaryRelay: BinaryRelayTransport | null = null;
@@ -808,6 +808,17 @@ export class RealtimeClient {
    */
   binaryRelayStats(): BinaryRelaySendStats | null {
     return this.binaryRelay?.stats() ?? null;
+  }
+
+  /**
+   * Start or stop asking for this player's own spatial voice and video, which
+   * from Buddy v0.48.0 a speaker is not sent otherwise. Binary relay only; the
+   * relay advertises the change at once, and a relay opened later starts with
+   * it. The initial value is {@link RealtimeConfig.ownMediaEcho}.
+   */
+  setOwnMediaEcho(on: boolean): void {
+    this.ownMediaEcho = on;
+    this.binaryRelay?.setOwnMediaEcho(on);
   }
 
   /**

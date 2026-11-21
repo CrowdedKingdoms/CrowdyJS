@@ -220,7 +220,7 @@ export class BinaryRelayTransport {
   private readonly bundleWindowMs: number;
   private readonly advertiseCapabilities: boolean;
   private readonly capabilitiesIntervalMs: number;
-  private readonly capabilityFlags: number;
+  private capabilityFlags: number;
   private capsTimer: ReturnType<typeof setInterval> | null = null;
   private pendingMembers: Uint8Array[] = [];
   private pendingBytes = 0;
@@ -248,6 +248,20 @@ export class BinaryRelayTransport {
     this.capabilitiesIntervalMs = Math.max(1000, config.capabilitiesIntervalMs ?? 15_000);
     this.capabilityFlags =
       SDK_CAPABILITIES | (config.ownMediaEcho ? ClientCapability.OWN_MEDIA_ECHO : 0);
+  }
+
+  /**
+   * Start or stop asking for this session's own spatial voice and video
+   * (`ClientCapability.OWN_MEDIA_ECHO`). Advertised at once when ready, and on
+   * every later advertisement.
+   */
+  setOwnMediaEcho(on: boolean): void {
+    const flags = on
+      ? this.capabilityFlags | ClientCapability.OWN_MEDIA_ECHO
+      : this.capabilityFlags & ~ClientCapability.OWN_MEDIA_ECHO;
+    if (flags === this.capabilityFlags) return;
+    this.capabilityFlags = flags;
+    if (this.advertiseCapabilities) void this.sendCapabilities();
   }
 
   /** Snapshot of the uplink counters. */
