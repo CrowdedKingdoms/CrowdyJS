@@ -2515,6 +2515,10 @@ type RateCardEntryType {
   The period freeUnits resets on. Null when the dimension has no allowance row.
   """
   freePeriod: AllowancePeriod
+  """
+  True when freeUnits is already the whole organization's allowance, shared by its apps: wasm_memory_reserved (reserved compute-module memory). False on every other dimension, whose allowance is one app's; in a pooled month an organization's apps share allowancePool.factor times it.
+  """
+  allowancePerOrganization: Boolean!
   """Operator note on the seed row; null when unset."""
   description: String
   """
@@ -2618,6 +2622,10 @@ type PublicRateCardEntryType {
   The period freeUnits resets on. Every dimension is billed as its period aggregate crosses each whole cent, within about a minute of the usage arriving.
   """
   freePeriod: AllowancePeriod
+  """
+  True when freeUnits is already the whole organization's allowance, shared by its apps: wasm_memory_reserved (reserved compute-module memory). False on every other dimension, whose allowance is one app's; in a pooled month an organization's apps share allowancePool.factor times it.
+  """
+  allowancePerOrganization: Boolean!
   """
   The graduated price, band by band, or null when the dimension has one flat price. Egress (aggregate_data_volume) is priced this way. On a RATE schedule each connection's data out is priced minute by minute at the rate it was served at: the part of a minute below the first edge at the first band, the part between the first and second edges at the second, and so on, while data out that belongs to no connection (API responses, module egress) is priced at the first band. On a VOLUME schedule each GB is charged at the band the app's month-to-date total has reached. priceCents is the first band's price, and the free monthly allowance comes out of the first band.
   """
@@ -5460,11 +5468,11 @@ One meter of an organization's pooled free allowance this month: how large the p
 """
 type OrgAllowancePool {
   """
-  The priced meter: aggregate_data_volume (bytes out), aggregate_data_ingress (bytes in), compute_cpu_ms (CPU milliseconds), durable_storage_byte_hours (byte-hours stored) or wasm_write_bytes (bytes written by compute modules).
+  The priced meter: aggregate_data_volume (bytes out), aggregate_data_ingress (bytes in), compute_cpu_ms (CPU milliseconds), durable_storage_byte_hours (byte-hours stored), wasm_write_bytes (bytes written by compute modules) or wasm_memory_reserved (byte-seconds of memory reserved by compute modules; 3,600,000,000,000 is one GB-hour).
   """
   meter: String!
   """
-  The pool, in the meter's raw units: the rate card's allowance for one app times allowancePool.factor.
+  The pool, in the meter's raw units: the rate card's allowance for one app times allowancePool.factor, data out and data in sized by the organization's free tier level. wasm_memory_reserved's allowance is the organization's already, so its pool is the rate card's figure.
   """
   poolUnits: String!
   """
@@ -11051,7 +11059,7 @@ type Mutation {
     lowWaterThresholdCents: BigInt
   ): PlayerAutoBilling!
   """
-  Set the app's player rate-card markup (0..10000 basis points on the platform base price). Markup income accrues per charge to the org's income line and is paid out via the P4b payout ledger. Requires 'manage_billing'.
+  Set the app's player rate-card markup (0..10000 basis points on the platform base price). Markup income is credited to the organization's wallet with each player charge; wallet credit pays only for Crowded Kingdoms fees and is not paid out (API Terms §4.17). Requires 'manage_billing'.
   """
   setPlayerRateMarkup(
     """App whose markup to set."""
