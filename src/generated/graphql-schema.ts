@@ -5847,7 +5847,7 @@ export type Mutation = {
   setPlayerAutoBilling: PlayerAutoBilling;
   /** Change a listing's catalog status. DELISTED/ACTIVE are owner actions (existing installs keep their pinned versions; delisting only stops new acquisitions). KILLED requires 'manage_compute' on the app (studio/operator). SIDE EFFECTS: audit row + replica sync. */
   setPlayerCodeListingStatus: PlayerCodeListing;
-  /** Set the app's player rate-card markup (0..10000 basis points on the platform base price). Markup income accrues per charge to the org's income line and is paid out via the P4b payout ledger. Requires 'manage_billing'. */
+  /** Set the app's player rate-card markup (0..10000 basis points on the platform base price). Markup income is credited to the organization's wallet with each player charge; wallet credit pays only for Crowded Kingdoms fees and is not paid out (API Terms §4.17). Requires 'manage_billing'. */
   setPlayerRateMarkup: Scalars['Int']['output'];
   /** Set (or clear, by passing both limits null) one of the caller's self-set spend caps: a global or per-app daily/monthly ceiling in cents. Hitting a cap pauses that player's mods with PLAYER_SPEND_CAP until the window rolls — play is untouched. Changes replica-sync to the game runtime. */
   setPlayerSpendCap: Array<PlayerSpendCap>;
