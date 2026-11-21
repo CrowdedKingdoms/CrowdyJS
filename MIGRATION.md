@@ -120,6 +120,13 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.37.0: the owner echo turns on and off on a live session
+
+`game.udp.setOwnMediaEcho(true)` asks for your own spatial voice and video on a session that is
+already connected, and `setOwnMediaEcho(false)` stops it; each change is advertised at once. Use it
+around a microphone or camera check, so the copy is sent (and billed) only while the check runs.
+`realtime.ownMediaEcho` is still the starting value. Binary relay only.
+
 ## 18.36.0: a speaker's own voice and video stop coming back
 
 **What changed on the server.** From Buddy v0.48.0 a session is not sent its own spatial voice
