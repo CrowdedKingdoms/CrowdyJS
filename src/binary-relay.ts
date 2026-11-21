@@ -19,6 +19,7 @@ import type { UdpNotification } from './realtime.js';
 import {
   BUNDLE_LENGTH_PREFIX_BYTES,
   bundleSizeOf,
+  ClientCapability,
   createSignContext,
   packMessageBundle,
   parseRelayFrame,
@@ -26,6 +27,7 @@ import {
   RELAY_MAX_BUNDLE_MEMBERS,
   RELAY_MAX_DATAGRAM_BYTES,
   type RelaySignContext,
+  SDK_CAPABILITIES,
   serializeClientCapabilities,
 } from './binary-wire.js';
 
@@ -153,6 +155,14 @@ export interface BinaryRelayConfig {
   advertiseCapabilities?: boolean;
   /** Re-advertise period in ms (default 15 000). */
   capabilitiesIntervalMs?: number;
+  /**
+   * Ask the server to send this session its own spatial voice and video
+   * (`ClientCapability.OWN_MEDIA_ECHO`, Buddy v0.48.0), for example to check
+   * capture by playing back what came round. Default false: from v0.48.0 a
+   * speaker is not sent its own copy, which it does not need and which was
+   * billed as data out. Needs {@link advertiseCapabilities}.
+   */
+  ownMediaEcho?: boolean;
 }
 
 /** Uplink counters kept by the relay transport (see {@link BinaryRelayTransport.stats}). */
@@ -210,6 +220,7 @@ export class BinaryRelayTransport {
   private readonly bundleWindowMs: number;
   private readonly advertiseCapabilities: boolean;
   private readonly capabilitiesIntervalMs: number;
+  private readonly capabilityFlags: number;
   private capsTimer: ReturnType<typeof setInterval> | null = null;
   private pendingMembers: Uint8Array[] = [];
   private pendingBytes = 0;
@@ -235,6 +246,8 @@ export class BinaryRelayTransport {
     this.bundleWindowMs = Math.max(0, config.bundleWindowMs ?? 1);
     this.advertiseCapabilities = config.advertiseCapabilities ?? true;
     this.capabilitiesIntervalMs = Math.max(1000, config.capabilitiesIntervalMs ?? 15_000);
+    this.capabilityFlags =
+      SDK_CAPABILITIES | (config.ownMediaEcho ? ClientCapability.OWN_MEDIA_ECHO : 0);
   }
 
   /** Snapshot of the uplink counters. */
@@ -577,7 +590,7 @@ export class BinaryRelayTransport {
     const ctx = this.signContext;
     if (!ctx || this.appId == null || !this.isReady()) return;
     try {
-      const frame = await serializeClientCapabilities(ctx, this.appId);
+      const frame = await serializeClientCapabilities(ctx, this.appId, this.capabilityFlags);
       if (this.signContext !== ctx) return;
       this.sendFrame(frame);
       // The bundler would hold it for the window; nothing else is due right now.
