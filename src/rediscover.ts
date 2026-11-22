@@ -2,7 +2,16 @@ import type { AppTokenResponse } from './domains/portal';
 
 /** The minimum of a portal client this helper needs. */
 export interface MintCapablePortal {
-  mintAppToken(appId: string): Promise<AppTokenResponse>;
+  mintAppToken(
+    appId: string,
+  ): Promise<
+    Partial<
+      Pick<
+        AppTokenResponse,
+        'applicationApiUrl' | 'applicationApiWsUrl' | 'gameApiUrl' | 'gameApiWsUrl'
+      >
+    >
+  >;
 }
 
 /**
@@ -60,7 +69,11 @@ export function createMintRediscover(
     }
     try {
       const minted = await portal.mintAppToken(appId);
-      return { httpUrl: minted.gameApiUrl, wsUrl: minted.gameApiWsUrl };
+      // A caller's own mint function may still return the deprecated gameApi* names.
+      return {
+        httpUrl: minted.applicationApiUrl ?? minted.gameApiUrl,
+        wsUrl: minted.applicationApiWsUrl ?? minted.gameApiWsUrl,
+      };
     } catch (error) {
       options.logger?.warn?.(
         `Re-discovery via mintAppToken failed: ${

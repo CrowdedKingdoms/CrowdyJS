@@ -15,9 +15,13 @@ export type TerritoryPolicyRecord = TerritoryPoliciesQuery['territoryPolicies'][
  * environment. All fields are public (no auth required to read them).
  */
 export interface PlatformConfig {
-  /** Shared game-api HTTP/GraphQL root for shared-environment apps; `null` if unset. */
+  /** Shared Application API HTTP/GraphQL root for shared-environment apps; `null` if unset. */
+  sharedApplicationApiUrl: string | null;
+  /** Shared Application API WebSocket root (subscriptions / UDP proxy); `null` if unset. */
+  sharedApplicationApiWsUrl: string | null;
+  /** @deprecated Use sharedApplicationApiUrl: the Game API is now the Application API. Removed on January 1, 2027. */
   sharedGameApiUrl: string | null;
-  /** Shared game-api WebSocket root (subscriptions / UDP proxy); `null` if unset. */
+  /** @deprecated Use sharedApplicationApiWsUrl: the Game API is now the Application API. Removed on January 1, 2027. */
   sharedGameApiWsUrl: string | null;
   /** Free shared app slots an org gets before a paid subscription is required. */
   freeAppsPerOrg: number;
@@ -28,8 +32,10 @@ export interface PlatformConfig {
 const PlatformConfigDocument = parse(/* GraphQL */ `
   query PlatformConfig {
     platformConfig {
-      sharedGameApiUrl
-      sharedGameApiWsUrl
+      sharedApplicationApiUrl
+      sharedApplicationApiWsUrl
+      sharedGameApiUrl: sharedApplicationApiUrl
+      sharedGameApiWsUrl: sharedApplicationApiWsUrl
       freeAppsPerOrg
     }
   }

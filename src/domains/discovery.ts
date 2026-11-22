@@ -27,8 +27,12 @@ export interface AppEndpoint {
   /** Datacenter code, e.g. `or` / `va`. Null when the app has no placement. */
   datacenterCode: string | null;
   /** HTTPS GraphQL origin for the app's own datacenter, or null if unplaced. */
+  applicationApiUrl: string | null;
+  /** The wss:// form of applicationApiUrl. */
+  applicationApiWsUrl: string | null;
+  /** @deprecated Use applicationApiUrl: the Game API is now the Application API. Removed on January 1, 2027. */
   gameApiUrl: string | null;
-  /** The wss:// form of gameApiUrl. */
+  /** @deprecated Use applicationApiWsUrl: the Game API is now the Application API. Removed on January 1, 2027. */
   gameApiWsUrl: string | null;
 }
 
@@ -48,8 +52,10 @@ export class DiscoveryDomain {
     return data.appDiscovery.map((entry) => ({
       appId: String(entry.appId),
       datacenterCode: entry.datacenterCode ?? null,
-      gameApiUrl: entry.gameApiUrl ?? null,
-      gameApiWsUrl: entry.gameApiWsUrl ?? null,
+      applicationApiUrl: entry.applicationApiUrl ?? null,
+      applicationApiWsUrl: entry.applicationApiWsUrl ?? null,
+      gameApiUrl: entry.applicationApiUrl ?? null,
+      gameApiWsUrl: entry.applicationApiWsUrl ?? null,
     }));
   }
 
@@ -61,7 +67,7 @@ export class DiscoveryDomain {
    */
   async app(appId: string | number | bigint): Promise<AppEndpoint | null> {
     const [entry] = await this.apps([appId]);
-    if (!entry || !entry.gameApiUrl) return null;
+    if (!entry || !entry.applicationApiUrl) return null;
     return entry;
   }
 }

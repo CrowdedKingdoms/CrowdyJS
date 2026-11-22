@@ -11,7 +11,8 @@ query AppsForOrg($orgSlug: String!) {
     wildernessWritesOpen
     replayLoggingEnabled
     splitMode
-    gameApiUrl
+    applicationApiUrl
+    gameApiUrl: applicationApiUrl
     createdAt
     updatedAt
   }

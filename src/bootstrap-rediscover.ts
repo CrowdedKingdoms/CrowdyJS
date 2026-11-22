@@ -13,7 +13,7 @@
  */
 
 const BOOTSTRAP_QUERY = `query CrowdyJsRediscover($appId: BigInt!) {
-  gameClientBootstrap(appId: $appId) { gameApiUrl gameApiWsUrl discoveryUrl }
+  gameClientBootstrap(appId: $appId) { applicationApiUrl applicationApiWsUrl discoveryUrl }
 }`;
 
 export interface BootstrapRediscoverOptions {
@@ -85,13 +85,13 @@ export function createBootstrapRediscover(
       const body = (await res.json()) as {
         data?: {
           gameClientBootstrap?: {
-            gameApiUrl?: string | null;
-            gameApiWsUrl?: string | null;
+            applicationApiUrl?: string | null;
+            applicationApiWsUrl?: string | null;
           } | null;
         };
       };
       const found = body?.data?.gameClientBootstrap;
-      if (!found?.gameApiUrl && !found?.gameApiWsUrl) {
+      if (!found?.applicationApiUrl && !found?.applicationApiWsUrl) {
         // An older server that does not publish these fields yet. Say so once
         // rather than looping on an endpoint that can never answer.
         options.logger?.warn?.(
@@ -100,7 +100,7 @@ export function createBootstrapRediscover(
         );
         return null;
       }
-      return { httpUrl: found.gameApiUrl, wsUrl: found.gameApiWsUrl };
+      return { httpUrl: found.applicationApiUrl, wsUrl: found.applicationApiWsUrl };
     } catch (error) {
       // Never fatal: returning null leaves the client on its current endpoint
       // and its normal retry, which beats throwing out of a reconnect path.

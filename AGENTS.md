@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.38.0** (18.0.0 was published only as
+**Current package:** `package.json` is **18.39.0** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -29,6 +29,16 @@ directly. So, before adding a wrapper:
 - 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
+
+**18.39.0: the Application API names (2026-11-22, cks-biz BIZ-039 Q5; Application API v2.85.0).** The SDK
+selects `applicationApiUrl` / `applicationApiWsUrl` (and `sharedApplicationApiUrl` / `sharedApplicationApiWsUrl`
+on `platformConfig`) and fills the deprecated `gameApi*` properties through GraphQL aliases
+(`gameApiUrl: applicationApiUrl`), so it never queries a deprecated field: `AppTokenResponse`, `AppEndpoint`,
+`AppRoute`, `PlatformConfig` and `DatacenterMove` carry both names, the old marked `@deprecated` until January 1,
+2027. `moveFromError` reads `WRONG_DATACENTER`'s `applicationApiUrl` or, from an older API, `gameApiUrl`;
+`createMintRediscover` accepts either shape. The operations need Application API v2.85.0, so a tier's SDK
+release follows that tier's API. The relay's frame keys (`binary-relay.ts`) are the relay's own protocol and keep
+their names. `setAppBudget`'s JSDoc says the cap pauses the app (v2.84.0) and `"0"` removes it.
 
 **18.38.0: the speakers each player receives (2026-11-22, cks-biz BIZ-031 Q2).** `udp.setSpeakers({ voice,
 video })` (`RealtimeClient.setSpeakers`, `BinaryRelayTransport.setSpeakers`) sends Buddy v0.49.0's

@@ -25,11 +25,12 @@ Start here:
 npm install @crowdedkingdoms/crowdyjs
 ```
 
-**Server compatibility.** A release selects fields the Game API it was built against has,
-so it needs that Game API or newer; promote the Game API before the SDK on each tier.
+**Server compatibility.** A release selects fields the Application API it was built against has,
+so it needs that Application API or newer; promote the Application API before the SDK on each tier.
 
-| CrowdyJS | Needs the Game API (ck-api) |
+| CrowdyJS | Needs the Application API (ck-api) |
 | --- | --- |
+| 18.39.0 | v2.85.0 or later (selects `applicationApiUrl`, `applicationApiWsUrl` and `platformConfig`'s `sharedApplicationApi*`; the `gameApi*` names stay as deprecated aliases until January 1, 2027) |
 | 18.33.0 | v2.73.0 or later (exec's mod builds, mods and CLIENT halves select `studioProjectId` and `studioRevision`; `exec.modClientStarter`, `crowdyStudio.links`) |
 | 18.32.0 | v2.70.0 or later (`chunks.get` and `chunks.byDistance` select `Chunk.voxelsUpdatedAt`) |
 | 18.31.1 | as 18.31.0 |
@@ -206,8 +207,8 @@ await identity.auth.login({ email, password }); // or register / magic link / so
 
 const t = await identity.portal.mintAppToken(appId);
 const game = createCrowdyClient({
-  httpUrl: t.gameApiUrl!,
-  wsUrl: t.gameApiWsUrl!,
+  httpUrl: t.applicationApiUrl!,
+  wsUrl: t.applicationApiWsUrl!,
   tokenStore: new BrowserLocalStorageTokenStore('crowdyjs:app:' + appId),
 });
 game.setToken(t.token);
@@ -218,8 +219,8 @@ Game-to-game routes through Studio's hosted page for a fresh per-game token.
 
 Notes:
 
-- `portal.mintAppToken(appId)` returns the token plus `gameApiUrl` /
-  `gameApiWsUrl` / `expiresAt`; it does **not** store the token on the identity
+- `portal.mintAppToken(appId)` returns the token plus `applicationApiUrl` /
+  `applicationApiWsUrl` / `expiresAt`; it does **not** store the token on the identity
   client — set it on the per-game client.
 - Each client's `AuthState` is observed by both its HTTP client and its
   realtime socket, so HTTP and WebSocket auth never drift within a client.
@@ -262,7 +263,7 @@ const res = await fetch('https://ck.dev.crowdedkingdoms.com/graphql', {
   headers: { 'content-type': 'application/json', authorization: `Bearer ${process.env.CK_ORG_TOKEN}` },
   body: JSON.stringify({
     query: `mutation($i: MintManagedPlayerTokenInput!) { mintManagedPlayerToken(input: $i) {
-      token gameTokenId appId expiresAt gameApiUrl gameApiWsUrl discoveryUrl launchUrl } }`,
+      token gameTokenId appId expiresAt applicationApiUrl applicationApiWsUrl discoveryUrl launchUrl } }`,
     variables: {
       i: {
         appId,
@@ -282,7 +283,7 @@ const { data } = await res.json();
 ```ts
 // the player's device
 const access = await fetch('/api/crowded-kingdoms/token').then((r) => r.json());
-const game = createCrowdyClient({ httpUrl: access.gameApiUrl, wsUrl: access.gameApiWsUrl });
+const game = createCrowdyClient({ httpUrl: access.applicationApiUrl, wsUrl: access.applicationApiWsUrl });
 game.portal.adoptAppToken(access); // refuses an org token by mistake
 game.world(appId).subscribe({ actorUpdate: (n) => { /* ... */ } });
 ```
@@ -341,7 +342,7 @@ surface the error and retry `game.udp.connect()` instead of rotating again.
 `game.portal.refresh()` remains available for clients with no active UDP
 lifecycle to preserve. A **native (direct-UDP) client** should pass the server it
 is connected to — `game.portal.refresh({ ip4, clientPort })`, the pair
-`serverWithLeastClients` handed it — so the Game API (v1.83.7+) authorizes the
+`serverWithLeastClients` handed it — so the Application API (v1.83.7+) authorizes the
 new token on that same Buddy and answers `authorizedServer`: when it is set,
 keep the socket and sign with the new token; when it is null, place again with
 `serverWithLeastClients`. A Buddy silently drops datagrams for a token it was
@@ -502,7 +503,7 @@ not from an untrusted browser.
 
 ## Per-app routing
 
-`mintAppToken` returns `gameApiUrl` / `gameApiWsUrl`, so you rarely need a
+`mintAppToken` returns `applicationApiUrl` / `applicationApiWsUrl`, so you rarely need a
 separate routing query. When you do (e.g. pre-flight discovery), query the
 app's routing fields:
 
@@ -512,22 +513,22 @@ query AppForRouting($appId: BigInt!) {
     appId
     splitMode
     deploymentTarget
-    gameApiUrl
+    applicationApiUrl
   }
 }
 ```
 
-`gameApiUrl` is populated for both dedicated (`splitMode`) and shared
+`applicationApiUrl` is populated for both dedicated (`splitMode`) and shared
 (`deploymentTarget: "shared"`) apps. When it's set, build a second
-`CrowdyClient` with `httpUrl: gameApiUrl` (and the matching `wsUrl`) holding
+`CrowdyClient` with `httpUrl: applicationApiUrl` (and the matching `wsUrl`) holding
 that app's app-scoped token, then drive gameplay through that client. Apps
-with no `gameApiUrl` keep working against the default `httpUrl` you
-configured. See [Loading an app's Game API](https://docs.crowdedkingdoms.com/crowdyjs/shared-environment-routing).
+with no `applicationApiUrl` keep working against the default `httpUrl` you
+configured. See [Loading an app's Application API](https://docs.crowdedkingdoms.com/crowdyjs/shared-environment-routing).
 
 ## Realtime notifications
 
 `subscribe` takes the handlers **and a required `appId`** (second argument).
-The Game API scopes the realtime session to that app and rejects an
+The Application API scopes the realtime session to that app and rejects an
 app-agnostic subscription with a `RealtimeConnectionEvent`
 (`code: 'APP_ID_REQUIRED'`); a missing or invalid gameplay token is rejected
 with `AUTH_REQUIRED`. Run one client per app (each holding that app's
@@ -650,8 +651,8 @@ retries run out and then sits there, connected to nothing.
 const bootstrap = await client.udp.gameClientBootstrap(appId);
 
 const client = createCrowdyClient({
-  httpUrl: bootstrap.gameApiUrl,
-  wsUrl: bootstrap.gameApiWsUrl,
+  httpUrl: bootstrap.applicationApiUrl,
+  wsUrl: bootstrap.applicationApiWsUrl,
   realtime: {
     // The LOAD BALANCER, not the instance above. A discovery URL that dies with
     // the instance it exists to replace is worse than none.
@@ -1073,12 +1074,12 @@ const stop = await exec.subscribe('arena', 'm1', 'hp', (push) => {
 exec.onReconnect((host) => console.log('moved to', host));
 ```
 
-- `connect` asks the game API for a host (`execConnect`) and opens a WebSocket to its gateway.
+- `connect` asks the Application API for a host (`execConnect`) and opens a WebSocket to its gateway.
   With `nodeType` and `key`, the player lands on the host that runs that instance. On runtimes
   without a global `WebSocket` (Node before 22), pass one: `{ WebSocket }` from the `ws` package.
 - The connect token rides in the gateway URL, so `connect` dials only a gateway
-  `execGatewayRefusal(gameApiUrl, gatewayUrl)` passes: `wss:` when the game API is `https:`, and on
-  the game API's estate or the platform's (a loopback game API may name a loopback gateway, as
+  `execGatewayRefusal(applicationApiUrl, gatewayUrl)` passes: `wss:` when the Application API is `https:`, and on
+  the Application API's estate or the platform's (a loopback Application API may name a loopback gateway, as
   ck-exec's local cluster does). Any other is refused `Unavailable` without being dialed (18.1.0).
 - A gateway that refuses the connect token answers the upgrade `HTTP 401` with its reason. Under
   Node's `ws` package `connect` throws `Denied` with that reason; a browser cannot read a refused
@@ -1490,8 +1491,8 @@ CROWDY_TEST_APP_ID='78221653114368' \
 **`CROWDY_HTTP_URL` is the ENTRY origin, not the gameplay origin.** Point it at
 the shared multivalue name (`ck.<tier>…`), the same one a cold client resolves.
 The harness then does what the SDK is built to do: sign in and mint against the
-entry origin, and build every gameplay client on the `gameApiUrl` /
-`gameApiWsUrl` the mint returns, threading `discoveryUrl` into `realtime` so
+entry origin, and build every gameplay client on the `applicationApiUrl` /
+`applicationApiWsUrl` the mint returns, threading `discoveryUrl` into `realtime` so
 instance loss is recoverable.
 
 Do not point it at a single datacenter to "make the tests pass". That was the
@@ -1574,7 +1575,7 @@ refresh them from an explicitly supplied source:
   `npm run authoring-index:drift -- --source <exporter-json> [--write]`, then
   `npm run authoring-index:generate`.
 - The agent tool-descriptor fixture:
-  `npm run agent-descriptors:drift -- --source <game-api-fixture>`; every
+  `npm run agent-descriptors:drift -- --source <application-api-fixture>`; every
   build re-checks the digests.
 
 ## Migration

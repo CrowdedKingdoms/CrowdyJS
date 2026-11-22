@@ -55,22 +55,24 @@ export interface AppRoute {
   /** Numeric id of the app (`BigInt` as a decimal string). */
   appId: string;
   /**
-   * `true` when the app's runtime data lives in a dedicated per-tenant game-api
-   * database rather than the shared game-api. Used together with `gameApiUrl` to
+   * `true` when the app's runtime data lives in a dedicated per-tenant Application API
+   * database rather than the shared one. Used together with `applicationApiUrl` to
    * route gameplay calls.
    */
   splitMode: boolean;
   /**
    * Where the app runs: `'none'` (draft / not deployed), `'shared'` (the shared
-   * game-api), or `'dedicated'` (a provisioned per-tenant environment). `null`
+   * Application API), or `'dedicated'` (a provisioned per-tenant environment). `null`
    * until the schema/codegen expose it.
    */
   deploymentTarget: string | null;
   /**
-   * The game-api base URL to route gameplay to. Set for BOTH dedicated
-   * (split-mode) and shared-environment apps. When non-null, build a game-api
-   * client against it; when `null`, fall back to the constructor `httpUrl`.
+   * The Application API base URL to route gameplay to. Set for BOTH dedicated
+   * (split-mode) and shared-environment apps. When non-null, build a client
+   * against it; when `null`, fall back to the constructor `httpUrl`.
    */
+  applicationApiUrl: string | null;
+  /** @deprecated Use applicationApiUrl: the Game API is now the Application API. Removed on January 1, 2027. */
   gameApiUrl: string | null;
 }
 
@@ -85,13 +87,15 @@ function appRouteFromAppRow(row: unknown): AppRoute | null {
   if (!row || typeof row !== 'object') return null;
   const r = row as Record<string, unknown>;
   if (typeof r.appId !== 'string') return null;
+  const selected = r.applicationApiUrl ?? r.gameApiUrl;
+  const url = typeof selected === 'string' && selected ? selected : null;
   return {
     appId: r.appId,
     splitMode: typeof r.splitMode === 'boolean' ? r.splitMode : false,
     deploymentTarget:
       typeof r.deploymentTarget === 'string' ? r.deploymentTarget : null,
-    gameApiUrl:
-      typeof r.gameApiUrl === 'string' && r.gameApiUrl ? r.gameApiUrl : null,
+    applicationApiUrl: url,
+    gameApiUrl: url,
   };
 }
 
@@ -117,11 +121,11 @@ function appRouteFromAppRow(row: unknown): AppRoute | null {
  * await base.auth.login({ email, password });
  *
  * const route = await base.apps.routeFor(appId);
- * if (route.gameApiUrl) {
+ * if (route.applicationApiUrl) {
  *   // route gameplay to the app's resolved game-api endpoint
  *   const perAppClient = createCrowdyClient({
- *     httpUrl: route.gameApiUrl,
- *     wsUrl: route.gameApiUrl.replace(/^http/, 'ws'),
+ *     httpUrl: route.applicationApiUrl,
+ *     wsUrl: route.applicationApiUrl.replace(/^http/, 'ws'),
  *     tokenStore: base.session.tokenStore,
  *   });
  * }
@@ -303,14 +307,14 @@ export class AppsAPI {
 
   /**
    * Convenience wrapper over {@link app} that returns just the {@link AppRoute}
-   * routing tuple for an app — i.e. which game-api endpoint should serve it. If
-   * the app row is missing or the API does not expose the split-mode fields yet,
+   * routing tuple for an app — i.e. which Application API endpoint should serve it.
+   * If the app row is missing or the API does not expose the split-mode fields yet,
    * returns a safe default (`{ appId, splitMode: false, deploymentTarget: null,
-   * gameApiUrl: null }`) so the caller keeps using the legacy single-endpoint
+   * applicationApiUrl: null }`) so the caller keeps using the legacy single-endpoint
    * deployment.
    *
    * @param appId - Numeric id of the app (`BigInt` as a decimal string).
-   * @returns The {@link AppRoute}; route gameplay to `gameApiUrl` when non-null,
+   * @returns The {@link AppRoute}; route gameplay to `applicationApiUrl` when non-null,
    *   otherwise fall back to the constructor `httpUrl`.
    * @throws {CrowdyGraphQLError} `UNAUTHENTICATED` (it calls {@link app} under
    *   the hood).
@@ -322,6 +326,7 @@ export class AppsAPI {
         appId,
         splitMode: false,
         deploymentTarget: null,
+        applicationApiUrl: null,
         gameApiUrl: null,
       }
     );
