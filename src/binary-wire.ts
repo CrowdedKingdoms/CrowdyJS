@@ -306,6 +306,12 @@ async function serializeSpatial(
 export const ClientCapability = {
   /** This client parses MESSAGE_BUNDLE_SIGNED (one HMAC per downlink bundle). */
   BUNDLE_SIGNED: 1,
+  /**
+   * Send this session its own spatial voice and video (Buddy v0.48.0). Without
+   * it the server does not send a speaker its own `CLIENT_AUDIO_PACKET_2` or
+   * `CLIENT_VIDEO_PACKET_2` back.
+   */
+  OWN_MEDIA_ECHO: 4,
 } as const;
 
 /** Every capability this SDK build understands. */

@@ -169,6 +169,13 @@ export interface CrowdyClientConfig {
      */
     binaryRelayUrl?: string;
     /**
+     * Binary relay only: ask the server to send this session its own spatial
+     * voice and video (Buddy v0.48.0), for example to check capture by playing
+     * back what came round. Defaults to `false`: a speaker is not sent its own
+     * copy, which it does not need and which was billed as data out.
+     */
+    ownMediaEcho?: boolean;
+    /**
      * Ask where to reconnect when the current instance stops answering.
      *
      * Only needed under direct connect, where `gameApiUrl` names one api
