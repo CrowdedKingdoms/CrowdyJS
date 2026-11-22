@@ -120,6 +120,21 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.38.0: choose the speakers each player receives
+
+Nothing changes until you call it. With Buddy v0.49.0, `game.udp.setSpeakers({ voice, video })` tells the server
+whose spatial voice and webcam video this player receives; streams a list leaves out are neither sent nor billed:
+
+```ts
+// Hear only the conversation, see nobody's camera, and leave a kind alone by omitting it.
+game.udp.setSpeakers({ voice: conversation.map((p) => p.actorUuid), video: [] });
+// Hear everyone in range again.
+game.udp.setSpeakers({ voice: null });
+```
+
+A list names at most the app's `gameClientBootstrap.maxVoiceSpeakers` / `maxVideoSpeakers` (an org admin sets them
+with `updateApp`; 32 by default and at most). Binary relay only.
+
 ## 18.37.0: the owner echo turns on and off on a live session
 
 `game.udp.setOwnMediaEcho(true)` asks for your own spatial voice and video on a session that is

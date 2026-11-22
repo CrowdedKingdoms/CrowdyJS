@@ -1498,6 +1498,22 @@ type App {
   Seconds a realtime session may go without gameplay input (movement, messages, edits, voice; keep-alives and keyframes that repeat an unchanged state do not count) before the replication server releases it with reason idle. 900 (15 minutes) unless the app sets its own; 0 means never. A released player is not reconnected automatically: the SDKs report the session inactive and the game reconnects on the next player input.
   """
   effectiveIdleTimeoutSeconds: Int!
+  """
+  The most speakers whose spatial voice one player's game may name in its speaker list, when the app sets a number: 1 to 32. null uses 32 (effectiveMaxVoiceSpeakers). Set with updateApp (manage_apps).
+  """
+  maxVoiceSpeakers: Int
+  """
+  The most speakers whose spatial voice one player's game may name in its speaker list (the realtime servers' CLIENT_MEDIA_SPEAKERS): the app's maxVoiceSpeakers, else 32. The servers deliver voice only from the speakers a list names, so voice the list leaves out is neither sent nor billed; a player whose game sends no list receives every speaker in range.
+  """
+  effectiveMaxVoiceSpeakers: Int!
+  """
+  The most speakers whose webcam video one player's game may name in its speaker list, when the app sets a number: 1 to 32. null uses 32 (effectiveMaxVideoSpeakers). Set with updateApp (manage_apps).
+  """
+  maxVideoSpeakers: Int
+  """
+  The most speakers whose webcam video one player's game may name in its speaker list: the app's maxVideoSpeakers, else 32. Video the list leaves out is neither sent nor billed; a player whose game sends no list receives every camera in range.
+  """
+  effectiveMaxVideoSpeakers: Int!
   """Timestamp when the app was created."""
   createdAt: DateTime!
   """Timestamp when the app was last updated."""
@@ -6439,6 +6455,14 @@ type GameClientBootstrap {
   Whether the app's wilderness (land no grid but the world grid covers) is open to players' voxel edits (App.wildernessWritesOpen). When false, edits there are refused, so a client can stop a player before sending one.
   """
   wildernessWritesOpen: Boolean!
+  """
+  The most speakers whose spatial voice this player's speaker list may name (App.effectiveMaxVoiceSpeakers, 1 to 32): the realtime servers refuse a longer list (CLIENT_MEDIA_SPEAKERS, opcode 47). A player whose game sends no list receives every speaker in range.
+  """
+  maxVoiceSpeakers: Int!
+  """
+  The most speakers whose webcam video this player's speaker list may name (App.effectiveMaxVideoSpeakers, 1 to 32): the realtime servers refuse a longer list. A player whose game sends no list receives every camera in range.
+  """
+  maxVideoSpeakers: Int!
 }
 
 """
@@ -10403,7 +10427,7 @@ type Mutation {
     input: CreateAppInput!
   ): App! @requiresPermission(scope: "org", permission: "manage_apps", scopeArg: "input.orgId")
   """
-  Update mutable fields of an existing app (name, description, visibility, status, metadata, wildernessWritesOpen, claimOwnerKeys, replayLoggingEnabled, replayLoggingRecordsMedia, replayLoggingRecordsVoice, replayLoggingRecordsVideo, minPlayerAge, idleTimeoutSeconds); only fields present in the input are changed. Turning replayLoggingEnabled on is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet can spend at least the projected cost of keeping one retention period of the app's recent traffic (extensions.requiredMicrousd and spendableMicrousd say how much), or the org is billing-exempt; recordings already kept go on billing after it is turned off, until they age out. Turning it off is refused with SAFETY_LOG_REQUIRED while the app admits players under 18. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility (PUBLIC lists the app in the marketplace), or restore an archived app (status back to DRAFT/LIVE); a restore counts against the cap of 10 apps for an organization without a funded wallet or auto-billing (APP_LIMIT_REACHED). Throws if the app id does not exist.
+  Update mutable fields of an existing app (name, description, visibility, status, metadata, wildernessWritesOpen, claimOwnerKeys, replayLoggingEnabled, replayLoggingRecordsMedia, replayLoggingRecordsVoice, replayLoggingRecordsVideo, minPlayerAge, idleTimeoutSeconds, maxVoiceSpeakers, maxVideoSpeakers); only fields present in the input are changed. Turning replayLoggingEnabled on is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet can spend at least the projected cost of keeping one retention period of the app's recent traffic (extensions.requiredMicrousd and spendableMicrousd say how much), or the org is billing-exempt; recordings already kept go on billing after it is turned off, until they age out. Turning it off is refused with SAFETY_LOG_REQUIRED while the app admits players under 18. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility (PUBLIC lists the app in the marketplace), or restore an archived app (status back to DRAFT/LIVE); a restore counts against the cap of 10 apps for an organization without a funded wallet or auto-billing (APP_LIMIT_REACHED). Throws if the app id does not exist.
   """
   updateApp(
     """Numeric id of the app to update."""
@@ -12733,6 +12757,14 @@ input UpdateAppInput {
   Seconds a realtime session may go without gameplay input before the replication server releases it with reason idle: 60 to 86400, or 0 to turn the timeout off. null returns the app to the platform default (900 seconds). Takes effect within about 15 seconds, for sessions already open too. Omit to leave unchanged.
   """
   idleTimeoutSeconds: Int
+  """
+  The most speakers whose spatial voice one player's game may name in its speaker list: 1 to 32. A longer list is refused. null returns the app to 32. The realtime servers apply it within about 15 seconds, to lists already sent too. Omit to leave unchanged.
+  """
+  maxVoiceSpeakers: Int
+  """
+  The most speakers whose webcam video one player's game may name in its speaker list: 1 to 32. A longer list is refused. null returns the app to 32. The realtime servers apply it within about 15 seconds, to lists already sent too. Omit to leave unchanged.
+  """
+  maxVideoSpeakers: Int
 }
 
 input AdmitAppCodeInput {
