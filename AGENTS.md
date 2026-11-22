@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.34.0** (18.0.0 was published only as
+**Current package:** `package.json` is **18.37.0** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -29,6 +29,20 @@ directly. So, before adding a wrapper:
 - 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
+
+**18.37.0: the owner echo turns on and off on a live session (2026-11-21).** `udp.setOwnMediaEcho(on)`
+(`RealtimeClient.setOwnMediaEcho`, `BinaryRelayTransport.setOwnMediaEcho`) changes the bit and
+advertises at once when it changes, so a microphone or camera check asks for the copy only while it
+runs; a relay opened later starts with the last value. Tests: the toggle case in
+`test/unit/own-media-echo.test.mjs`.
+
+**18.36.0: a speaker's own voice and video stop coming back (2026-11-21, cks-biz BIZ-031 Q8).**
+Buddy v0.48.0 does not send a session its own spatial voice and video (`CLIENT_AUDIO_PACKET_2`,
+`CLIENT_VIDEO_PACKET_2`) unless its `CLIENT_CAPABILITIES` carries `ClientCapability.OWN_MEDIA_ECHO`
+(bit 2). `realtime.ownMediaEcho` (default false) adds the bit to the relay's advertisement, for a
+game that checks capture by playing back what came round. Relay only: the GraphQL transport sends
+no capabilities. The same Buddy release bills keepalives as data in. Tests:
+`test/unit/own-media-echo.test.mjs`.
 
 **18.35.0: an organization's cap of apps, and its shared compute ceiling (2026-11-20, cks-biz
 BIZ-027 Q43 and Q49).** ck-api v2.80.0 refuses `createApp`, or restoring an archived app, past 10
