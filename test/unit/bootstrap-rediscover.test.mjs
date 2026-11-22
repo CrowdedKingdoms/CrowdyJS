@@ -26,8 +26,8 @@ test('asks the discovery URL, not the instance, and returns its endpoints', asyn
       return jsonResponse({
         data: {
           gameClientBootstrap: {
-            gameApiUrl: 'https://ck-api-or-5.prod.crowdedkingdoms.com',
-            gameApiWsUrl: 'wss://ck-api-or-5.prod.crowdedkingdoms.com',
+            applicationApiUrl: 'https://ck-api-or-5.prod.crowdedkingdoms.com',
+            applicationApiWsUrl: 'wss://ck-api-or-5.prod.crowdedkingdoms.com',
           },
         },
       });
@@ -53,7 +53,7 @@ test('does not double up /graphql when the discovery URL already has it', async 
     fetchImpl: async (url) => {
       seen = url;
       return jsonResponse({
-        data: { gameClientBootstrap: { gameApiUrl: 'https://x' } },
+        data: { gameClientBootstrap: { applicationApiUrl: 'https://x' } },
       });
     },
   });

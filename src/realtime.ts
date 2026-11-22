@@ -1236,8 +1236,8 @@ export class RealtimeClient {
     if (!move) return false;
     const before = this.wsUrl;
     this.moveToDatacenter({
-      httpUrl: move.gameApiUrl,
-      wsUrl: move.gameApiWsUrl ?? null,
+      httpUrl: move.applicationApiUrl,
+      wsUrl: move.applicationApiWsUrl ?? null,
       datacenter: move.appDatacenter,
     });
     return this.wsUrl !== before;

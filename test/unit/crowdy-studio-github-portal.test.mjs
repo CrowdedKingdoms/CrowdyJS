@@ -50,6 +50,8 @@ test('completeEntry still exchanges a plain portal code', async () => {
             gameTokenId: '1',
             appId: '84070698573312',
             expiresAt: 'later',
+            applicationApiUrl: 'https://play.invalid',
+            applicationApiWsUrl: 'wss://play.invalid',
             gameApiUrl: 'https://play.invalid',
             gameApiWsUrl: 'wss://play.invalid',
           },

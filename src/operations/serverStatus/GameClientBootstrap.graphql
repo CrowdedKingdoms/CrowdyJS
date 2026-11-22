@@ -1,8 +1,10 @@
 query GameClientBootstrap($appId: BigInt!) {
   gameClientBootstrap(appId: $appId) {
     appId
-    gameApiUrl
-    gameApiWsUrl
+    applicationApiUrl
+    gameApiUrl: applicationApiUrl
+    applicationApiWsUrl
+    gameApiWsUrl: applicationApiWsUrl
     discoveryUrl
     realtimeProtocol
     subscriptionName

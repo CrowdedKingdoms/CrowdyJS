@@ -29,7 +29,8 @@ query App($appId: BigInt!) {
     reservedGraphqlOpsPerSec
     runtimeStatus
     runtimeDenialReason
-    gameApiUrl
+    applicationApiUrl
+    gameApiUrl: applicationApiUrl
     launchUrl
     redirectUris
     isTrusted
