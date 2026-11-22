@@ -927,6 +927,8 @@ export type App = {
   __typename?: 'App';
   /** Unique numeric identifier of the app (primary key). */
   appId: Scalars['BigInt']['output'];
+  /** Resolved Application API base URL for SDK/runtime calls: the per-tenant URL for dedicated apps, or the shared platform URL for shared apps. Null for legacy or not-yet-deployed apps. */
+  applicationApiUrl: Maybe<Scalars['String']['output']>;
   /** Grid permission keys a player's claim grants its owner on the claimed grid (claimGridOwnership), beside the player-code keys the owner's tier carries; for example update_voxel_data makes a claim buildable without a hub granting it. Never a player-code key; the grid's permission limits still cap them. Empty by default. Set with updateApp (manage_apps). */
   claimOwnerKeys: Array<Scalars['String']['output']>;
   /** OAuth client type: "public" (browser/PKCE, no secret) or "confidential" (server-side, holds a secret). Defaults to "public". */
@@ -937,7 +939,7 @@ export type App = {
   createdAt: Scalars['DateTime']['output'];
   /** Numeric user id of the account that created the app. */
   createdBy: Scalars['BigInt']['output'];
-  /** Where the app runs: "none" (draft / not deployed), "shared" (the shared game-api), or "dedicated" (a provisioned per-tenant environment). */
+  /** Where the app runs: "none" (draft / not deployed), "shared" (the shared Application API), or "dedicated" (a provisioned per-tenant environment). */
   deploymentTarget: Scalars['String']['output'];
   /** Short plain-text description shown in listings; also matched by the marketplace free-text filter. */
   description: Maybe<Scalars['String']['output']>;
@@ -949,7 +951,10 @@ export type App = {
   effectiveMaxVoiceSpeakers: Scalars['Int']['output'];
   /** The youngest age the app admits now: the higher of minPlayerAge and the platform's minimum (18 until players 13 and over are admitted, then 13). A player's country can require more (territoryPolicies); younger players are refused AGE_REQUIREMENT_NOT_MET at mint. */
   effectiveMinPlayerAge: Scalars['Int']['output'];
-  /** Resolved game-api base URL for SDK/runtime calls: the per-tenant URL for dedicated apps, or the shared platform URL for shared apps. Null for legacy or not-yet-deployed apps. */
+  /**
+   * Resolved Application API base URL for SDK/runtime calls: the per-tenant URL for dedicated apps, or the shared platform URL for shared apps. Null for legacy or not-yet-deployed apps.
+   * @deprecated Use applicationApiUrl: the Game API is now the Application API. Removed on January 1, 2027.
+   */
   gameApiUrl: Maybe<Scalars['String']['output']>;
   /** Player user ids allowed to approve grid claim requests in "approval" mode. When empty, approval falls back to org staff holding manage_compute. */
   gridClaimApproverUserIds: Array<Scalars['String']['output']>;
@@ -1002,11 +1007,11 @@ export type App = {
   reservedUdpBytesPerSec: Scalars['BigInt']['output'];
   /** When runtimeStatus is not "active", why the runtime is gated: "insufficient_funds", "spend_cap", "subscription_lapsed", or "payment_method_required" (the free-tier card requirement applies to the organization and it has no saved card and no exemption). Null when active. Historical rows may carry "free_allowance", which the gate no longer produces -- an app over its allowance with no way to pay is denied as "insufficient_funds". */
   runtimeDenialReason: Maybe<Scalars['String']['output']>;
-  /** Shared-environment runtime gate, mirrored to the game DB and enforced by game-api + Buddy: "active", "grace", "denied", or "suspended". */
+  /** Shared-environment runtime gate, mirrored to the game DB and enforced by Application API + Buddy: "active", "grace", "denied", or "suspended". */
   runtimeStatus: Scalars['String']['output'];
   /** URL-safe slug, unique within the org; combined with the org slug to form the marketplace path. May be null for legacy rows. */
   slug: Maybe<Scalars['String']['output']>;
-  /** True when this app's runtime data lives in a dedicated per-tenant game-api database (rather than the shared game-api). Used together with gameApiUrl to route gameplay calls. */
+  /** True when this app's runtime data lives in a dedicated per-tenant Application API database (rather than the shared Application API). Used together with applicationApiUrl to route gameplay calls. */
   splitMode: Scalars['Boolean']['output'];
   /** Base64-encoded binary blob of the app's persisted runtime/world state; opaque to clients and potentially large. Null when no state has been saved. */
   state: Maybe<Scalars['String']['output']>;
@@ -1092,7 +1097,7 @@ export type AppBudget = {
   createdAt: Scalars['DateTime']['output'];
   /** Spend so far in the current monthly period, in minor currency units (cents) as a BigInt decimal string. Resets when `periodStart` rolls over to a new month. */
   currentMonthUsageCents: Scalars['BigInt']['output'];
-  /** Monthly spend cap in minor currency units (cents) as a BigInt decimal string; null means no cap is configured (unlimited). */
+  /** Monthly spend cap in minor currency units (cents) as a BigInt decimal string; null means no cap is configured (unlimited). Enforced: once currentMonthUsageCents reaches it the app is refused with spend_cap until the month ends or the cap is raised. setAppBudget with 0 removes it (null). */
   monthlyLimitCents: Maybe<Scalars['BigInt']['output']>;
   /** Organization that owns the app (BigInt as a decimal string). */
   orgId: Scalars['BigInt']['output'];
@@ -1138,13 +1143,13 @@ export type AppComputeBudgetInfo = {
   updatedAt: Scalars['DateTime']['output'];
 };
 
-/** Where an app runs: none (draft), shared (the shared game-api), or dedicated (a provisioned environment). */
+/** Where an app runs: none (draft), shared (the shared Application API), or dedicated (a provisioned environment). */
 export enum AppDeploymentTarget {
   /** Runs on a dedicated, org-provisioned environment. */
   Dedicated = 'DEDICATED',
   /** Draft / unpublished: the app is not deployed to any runtime. */
   None = 'NONE',
-  /** Runs on the multi-tenant shared game-api (publishAppToShared). */
+  /** Runs on the multi-tenant shared Application API (publishAppToShared). */
   Shared = 'SHARED'
 }
 
@@ -1153,11 +1158,21 @@ export type AppDiscovery = {
   __typename?: 'AppDiscovery';
   /** The app this entry describes, echoed back so a batched result can be matched to its request. */
   appId: Scalars['BigInt']['output'];
+  /** HTTPS GraphQL origin for this app's OWN datacenter. Move here BEFORE authenticating: logging in through the shared origin writes the session on whichever datacenter DNS happened to pick, and the app token then has to be minted across a WAN. Null when the app has no placement, in which case keep using the shared origin. */
+  applicationApiUrl: Maybe<Scalars['String']['output']>;
+  /** The wss:// form of applicationApiUrl, for the subscription socket and the binary relay. */
+  applicationApiWsUrl: Maybe<Scalars['String']['output']>;
   /** Datacenter code the app is placed in (for example `or`, `va`), or null if the app has no placement yet. */
   datacenterCode: Maybe<Scalars['String']['output']>;
-  /** HTTPS GraphQL origin for this app's OWN datacenter. Move here BEFORE authenticating: logging in through the shared origin writes the session on whichever datacenter DNS happened to pick, and the app token then has to be minted across a WAN. Null when the app has no placement, in which case keep using the shared origin. */
+  /**
+   * HTTPS GraphQL origin for this app's OWN datacenter. Move here BEFORE authenticating: logging in through the shared origin writes the session on whichever datacenter DNS happened to pick, and the app token then has to be minted across a WAN. Null when the app has no placement, in which case keep using the shared origin.
+   * @deprecated Use applicationApiUrl: the Game API is now the Application API. Removed on January 1, 2027.
+   */
   gameApiUrl: Maybe<Scalars['String']['output']>;
-  /** The wss:// form of gameApiUrl, for the subscription socket and the binary relay. */
+  /**
+   * The wss:// form of gameApiUrl, for the subscription socket and the binary relay.
+   * @deprecated Use applicationApiWsUrl: the Game API is now the Application API. Removed on January 1, 2027.
+   */
   gameApiWsUrl: Maybe<Scalars['String']['output']>;
 };
 
@@ -1267,12 +1282,16 @@ export type AppRuntimeState = {
   currentDayUsageCents: Scalars['BigInt']['output'];
   /** Spend so far in the current hour window, in cents. */
   currentHourUsageCents: Scalars['BigInt']['output'];
+  /** Spend so far in the current calendar month (UTC), in cents. */
+  currentMonthUsageCents: Scalars['BigInt']['output'];
   /** Per-app daily spend cap in cents (set via setAppSpendCaps). Null = no cap. */
   dailyLimitCents: Maybe<Scalars['BigInt']['output']>;
   /** Where the app runs (none / shared / dedicated). */
   deploymentTarget: AppDeploymentTarget;
   /** Per-app hourly spend cap in cents (set via setAppSpendCaps). Null = no cap. */
   hourlyLimitCents: Maybe<Scalars['BigInt']['output']>;
+  /** Per-app monthly budget in cents (set via setAppBudget). Null = no budget. The app is refused with spend_cap once this month's spend reaches it. */
+  monthlyLimitCents: Maybe<Scalars['BigInt']['output']>;
   /** insufficient_funds | spend_cap | subscription_lapsed | payment_method_required when not active. payment_method_required: the free-tier card requirement (freeTierCardRequirement) applies to the organization, and it has no saved card and no exemption. Historical rows may carry free_allowance, which the gate no longer produces. */
   runtimeDenialReason: Maybe<Scalars['String']['output']>;
   /** Current runtime gate decision (active / grace / denied / suspended). */
@@ -1281,7 +1300,7 @@ export type AppRuntimeState = {
   walletBalanceCents: Scalars['BigInt']['output'];
 };
 
-/** The per-app runtime gate game-api + Buddy enforce. See runtimeDenialReason when not active. */
+/** The per-app runtime gate Application API + Buddy enforce. See runtimeDenialReason when not active. */
 export enum AppRuntimeStatus {
   /** Allowed to run; clients may connect. */
   Active = 'ACTIVE',
@@ -1320,20 +1339,30 @@ export enum AppStatus {
   Live = 'LIVE'
 }
 
-/** A short-lived, app-scoped gameplay token (portal). Confined to a single app: usable only against that app's Game API + Buddy realtime surface (plus read-only `me` and same-app `refreshAppToken`). It CANNOT perform management operations and CANNOT mint tokens for other apps, so a game stack that receives it never gets the player's full identity session. */
+/** A short-lived, app-scoped gameplay token (portal). Confined to a single app: usable only against that app's Application API + Buddy realtime surface (plus read-only `me` and same-app `refreshAppToken`). It CANNOT perform management operations and CANNOT mint tokens for other apps, so a game stack that receives it never gets the player's full identity session. */
 export type AppTokenResponse = {
   __typename?: 'AppTokenResponse';
   /** The app this token is confined to, as a String. */
   appId: Scalars['String']['output'];
+  /** Base HTTPS URL of the Application API that serves this app — its OWN datacenter's endpoint when a placement exists, because that is where the app's shards are. Null if the app has no dedicated/shared Application API route yet. Use this for gameplay; use `discoveryUrl` to recover if it stops answering. */
+  applicationApiUrl: Maybe<Scalars['String']['output']>;
+  /** WebSocket URL of the Application API that serves this app (wss://), for realtime subscriptions. */
+  applicationApiWsUrl: Maybe<Scalars['String']['output']>;
   /** Set only by `refreshAppToken` when the caller passed `currentServer`: the Buddy the NEW token was just authorized on, which is the node the client is already connected to. When present, keep the existing UDP session and start signing datagrams with the new token; there is no need to call serverWithLeastClients. Null when the caller passed nothing, or when that node can no longer serve this app (gone, draining, Full, or not local to the app) -- then call serverWithLeastClients for a fresh placement, exactly as before. */
   authorizedServer: Maybe<ServerStatus>;
-  /** Stable entry origin, resolving to every datacenter, that always reaches SOME healthy instance. Use it to re-discover endpoints when `gameApiUrl` stops answering: a token-holding client cannot re-mint, because that needs the identity session it does not have. Never a per-datacenter or per-instance address. */
+  /** Stable entry origin, resolving to every datacenter, that always reaches SOME healthy instance. Use it to re-discover endpoints when `applicationApiUrl` stops answering: a token-holding client cannot re-mint, because that needs the identity session it does not have. Never a per-datacenter or per-instance address. */
   discoveryUrl: Maybe<Scalars['String']['output']>;
   /** ISO-8601 UTC expiry. Call `refreshAppToken` (same app) before this. A different app needs its own token: a hosted sign-in for that app, or mintAppToken with the session. */
   expiresAt: Scalars['String']['output'];
-  /** Base HTTPS URL of the Game API that serves this app — its OWN datacenter's endpoint when a placement exists, because that is where the app's shards are. Null if the app has no dedicated/shared game-api route yet. Use this for gameplay; use `discoveryUrl` to recover if it stops answering. */
+  /**
+   * Base HTTPS URL of the Application API that serves this app — its OWN datacenter's endpoint when a placement exists, because that is where the app's shards are. Null if the app has no dedicated/shared Application API route yet. Use this for gameplay; use `discoveryUrl` to recover if it stops answering.
+   * @deprecated Use applicationApiUrl: the Game API is now the Application API. Removed on January 1, 2027.
+   */
   gameApiUrl: Maybe<Scalars['String']['output']>;
-  /** WebSocket URL of the Game API that serves this app (wss://), for realtime subscriptions. */
+  /**
+   * WebSocket URL of the Application API that serves this app (wss://), for realtime subscriptions.
+   * @deprecated Use applicationApiWsUrl: the Game API is now the Application API. Removed on January 1, 2027.
+   */
   gameApiWsUrl: Maybe<Scalars['String']['output']>;
   /** Identifier of the underlying game_token row, as a String. */
   gameTokenId: Scalars['String']['output'];
@@ -1341,7 +1370,7 @@ export type AppTokenResponse = {
   launchUrl: Maybe<Scalars['String']['output']>;
   /** The app's runtime gate when the token was minted. A token is issued for a paused app too, so a client can read status and reason and tell the player the world is paused; realtime sends and hub calls are refused until status is ACTIVE again. Null only when the gate could not be read. */
   runtimeGate: Maybe<AppRuntimeGate>;
-  /** Opaque app-scoped gameplay token. Send to the target app's Game API as `Authorization: Bearer <token>` (and in the realtime `connectionParams`). Do NOT send it to the Management API for anything other than `me`/`refreshAppToken`. */
+  /** Opaque app-scoped gameplay token. Send to the target app's Application API as `Authorization: Bearer <token>` (and in the realtime `connectionParams`). Do NOT send it to the Management API for anything other than `me`/`refreshAppToken`. */
   token: Scalars['String']['output'];
 };
 
@@ -1917,7 +1946,7 @@ export type Chunk = {
   voxelStatesTruncated: Scalars['Boolean']['output'];
   /** BASE64-encoded binary blob of the dense voxel-type grid. When present, the DECODED buffer is exactly 4096 bytes: one unsigned byte (voxel type 0-255) per voxel, indexed as x + y*16 + z*256 with x,y,z in 0-15. Null when the chunk has no voxel grid yet. Decode from base64 before reading. */
   voxels: Maybe<Scalars['String']['output']>;
-  /** When the chunk's grid and stored voxel states were last written whole (updateChunk, a mod's world.set_chunk). Every voxel edit recorded at or before it is superseded, so `voxelStates` holds the stored states (dated with this time) and the edits recorded after it. Chunk-state and LOD writes do not move it. Null when the chunk has not been written whole since Game API v2.70.0: then an edit recorded at any time applies over the grid, as before. A client that merges realtime voxel updates into a copy treats a voxel with no entry as written at this time. Game API v2.70.0. */
+  /** When the chunk's grid and stored voxel states were last written whole (updateChunk, a mod's world.set_chunk). Every voxel edit recorded at or before it is superseded, so `voxelStates` holds the stored states (dated with this time) and the edits recorded after it. Chunk-state and LOD writes do not move it. Null when the chunk has not been written whole since Application API v2.70.0: then an edit recorded at any time applies over the grid, as before. A client that merges realtime voxel updates into a copy treats a voxel with no entry as written at this time. Application API v2.70.0. */
   voxelsUpdatedAt: Maybe<Scalars['DateTime']['output']>;
 };
 
@@ -2909,7 +2938,7 @@ export type CrowdyStudioAgentPlayerDayLimitsInput = {
   totalTokens?: InputMaybe<Scalars['BigInt']['input']>;
 };
 
-/** Management's Agentic Crowdy Studio policy publication. EFFECTIVE values are the fail-closed platform/app intersection; an app can never widen platform models, tools, modes, risks, budgets, retention, or privacy. Game API runtime enforcement still requires a fresh validated replica. */
+/** Management's Agentic Crowdy Studio policy publication. EFFECTIVE values are the fail-closed platform/app intersection; an app can never widen platform models, tools, modes, risks, budgets, retention, or privacy. Application API runtime enforcement still requires a fresh validated replica. */
 export type CrowdyStudioAgentPolicy = {
   __typename?: 'CrowdyStudioAgentPolicy';
   /** Exact model ids allowed by this layer/intersection. Empty denies all models. */
@@ -2932,9 +2961,9 @@ export type CrowdyStudioAgentPolicy = {
   disableReason: Maybe<Scalars['String']['output']>;
   /** Stable disable/kill reason code (for example AGENT_OPERATOR_KILLED); null when enabled. */
   disableReasonCode: Maybe<Scalars['String']['output']>;
-  /** Composite Management revision, formatted p<platform revision>:a<app revision>. Game API pins it only after a successful fresh replica pull. */
+  /** Composite Management revision, formatted p<platform revision>:a<app revision>. Application API pins it only after a successful fresh replica pull. */
   effectiveRevision: Scalars['String']['output'];
-  /** Whether this Management policy layer/publication is enabled. EFFECTIVE is true only when all required layers are enabled and no kill applies; it does not attest that Game API has synchronized. */
+  /** Whether this Management policy layer/publication is enabled. EFFECTIVE is true only when all required layers are enabled and no kill applies; it does not attest that Application API has synchronized. */
   enabled: Scalars['Boolean']['output'];
   /** Platform-funded pilot/future billing seam. */
   funding: CrowdyStudioAgentFundingPolicy;
@@ -3145,7 +3174,7 @@ export enum CrowdyStudioAgentToolCallStatus {
 export enum CrowdyStudioAgentToolExecutor {
   /** The attached CrowdyJS host executes once after epoch/context/lease validation. */
   Browser = 'BROWSER',
-  /** Game API invokes an owner-scoped domain service; never shell or arbitrary GraphQL. */
+  /** The Application API invokes an owner-scoped domain service; never shell or arbitrary GraphQL. */
   Server = 'SERVER'
 }
 
@@ -3308,7 +3337,7 @@ export type CrowdyStudioAgentUsageRecord = {
   toolRounds: Scalars['BigInt']['output'];
   /** Exact upstream inference cost in decimal USD when reported. */
   upstreamInferenceCostUsd: Maybe<Scalars['String']['output']>;
-  /** Game API-issued immutable usage UUID. */
+  /** Application API-issued immutable usage UUID. */
   usageId: Scalars['String']['output'];
   /** Player whose isolated budget consumed usage. */
   userId: Scalars['BigInt']['output'];
@@ -4528,17 +4557,27 @@ export type GameClientBootstrap = {
   __typename?: 'GameClientBootstrap';
   /** The app (game) this bootstrap was requested for, echoed back. A BigInt as a decimal string. Reuse this exact appId to scope the udpNotifications subscription and on every spatial send for this play session. */
   appId: Scalars['BigInt']['output'];
+  /** HTTPS origin the client should use for GraphQL right now: the app's OWN datacenter, because that is where its shards live and a query answered elsewhere crosses a WAN silently. Under direct connect it is one specific instance in that datacenter, which is NOT interchangeable with other instances for an open realtime session. Not to be confused with discoveryUrl, which is the shared origin resolving to every datacenter — fall back to that if requests here start failing. */
+  applicationApiUrl: Maybe<Scalars['String']['output']>;
+  /** The wss:// form of applicationApiUrl, for the graphql-transport-ws subscription socket and the binary relay. Same origin, same caveat: under direct connect it is one instance. */
+  applicationApiWsUrl: Maybe<Scalars['String']['output']>;
   /** Whether this server exposes the binary realtime relay (crowdy-relay-v1): a raw WebSocket endpoint at binaryRelayPath that relays complete client-signed Buddy wire datagrams as BINARY frames in both directions, replacing the GraphQL send*\/udpNotifications hot path. When false, use the GraphQL realtime surface. */
   binaryRelayEnabled: Scalars['Boolean']['output'];
   /** HTTP path of the binary realtime relay WebSocket endpoint on this origin (e.g. "/realtime"). Connect with `?appId=<appId>` and offer the binaryRelayProtocol subprotocol; authenticate with an app-scoped bearer token via the Authorization header, a `bearer.<base64url(token)>` subprotocol entry, or `?token=`. Wire format: cks docs, client-wire-formats. */
   binaryRelayPath: Scalars['String']['output'];
   /** Required WebSocket subprotocol for the binary realtime relay. The client must offer it during the upgrade; the server selects it. Currently "crowdy-relay-v1". */
   binaryRelayProtocol: Scalars['String']['output'];
-  /** Stable entry point that always resolves to SOME healthy API instance — the environment’s shared load balancer. Use this to RE-DISCOVER an endpoint when the instance you are connected to stops answering: call gameClientBootstrap (or mintAppToken) against it and use the gameApiUrl it returns. This is the recovery path for direct connect, where gameApiUrl is a single instance that can die; discoveryUrl is chosen so that it cannot die with it. Null only if the server has no public URL configured. */
+  /** Stable entry point that always resolves to SOME healthy API instance — the environment’s shared load balancer. Use this to RE-DISCOVER an endpoint when the instance you are connected to stops answering: call gameClientBootstrap (or mintAppToken) against it and use the applicationApiUrl it returns. This is the recovery path for direct connect, where applicationApiUrl is a single instance that can die; discoveryUrl is chosen so that it cannot die with it. Null only if the server has no public URL configured. */
   discoveryUrl: Maybe<Scalars['String']['output']>;
-  /** HTTPS origin the client should use for GraphQL right now: the app's OWN datacenter, because that is where its shards live and a query answered elsewhere crosses a WAN silently. Under direct connect it is one specific instance in that datacenter, which is NOT interchangeable with other instances for an open realtime session. Not to be confused with discoveryUrl, which is the shared origin resolving to every datacenter — fall back to that if requests here start failing. */
+  /**
+   * HTTPS origin the client should use for GraphQL right now: the app's OWN datacenter, because that is where its shards live and a query answered elsewhere crosses a WAN silently. Under direct connect it is one specific instance in that datacenter, which is NOT interchangeable with other instances for an open realtime session. Not to be confused with discoveryUrl, which is the shared origin resolving to every datacenter — fall back to that if requests here start failing.
+   * @deprecated Use applicationApiUrl: the Game API is now the Application API. Removed on January 1, 2027.
+   */
   gameApiUrl: Maybe<Scalars['String']['output']>;
-  /** The wss:// form of gameApiUrl, for the graphql-transport-ws subscription socket and the binary relay. Same origin, same caveat: under direct connect it is one instance. */
+  /**
+   * The wss:// form of gameApiUrl, for the graphql-transport-ws subscription socket and the binary relay. Same origin, same caveat: under direct connect it is one instance.
+   * @deprecated Use applicationApiWsUrl: the Game API is now the Application API. Removed on January 1, 2027.
+   */
   gameApiWsUrl: Maybe<Scalars['String']['output']>;
   /** Maximum allowed value for the `decayRate` (named attenuation algorithm id) field on spatial sends. Currently 5; the server clamps send `decayRate` to 0..this. decayRate selects how the message attenuates with distance (0 = none). */
   maxDecayRate: Scalars['Int']['output'];
@@ -4566,7 +4605,7 @@ export type GameClientBootstrap = {
   wildernessWritesOpen: Scalars['Boolean']['output'];
 };
 
-/** The elected host user of a game (app). Election is deterministic across all game-api replicas: among actors that are still fresh (recently heartbeated), the user whose earliest actor was created first wins, with a uuid tiebreaker. Row lifecycle is owned by Buddy, the realtime runtime; liveness (updated_at) is owned by game-api's actorHeartbeat mutation. */
+/** The elected host user of a game (app). Election is deterministic across all Application API replicas: among actors that are still fresh (recently heartbeated), the user whose earliest actor was created first wins, with a uuid tiebreaker. Row lifecycle is owned by Buddy, the realtime runtime; liveness (updated_at) is owned by game-api's actorHeartbeat mutation. */
 export type GameHost = {
   __typename?: 'GameHost';
   /** How many actors the host user currently owns in this app (always >= 1 when this object is returned). */
@@ -4706,7 +4745,7 @@ export type GrantTierFeatureInput = {
   tierId: Scalars['BigInt']['input'];
 };
 
-/** A registered GraphQL API server instance in the fleet, with reachability addresses and basic host telemetry. Returned by graphqlServers (all) and activeGraphQLServers (only ReadyForClients). Use this for service discovery; realtime/UDP play still goes through the game-api UDP proxy. */
+/** A registered GraphQL API server instance in the fleet, with reachability addresses and basic host telemetry. Returned by graphqlServers (all) and activeGraphQLServers (only ReadyForClients). Use this for service discovery; realtime/UDP play still goes through the Application API UDP proxy. */
 export type GraphQlServer = {
   __typename?: 'GraphQLServer';
   /** TCP port the GraphQL/HTTP API listens on (default 4000). */
@@ -4729,7 +4768,7 @@ export type GraphQlServer = {
   memoryUsagePct: Maybe<Scalars['Float']['output']>;
   /** Cloud provider instance id of the underlying host, if known. */
   providerInstanceId: Maybe<Scalars['String']['output']>;
-  /** Public hostname clients can reach this instance on directly over TLS, e.g. `ck-api-or-1.prod.crowdedkingdoms.com`. Null when the instance has no public DNS name or certificate yet, in which case it is reachable only through the shared load balancer and must not be connected to directly. Prefer the `gameApiUrl` returned by mintAppToken over building a URL from this field: that call already picks a low-load instance for you. */
+  /** Public hostname clients can reach this instance on directly over TLS, e.g. `ck-api-or-1.prod.crowdedkingdoms.com`. Null when the instance has no public DNS name or certificate yet, in which case it is reachable only through the shared load balancer and must not be connected to directly. Prefer the `applicationApiUrl` returned by mintAppToken over building a URL from this field: that call already picks a low-load instance for you. */
   publicHostname: Maybe<Scalars['String']['output']>;
   /** Public IPv4 address clients use to reach this server, if assigned. */
   publicIp4: Maybe<Scalars['String']['output']>;
@@ -5427,7 +5466,7 @@ export type Mutation = {
   addTierAccessRule: TierAccessRule;
   /** Admit one player-code listing, author, or authoring org to an app's strict allow list. Requires 'manage_compute'. Idempotency is explicit: an identical active entry returns a conflict instead of silently creating duplicates. SIDE EFFECTS: audit row + replica sync. */
   admitAppCode: AppCodeAdmission;
-  /** Soft-delete an access tier by setting its status to 'archived' (the row is retained, NOT hard-deleted) and notifies the game API. Requires the 'manage_access_tiers' permission on the app that owns the tier; super admins bypass. Existing user grants on this tier are NOT automatically revoked. Throws if the tier is not found. */
+  /** Soft-delete an access tier by setting its status to 'archived' (the row is retained, NOT hard-deleted) and notifies the Application API. Requires the 'manage_access_tiers' permission on the app that owns the tier; super admins bypass. Existing user grants on this tier are NOT automatically revoked. Throws if the tier is not found. */
   archiveAccessTier: AppAccessTier;
   /** Soft-delete an app by setting status=ARCHIVED. The row is retained (NOT hard-deleted) and is excluded from the public marketplace. REVERSIBLE: call updateApp to set status back to DRAFT or LIVE. Requires the 'manage_apps' permission on the app; super admins bypass. Throws if the app id does not exist. */
   archiveApp: App;
@@ -5455,7 +5494,7 @@ export type Mutation = {
   capturePaypalCheckout: Checkout;
   /** Changes the authenticated user's password after verifying the current password. Requires a valid session token. Returns true on success. Refuses with extensions.code INVALID_CURRENT_PASSWORD (403) when the current password is wrong, and PASSWORD_NOT_SET (409) when the account has no password to change — use setInitialPassword for that, which needs only the session. NEITHER of those means the session is invalid, and neither is UNAUTHENTICATED: both were until v1.60.0, so a client that signs the user out on UNAUTHENTICATED was signing them out over a typo. Every OTHER session for the account is revoked (with the app tokens minted from it); the session that made this call stays valid, so the client does not need to sign in again. */
   changePassword: Scalars['Boolean']['output'];
-  /** Self-service: the authenticated caller claims access to an app via its free, open-by-default tier. Requires authentication only (no org membership needed). ENTITLEMENT CHANGE: grants the free default tier as a 'system' grant and notifies the game API. Idempotent: returns the existing row if already granted, and never overrides a prior revoke. Errors if the app has no free default tier or is archived. */
+  /** Self-service: the authenticated caller claims access to an app via its free, open-by-default tier. Requires authentication only (no org membership needed). ENTITLEMENT CHANGE: grants the free default tier as a 'system' grant and notifies the Application API. Idempotent: returns the existing row if already granted, and never overrides a prior revoke. Errors if the app has no free default tier or is archived. */
   claimFreeAppAccess: AppUserAccess;
   /** RETIRED 2026-10-29: Crowded Kingdoms no longer hosts games and every tier runs with hosting off, so this answers CONTENT_HOSTING_DISABLED. Host your build on your own origin. Claim the hosting slug for an app (idempotent; the same app re-claiming its slug is a no-op, a different slug MOVES the game). Registers https://<games host>/<slug>/ and https://<slug>.<content host> as the app's redirect URIs and sets launch_url to the former. Requires manage_apps on the app and a SESSION token. Refuses a slug that is not a DNS label, is reserved, or belongs to another app (HOSTED_SLUG_UNAVAILABLE), and answers CONTENT_HOSTING_DISABLED on a tier without a content CDN. */
   claimGameHosting: HostedGame;
@@ -5475,15 +5514,15 @@ export type Mutation = {
   connectUdpProxy: UdpProxyConnectionStatus;
   /** Operator only. Close an over-billed charge (an I3 finding: its priced total fell below what was billed and written off). The billed part of the difference is credited to the payer (a wallet credit and a CREDIT event); a written-off part (an exempt org) was never paid, so no money moves and a WRITE_OFF event of the opposite sign (reason OVERBILL_REVERSAL) offsets it. creditedMicrousd is the wallet credit only. Idempotent per charge state. */
   cpBillingCreditOverbill: BillingCreditResult;
-  /** Operator only (is_operator or is_super_admin). Publish or release an emergency kill for one app. This state is separate from the app's own kill and always takes precedence in Management's effective envelope; app users cannot clear it. SIDE EFFECTS: revision increment and a sanitized audit event. NOTHING IS PUSHED TO GAME API: preemption takes effect when its runtime next pulls this app's crowdy.studio-agent-policy/1 replica, which is within about a minute for an app already holding one and not at all for an app that does not until a permitted caller asks. Releasing the operator kill does not enable the app or clear its own kill. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT. */
+  /** Operator only (is_operator or is_super_admin). Publish or release an emergency kill for one app. This state is separate from the app's own kill and always takes precedence in Management's effective envelope; app users cannot clear it. SIDE EFFECTS: revision increment and a sanitized audit event. NOTHING IS PUSHED TO THE APPLICATION API: preemption takes effect when its runtime next pulls this app's crowdy.studio-agent-policy/1 replica, which is within about a minute for an app already holding one and not at all for an app that does not until a permitted caller asks. Releasing the operator kill does not enable the app or clear its own kill. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT. */
   cpSetCrowdyStudioAgentAppKill: CrowdyStudioAgentPolicy;
-  /** Operator only (is_operator or is_super_admin). Patch Management platform Agentic Studio policy and global emergency kill. SIDE EFFECTS: the published kill takes precedence over every app setting, the revision increments, and a sanitized append-only audit event is written. NOTHING IS FANNED OUT TO APPS: Game API pulls crowdy.studio-agent-policy/1 per app, so a platform change reaches an app that already holds a replica within about a minute (refreshAfter is two thirds of a 60s validity) and reaches an app with no replica only when a permitted caller next asks about it. Game API must fail closed if the envelope is missing, malformed, or stale. Narrowing the platform lists narrows every app immediately on its next read, including apps that expressed no narrowing of their own. Hard ZDR/collection/body-retention rules and platform-funded/no-wallet pilot funding cannot be loosened. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT. */
+  /** Operator only (is_operator or is_super_admin). Patch Management platform Agentic Studio policy and global emergency kill. SIDE EFFECTS: the published kill takes precedence over every app setting, the revision increments, and a sanitized append-only audit event is written. NOTHING IS FANNED OUT TO APPS: Application API pulls crowdy.studio-agent-policy/1 per app, so a platform change reaches an app that already holds a replica within about a minute (refreshAfter is two thirds of a 60s validity) and reaches an app with no replica only when a permitted caller next asks about it. Application API must fail closed if the envelope is missing, malformed, or stale. Narrowing the platform lists narrows every app immediately on its next read, including apps that expressed no narrowing of their own. Hard ZDR/collection/body-retention rules and platform-funded/no-wallet pilot funding cannot be loosened. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT. */
   cpSetCrowdyStudioAgentPlatformPolicy: CrowdyStudioAgentPolicy;
-  /** Create a new access tier (a free/paid bundle of runtime permissions) for an app. Requires the 'manage_access_tiers' permission on the app (input.appId); super admins bypass. SIDE EFFECTS: validates the tier's permission keys against runtimePermissions and notifies the game API so Buddy sees the new tier. Does NOT grant the tier to any user. */
+  /** Create a new access tier (a free/paid bundle of runtime permissions) for an app. Requires the 'manage_access_tiers' permission on the app (input.appId); super admins bypass. SIDE EFFECTS: validates the tier's permission keys against runtimePermissions and notifies the Application API so Buddy sees the new tier. Does NOT grant the tier to any user. */
   createAccessTier: AppAccessTier;
   /** Creates an actor (a player’s presence/instance in an app world) owned by the authenticated user and returns the persisted row (including the server-set `createdAt`). Requires a valid game token. If `input.avatarId` is set it must reference an avatar the caller owns (throws Unauthorized otherwise). `input.uuid` must be the 32-character ASCII actor id used on the UDP wire (NOT a hyphenated RFC-4122 UUID). */
   createActor: Actor;
-  /** Create a new app within an organization. Requires the 'manage_apps' permission on the target org (input.orgId); super admins bypass. REQUIRES A DATACENTER (input.datacenter): the app is distributed on its app_id, so all of its data lives in one datacenter, and the id is chosen at creation so that it does. Query placeableDatacenters first for the codes this deployment accepts. Creation FAILS — rather than producing an unroutable app — if the named datacenter is unknown to this deployment or holds no shards. SIDE EFFECTS: also provisions a free, open-by-default "Default" access tier granting baseline runtime permissions and notifies the game API. Elevated capabilities such as use_studio_agent are NOT granted by default and require an explicit tier grant. Slug must be unique within the org (a duplicate slug fails). New apps default to visibility=UNLISTED and status=LIVE unless overridden in the input: an app reaches the marketplace only once it is set PUBLIC (updateApp). Neither setting decides who may play; the access tiers do. An organization without a funded wallet or auto-billing may have at most 10 apps that are not archived; one more is refused with APP_LIMIT_REACHED (orgAppLimit says where an organization stands). */
+  /** Create a new app within an organization. Requires the 'manage_apps' permission on the target org (input.orgId); super admins bypass. REQUIRES A DATACENTER (input.datacenter): the app is distributed on its app_id, so all of its data lives in one datacenter, and the id is chosen at creation so that it does. Query placeableDatacenters first for the codes this deployment accepts. Creation FAILS — rather than producing an unroutable app — if the named datacenter is unknown to this deployment or holds no shards. SIDE EFFECTS: also provisions a free, open-by-default "Default" access tier granting baseline runtime permissions and notifies the Application API. Elevated capabilities such as use_studio_agent are NOT granted by default and require an explicit tier grant. Slug must be unique within the org (a duplicate slug fails). New apps default to visibility=UNLISTED and status=LIVE unless overridden in the input: an app reaches the marketplace only once it is set PUBLIC (updateApp). Neither setting decides who may play; the access tiers do. An organization without a funded wallet or auto-billing may have at most 10 apps that are not archived; one more is refused with APP_LIMIT_REACHED (orgAppLimit says where an organization stands). */
   createApp: App;
   /** Creates a new avatar owned by the authenticated user and returns it. Requires a valid game token; the new avatar is always owned by the caller. `input.name` is optional and defaults to "Default Avatar". */
   createAvatar: Avatar;
@@ -5643,11 +5682,11 @@ export type Mutation = {
   gameModelGrantTierFeature: GmTierFeature;
   /** Revoke a feature key from an access tier. Requires app-admin ('manage_apps'). Returns true if a grant was removed. */
   gameModelRevokeTierFeature: Scalars['Boolean']['output'];
-  /** Grant (or re-activate) a user's access to an app, optionally on a specific tier. Requires the 'manage_access_tiers' permission on the app (input.appId); super admins bypass. ENTITLEMENT CHANGE: upserts an active app_user_access row and notifies the game API, so the target user immediately gains that tier's runtime permissions in Buddy. Idempotent per (app,user): re-granting updates the tier and sets status back to active. */
+  /** Grant (or re-activate) a user's access to an app, optionally on a specific tier. Requires the 'manage_access_tiers' permission on the app (input.appId); super admins bypass. ENTITLEMENT CHANGE: upserts an active app_user_access row and notifies the Application API, so the target user immediately gains that tier's runtime permissions in Buddy. Idempotent per (app,user): re-granting updates the tier and sets status back to active. */
   grantAppAccess: AppUserAccess;
   /** Grant one or more runtime permission keys directly to a single user on a grid (writes the `grid_user_direct_grants` input table), then recompute that user's materialized effective ACL on the grid. The target user must already have active app access (otherwise this fails). Requires app-admin ('manage_apps'). Returns the user's full effective permission-key set on the grid. To grant by group/role instead of per-user, use `assignGroupToGrid`. */
   grantGridPermissions: GridUserPermissions;
-  /** Org dashboard shortcut: the authenticated caller grants themselves access to an app using its default active tier. Requires that the caller is an active member of the app's owning org OR holds the 'manage_access_tiers' permission on the app. ENTITLEMENT CHANGE: upserts an active grant and notifies the game API. Errors if the app has no active tier, or the caller is neither a member nor a manager. */
+  /** Org dashboard shortcut: the authenticated caller grants themselves access to an app using its default active tier. Requires that the caller is an active member of the app's owning org OR holds the 'manage_access_tiers' permission on the app. ENTITLEMENT CHANGE: upserts an active grant and notifies the Application API. Errors if the app has no active tier, or the caller is neither a member nor a manager. */
   grantMyAppAccess: AppUserAccess;
   /** OPERATOR: grant every existing account a prefix*@domain pattern matches that has no grant -- for bot rosters created before the gate. The domain must be a reserved test domain or a company domain. Dry run by default. Refused on prod. */
   grantTierAccessByPattern: GrantTierAccessByPatternResult;
@@ -5667,7 +5706,7 @@ export type Mutation = {
   linkIdentity: UserIdentity;
   /** Authenticates with email + password and starts a new session. Returns an AuthResponse whose `token` must be sent on subsequent requests as `Authorization: Bearer <token>`. Public (no auth required); throws on invalid credentials. If the account also has another verified sign-in method, the password must first be email-confirmed. First-party origins only: a browser page on any other origin is refused with HOSTED_SIGN_IN_REQUIRED (403) and must use the hosted sign-in redirect (CrowdyJS portal.signIn) instead; requests with no Origin header (native clients, scripts) are unaffected. Rate-limited per address and per client. */
   login: AuthResponse;
-  /** Ends the current session by deleting the game_token that authenticated this request; other devices stay logged in. An identity session logout also cascades to (revokes) every app token it minted. Returns false if no token was resolved. */
+  /** Ends the current session by deleting the game_token that authenticated this request; other devices stay logged in. An identity session logout also cascades to (revokes) every app token it minted. An app token logs only itself out: it is deleted, and the realtime and compute-module sessions it opened end at once; the identity session that minted it is untouched. Returns false if no token was resolved. */
   logout: Scalars['Boolean']['output'];
   /** Ends every active session for the authenticated user: deletes every session token and every app-scoped gameplay token derived from one, so the user is signed out of the platform and of every game they had entered. Takes effect immediately — a deleted token stops authenticating on its next request rather than at its next refresh. Requires a valid session token. */
   logoutAllDevices: Scalars['Boolean']['output'];
@@ -5681,7 +5720,7 @@ export type Mutation = {
   mintManagedPlayerToken: AppTokenResponse;
   /** Create managed players ahead of their first sign-in, up to 500 a call in one write (creating a player is a cluster-wide commit, so a large import goes in batches). A player that exists is left as it is. Refused with ORG_LEGAL_ACCEPTANCE_REQUIRED until the organization has accepted the current Org-Managed Players Addendum. An org token with players:manage, or an org admin with manage_players. */
   provisionManagedPlayers: ProvisionManagedPlayersResult;
-  /** Publishes an app to the shared game-api environment. Free under the org's app-slot quota (result.free = true); beyond the quota, publish still succeeds and metered usage is charged to the org wallet. Requires the 'manage_apps' permission on the app's org. Blocked when SHARED_GAME_API_URL is not configured. */
+  /** Publishes an app to the shared Application API environment. Free under the org's app-slot quota (result.free = true); beyond the quota, publish still succeeds and metered usage is charged to the org wallet. Requires the 'manage_apps' permission on the app's org. Blocked when SHARED_GAME_API_URL is not configured. */
   publishAppToShared: PublishAppResult;
   /** Store acceptance of the current developer documents (developerLegalDocuments: the API Terms, SDK Developer Terms and Free Tier and Billing Basis). acceptDeveloperTerms must be true; false stores nothing and is refused with LEGAL_ACCEPTANCE_REQUIRED. The developer documents admit adults only: an account with no age is refused AGE_REQUIRED (recordPlayerAge first) and one under 18 AGE_REQUIREMENT_NOT_MET. Idempotent. Requires a session token. */
   recordDeveloperConsents: Scalars['Boolean']['output'];
@@ -5737,11 +5776,11 @@ export type Mutation = {
   resyncTierGridPermissions: Scalars['Boolean']['output'];
   /** OPERATOR ONLY. Retires an organization: sets organizations.status to 'retired', stamps deleted_at, archives its apps, and writes a tombstone to org_retirements. RETIREMENT IS A STATE, NOT A DELETION — no wallet_transactions, org_billing_waivers, app_shared_usage_charges or other ledger row is altered or removed, so an auditor can still reconstruct exactly what this organization spent, with the same joins as before, indefinitely. There is no purge and no retention window, by decision rather than by omission: org ledger rows are retained forever (operator decision, 2026-08-21), so retirement is only ever a state. A retired organization's remaining wallet balance is FROZEN indefinitely by the same decision — held, not refunded and not forfeited — and the amount is recorded on the tombstone. AFTER RETIREMENT the org's API tokens stop authenticating, its members lose every org permission (super admins excepted, so this is reversible), and it is excluded from the caller's organization list — but it is still readable by id and slug, because a retired org that answers like a missing one is worse than one that says what it is. Refuses unless expectedSlug matches the org named by orgId, and refuses an organization holding money unless acknowledgeFrozenBalance is passed. Reverse it with reinstateOrganization. */
   retireOrganization: OrgRetirementType;
-  /** Revoke a user's access to an app by setting their app_user_access status to 'revoked'. Their gameplay tokens for the app are deleted and their realtime sessions ended at once, and a new token is refused with ACCESS_REVOKED. Requires the 'manage_access_tiers' permission on the app; super admins bypass. The row is retained for audit (not deleted); REVERSIBLE via grantAppAccess. For a ban that lifts by itself use suspendAppAccess. */
+  /** Revoke a user's access to an app by setting their app_user_access status to 'revoked'. Their gameplay tokens for the app are deleted and their realtime sessions ended at once, and a new token is refused with ACCESS_REVOKED. A user with no access record for the app is NOT_FOUND. Requires the 'manage_access_tiers' permission on the app; super admins bypass. The row is retained for audit (not deleted); REVERSIBLE via grantAppAccess. For a ban that lifts by itself use suspendAppAccess. */
   revokeAppAccess: AppUserAccess;
   /** Withdraw consent for an app and immediately invalidate every app-scoped token the authenticated user holds for it, whichever session minted them — the tokens stop authenticating on their next request, not at their next refresh. Atomic: if the tokens cannot be invalidated, consent is left in place and this returns an error, so a successful response is the only state in which access has actually been withdrawn. Does NOT sign the user out: their identity session and their tokens for other apps are untouched. Returns false when there was nothing to revoke (no active grant and no live tokens), which makes a repeat call safe. Requires a SESSION token. */
   revokeAppAuthorization: Scalars['Boolean']['output'];
-  /** Revoke an active player-code admission. Requires 'manage_compute'. SIDE EFFECTS: audit row + replica sync; game-api drains affected server modules and blocks client artifact fetches on the next admission refresh. */
+  /** Revoke an active player-code admission. Requires 'manage_compute'. SIDE EFFECTS: audit row + replica sync; Application API drains affected server modules and blocks client artifact fetches on the next admission refresh. */
   revokeAppCodeAdmission: AppCodeAdmission;
   /** Revoke a user's direct grants on a grid (deletes from the `grid_user_direct_grants` input table) and recompute their materialized effective ACL. Omit `permissionKeys` to remove ALL of the user's direct grants on the grid; pass a subset to remove only those keys. Does not affect permissions the user receives via group grants. Requires app-admin ('manage_apps'). DESTRUCTIVE for the targeted grants. Returns the user's remaining effective permission keys on the grid. */
   revokeGridPermissions: GridUserPermissions;
@@ -5787,11 +5826,11 @@ export type Mutation = {
   sendVoxelUpdate: Scalars['Boolean']['output'];
   /** Operator only. Moves the start of the organization allowance pool or its size on this tier, and records each change in billing_rate_changes (scope SHARED, metric allowance_pool). A month already settled keeps the allowance it was settled with. */
   setAllowancePool: AllowancePoolSettings;
-  /** Creates or updates an app's monthly spend cap (idempotent upsert keyed by org + app) and returns the resulting budget. This only records the cap used to monitor/limit overspend; it does not move money, charge a card, or alter the wallet balance. Requires the 'manage_billing' app permission. */
+  /** Creates or updates an app's monthly spend cap (idempotent upsert keyed by org + app) and returns the resulting budget. Once the app's spend this calendar month (UTC) reaches the cap, the platform refuses the app's traffic with spend_cap until the month ends or the cap is raised, as it does for the hourly and daily caps (setAppSpendCaps); 0 removes the budget. It does not move money, charge a card, or alter the wallet balance. Requires the 'manage_billing' app permission. */
   setAppBudget: AppBudget;
   /** Register/update an app's portal client settings (redirect_uris, client_type, launch_url). Requires manage_apps on the app and a SESSION token. */
   setAppClientSettings: PortalConsentState;
-  /** Set an app's player-code censorship mode. Requires 'manage_compute'. SIDE EFFECTS: writes an immutable audit row and replica-syncs the mode to game-api. Switching to ALLOW_LIST is strict: unadmitted code (including self-authored code) drains at the runtime activation gate; deploy/compile remain allowed. */
+  /** Set an app's player-code censorship mode. Requires 'manage_compute'. SIDE EFFECTS: writes an immutable audit row and replica-syncs the mode to Application API. Switching to ALLOW_LIST is strict: unadmitted code (including self-authored code) drains at the runtime activation gate; deploy/compile remain allowed. */
   setAppCodeAdmissionMode: CodeAdmissionMode;
   /** Set an app's compute allowance in units per minute. One unit is one millisecond of measured execution time; ck-exec work is converted from busy time and fuel. An over-ceiling value is REFUSED naming the ceiling (6000000 units per minute) rather than accepted and clamped, so the value reported back is always the value in force. Set enforce to true to pause the app's ck-exec code while its last settled minute is over the allowance; leave it false to record the allowance without pausing anything. Requires app-admin ('manage_apps'). */
   setAppComputeBudget: AppComputeBudgetInfo;
@@ -5817,7 +5856,7 @@ export type Mutation = {
   setChannelPolicy: AppGroupPolicy;
   /** Operator only. Sets the Twenty sync's mode (OFF, SHADOW, LIVE) and whether its signed webhook is accepted; recorded in crm_sync_changes. LIVE sends studio and developer contacts to the CRM. */
   setCrmSync: CrmSyncStatus;
-  /** Create or patch an app's Agentic Crowdy Studio policy. Requires 'manage_compute'. Omitted values stay unchanged; first creation starts disabled, killed, and deny-all. A model/tool/mode/risk list naming anything outside the platform allowlist is REFUSED with AGENT_POLICY_INVALID quoting the platform's current list, rather than silently reduced; a list you do send is stored exactly as sent and can only narrow, and omitting it entirely means 'no narrowing', which inherits the platform's list live on every read. Numeric and retention values are still clamped down to platform limits. Locked ZDR/collection/body-retention rules and the operator app kill cannot be changed. SIDE EFFECTS: increments Management's publication revision and appends a sanitized audit event. NOTHING IS PUSHED TO GAME API: its runtime pulls crowdy.studio-agent-policy/1, obtaining a replica the first time a permitted caller asks about an app that has none, and re-pulling an existing replica once it passes refreshAfter (two thirds of its 60s validity). A change therefore reaches enforcement within about a minute for an app already in use, and not at all until someone asks for one that is not. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT. */
+  /** Create or patch an app's Agentic Crowdy Studio policy. Requires 'manage_compute'. Omitted values stay unchanged; first creation starts disabled, killed, and deny-all. A model/tool/mode/risk list naming anything outside the platform allowlist is REFUSED with AGENT_POLICY_INVALID quoting the platform's current list, rather than silently reduced; a list you do send is stored exactly as sent and can only narrow, and omitting it entirely means 'no narrowing', which inherits the platform's list live on every read. Numeric and retention values are still clamped down to platform limits. Locked ZDR/collection/body-retention rules and the operator app kill cannot be changed. SIDE EFFECTS: increments Management's publication revision and appends a sanitized audit event. NOTHING IS PUSHED TO THE APPLICATION API: its runtime pulls crowdy.studio-agent-policy/1, obtaining a replica the first time a permitted caller asks about an app that has none, and re-pulling an existing replica once it passes refreshAfter (two thirds of its 60s validity). A change therefore reaches enforcement within about a minute for an app already in use, and not at all until someone asks for one that is not. Stable errors: AGENT_POLICY_INVALID, AGENT_POLICY_REVISION_CONFLICT, IDEMPOTENCY_CONFLICT. */
   setCrowdyStudioAgentPolicy: CrowdyStudioAgentPolicy;
   /** Sets the per-user early-access override flag, forcing early access on or off regardless of the global free-play window. Requires a super-admin bearer game token (and the management API enabled). */
   setEarlyAccessOverride: User;
@@ -5895,7 +5934,7 @@ export type Mutation = {
   teleportRequest: TeleportResponse;
   /** Transfer grid title to another user. The current user owner or an app admin may transfer. DESTRUCTIVE/SECURITY-SENSITIVE: atomically disables every player module on the grid pending new-owner consent, wipes module state, removes the old owner direct grid grants, and closes the old title row. The new owner receives no implicit permissions. */
   transferGridOwnership: GridOwnership;
-  /** Transfer a listing between personal and org ownership (DN-9). The caller must be the current owner (user-owned) or hold manage_compute in the owning org; transfers to an org require manage_compute in the receiving org. SIDE EFFECTS: append-only ownership audit row + replica sync to game-api. Ownership moves listing control and source-access rights; from P4b it also moves proceeds. */
+  /** Transfer a listing between personal and org ownership (DN-9). The caller must be the current owner (user-owned) or hold manage_compute in the owning org; transfers to an org require manage_compute in the receiving org. SIDE EFFECTS: append-only ownership audit row + replica sync to Application API. Ownership moves listing control and source-access rights; from P4b it also moves proceeds. */
   transferPlayerCodeListing: PlayerCodeListing;
   /** Lift a channel ban, so the user may join or be added again (nothing is restored). Requires the 'manage_members' channel permission (app admins bypass). Returns true if there was a ban. */
   unbanChannelMember: Scalars['Boolean']['output'];
@@ -5909,7 +5948,7 @@ export type Mutation = {
   unlinkIdentity: Scalars['Boolean']['output'];
   /** Lift a user's suspension (suspendAppAccess) before it lapses. A no-op for a user who is not suspended. Requires the 'manage_access_tiers' permission on the app; super admins bypass. */
   unsuspendAppAccess: AppUserAccess;
-  /** Update an existing access tier (name, ordering, pricing, permissions, etc.); only fields present in the input are changed. Requires the 'manage_access_tiers' permission on the app that owns the tier (resolved from tierId); super admins bypass. SIDE EFFECTS: re-syncs the tier's permissions to the game API. Throws if the tier is not found or the caller lacks permission. */
+  /** Update an existing access tier (name, ordering, pricing, permissions, etc.); only fields present in the input are changed. Requires the 'manage_access_tiers' permission on the app that owns the tier (resolved from tierId); super admins bypass. SIDE EFFECTS: re-syncs the tier's permissions to the Application API. Throws if the tier is not found or the caller lacks permission. */
   updateAccessTier: AppAccessTier;
   /** Partially updates an actor (appId, avatarId, chunk, publicState, privateState); fields omitted from `input` are left unchanged. OWNER-EXCLUSIVE: only the actor’s owner may update (throws Unauthorized otherwise). Game-plane: requires an app token for the actor’s app (a session token or another app’s token is answered NotFound). `uuid` is the 32-character ASCII actor id. */
   updateActor: Actor;
@@ -5927,7 +5966,7 @@ export type Mutation = {
   updateChannel: Group;
   /** Update a channel role's name, rank, and/or permission keys (system roles cannot be renamed/re-ranked). When permissions are supplied they REPLACE the role's existing keys. Requires the 'manage_roles' channel permission (app admins bypass). Note: changing send_messages here does not re-push Buddy until affected members' roles are re-applied via setChannelMemberRoles. */
   updateChannelRole: GroupRole;
-  /** Creates or replaces a chunk's dense voxel grid and/or per-voxel states for the given app and coordinates, records each provided voxel state as an individual voxel update, and asynchronously uploads the chunk to the CDN. WRITES world state. A whole-chunk write: every voxel edit recorded for the chunk at or before it is superseded and removed, so the chunk reads back as written (Chunk.voxelsUpdatedAt; Game API v2.70.0). A client that saves a grid it read earlier therefore overwrites edits made since that read. Leaves chunkState and LODs untouched. Requires an app token for the app and either the 'manage_apps' permission on the app (resolved via its org; super admins bypass) or the voxel edit permission for this chunk that updateVoxel checks (app access, the tier's update_voxel_data, and update_voxel_data on the most specific grid covering the chunk). Throws FORBIDDEN otherwise, and for a chunk only the app's world grid covers while the app's wilderness is closed (App.wildernessWritesOpen false). */
+  /** Creates or replaces a chunk's dense voxel grid and/or per-voxel states for the given app and coordinates, records each provided voxel state as an individual voxel update, and asynchronously uploads the chunk to the CDN. WRITES world state. A whole-chunk write: every voxel edit recorded for the chunk at or before it is superseded and removed, so the chunk reads back as written (Chunk.voxelsUpdatedAt; Application API v2.70.0). A client that saves a grid it read earlier therefore overwrites edits made since that read. Leaves chunkState and LODs untouched. Requires an app token for the app and either the 'manage_apps' permission on the app (resolved via its org; super admins bypass) or the voxel edit permission for this chunk that updateVoxel checks (app access, the tier's update_voxel_data, and update_voxel_data on the most specific grid covering the chunk). Throws FORBIDDEN otherwise, and for a chunk only the app's world grid covers while the app's wilderness is closed (App.wildernessWritesOpen false). */
   updateChunk: Chunk;
   /** Replaces the level-of-detail (LOD) set for a chunk, preserving voxels, per-voxel states, chunk state and owner; returns the updated chunk (or null if it could not be written). WRITES world state. Requires a valid bearer token AND the `manage_apps` permission on the org that owns input.appId (super admins bypass). */
   updateChunkLods: Maybe<Chunk>;
@@ -7848,7 +7887,7 @@ export type OrgToken = {
   /** False once revoked; inactive tokens cannot authenticate. */
   isActive: Scalars['Boolean']['output'];
   /**
-   * 'user_minted' (human-created) or 'service' (minted by the control plane for per-tenant game-apis).
+   * 'user_minted' (human-created) or 'service' (minted by the control plane for per-tenant Application API environments).
    * @deprecated Service tokens were retired; every org token is 'user_minted'. Read `scopes` for what a token may do.
    */
   kind: Scalars['String']['output'];
@@ -8094,11 +8133,21 @@ export type PlaceableDatacenter = {
   __typename?: 'PlaceableDatacenter';
   /** How many shards of the app colocation group this datacenter currently holds. This is the placement odds: createApp mints candidate app ids until one hashes into the requested datacenter, so a datacenter holding half the shards is satisfied in about two attempts. Zero means unplaceable. Always 0 on a deployment that distributes nothing, where the number does not exist and `placeable` is true regardless — read `placeable`, not this, to decide whether a choice is offerable. */
   appShardCount: Scalars['Int']['output'];
+  /** HTTPS GraphQL origin clients of an app in this datacenter should use. Null only where no topology has been pushed, which on a Citus deployment means the datacenter cannot yet be reached and on a single-node one means there is nothing to route. Informational for a picker: createApp does not need it, and appDiscovery is what a client reads per app. */
+  applicationApiUrl: Maybe<Scalars['String']['output']>;
+  /** The wss:// form of applicationApiUrl. Null under the same conditions. */
+  applicationApiWsUrl: Maybe<Scalars['String']['output']>;
   /** Datacenter code, e.g. 'va'. Pass this verbatim as createApp's input.datacenter; it is compared lowercase. */
   code: Scalars['String']['output'];
-  /** HTTPS GraphQL origin clients of an app in this datacenter should use. Null only where no topology has been pushed, which on a Citus deployment means the datacenter cannot yet be reached and on a single-node one means there is nothing to route. Informational for a picker: createApp does not need it, and appDiscovery is what a client reads per app. */
+  /**
+   * HTTPS GraphQL origin clients of an app in this datacenter should use. Null only where no topology has been pushed, which on a Citus deployment means the datacenter cannot yet be reached and on a single-node one means there is nothing to route. Informational for a picker: createApp does not need it, and appDiscovery is what a client reads per app.
+   * @deprecated Use applicationApiUrl: the Game API is now the Application API. Removed on January 1, 2027.
+   */
   gameApiUrl: Maybe<Scalars['String']['output']>;
-  /** The wss:// form of gameApiUrl. Null under the same conditions. */
+  /**
+   * The wss:// form of gameApiUrl. Null under the same conditions.
+   * @deprecated Use applicationApiWsUrl: the Game API is now the Application API. Removed on January 1, 2027.
+   */
   gameApiWsUrl: Maybe<Scalars['String']['output']>;
   /** Whether createApp will accept this datacenter right now. False means it holds no shards of the app colocation group, so no app id can hash into it and creation would fail after exhausting its candidates. Do not offer a false entry as a choice — show it as unavailable, because dropping it hides a half-built datacenter from the only person who would notice. */
   placeable: Scalars['Boolean']['output'];
@@ -8117,14 +8166,24 @@ export type PlaceableDatacenters = {
   servedBy: Maybe<Scalars['String']['output']>;
 };
 
-/** Public platform discovery. Clients/SDKs read the shared game-api URL here to route apps deployed to the shared environment. */
+/** Public platform discovery. Clients/SDKs read the shared Application API URL here to route apps deployed to the shared environment. */
 export type PlatformConfig = {
   __typename?: 'PlatformConfig';
   /** Free shared app slots an org gets before usage is wallet-billed. */
   freeAppsPerOrg: Scalars['Int']['output'];
-  /** Shared game-api HTTP/GraphQL root for shared-environment apps. */
+  /** Shared Application API HTTP/GraphQL root for shared-environment apps. */
+  sharedApplicationApiUrl: Maybe<Scalars['String']['output']>;
+  /** Shared Application API WebSocket root (subscriptions / UDP proxy). */
+  sharedApplicationApiWsUrl: Maybe<Scalars['String']['output']>;
+  /**
+   * Shared Application API HTTP/GraphQL root for shared-environment apps.
+   * @deprecated Use sharedApplicationApiUrl: the Game API is now the Application API. Removed on January 1, 2027.
+   */
   sharedGameApiUrl: Maybe<Scalars['String']['output']>;
-  /** Shared game-api WebSocket root (subscriptions / UDP proxy). */
+  /**
+   * Shared Application API WebSocket root (subscriptions / UDP proxy).
+   * @deprecated Use sharedApplicationApiWsUrl: the Game API is now the Application API. Removed on January 1, 2027.
+   */
   sharedGameApiWsUrl: Maybe<Scalars['String']['output']>;
 };
 
@@ -8695,7 +8754,7 @@ export type Query = {
   appCodeAdmissions: Array<AppCodeAdmission>;
   /** An app's stored compute allowance, or null when none has been set — in which case its ck-exec code is never paused for its budget. Requires app-admin ('manage_apps'). */
   appComputeBudget: Maybe<AppComputeBudgetInfo>;
-  /** Resolve where one or more apps are placed, WITHOUT authenticating. Call this before login and connect to the returned gameApiUrl, so the session and app token are both written in the app's own datacenter instead of across a WAN. Pass every app a launcher might switch to and cache the result; placement changes rarely and only an operator can change it. An app with no placement comes back with nulls, which means 'keep using the shared origin'. */
+  /** Resolve where one or more apps are placed, WITHOUT authenticating. Call this before login and connect to the returned applicationApiUrl, so the session and app token are both written in the app's own datacenter instead of across a WAN. Pass every app a launcher might switch to and cache the result; placement changes rarely and only an operator can change it. An app with no placement comes back with nulls, which means 'keep using the shared origin'. */
   appDiscovery: Array<AppDiscovery>;
   /** Lists org members eligible for a manual app access grant (active members of the app's owning org). Requires the 'manage_access_tiers' permission on the app; super admins bypass. Use the returned user ids with grantAppAccess. */
   appGrantMemberCandidates: Array<AppGrantMemberCandidate>;
@@ -8790,7 +8849,7 @@ export type Query = {
   crmBackfillPreview: CrmBackfillPreview;
   /** Operator only. The Twenty sync's mode, queue and last error in this environment, and what the CRM workspace lacks for LIVE. */
   crmSyncStatus: CrmSyncStatus;
-  /** Read Management's fail-closed Agentic Crowdy Studio publication: platform enable/kill, per-app operator kill, app enable/kill, the resolved model/tool/mode/risk lists (models and modes are the platform/app intersection; a tool or risk list the app left empty is inherited from the platform whole, because empty at a layer that can only narrow means no narrowing), minimum budgets/retention, locked privacy, and platform-funded billing seam. Requires 'view_compute_diagnostics'. This is the source publication, not proof of current runtime enforcement: Game API must hold a fresh crowdy.studio-agent-policy/1 replica and independently enforce it; missing/stale/malformed replica or an empty model/mode intersection must disable the agent. */
+  /** Read Management's fail-closed Agentic Crowdy Studio publication: platform enable/kill, per-app operator kill, app enable/kill, the resolved model/tool/mode/risk lists (models and modes are the platform/app intersection; a tool or risk list the app left empty is inherited from the platform whole, because empty at a layer that can only narrow means no narrowing), minimum budgets/retention, locked privacy, and platform-funded billing seam. Requires 'view_compute_diagnostics'. This is the source publication, not proof of current runtime enforcement: Application API must hold a fresh crowdy.studio-agent-policy/1 replica and independently enforce it; missing/stale/malformed replica or an empty model/mode intersection must disable the agent. */
   crowdyStudioAgentEffectivePolicy: CrowdyStudioAgentPolicy;
   /** Read the app-owned Agentic Crowdy Studio policy row, or a disabled/killed deny-all projection when no row exists. Requires 'view_compute_diagnostics' on the app. This is configuration only: use crowdyStudioAgentEffectivePolicy to see platform clamp and kill precedence. No provider key, prompt, source, header, request/response body, payer reference, or other secret is exposed. */
   crowdyStudioAgentPolicy: CrowdyStudioAgentPolicy;
@@ -8880,7 +8939,7 @@ export type Query = {
   freeTierLevels: FreeTierLevels;
   /** Single startup payload for browser game clients: the authenticated user, server/min-client version requirements, current UDP proxy status, realtime protocol details (subprotocol + subscription name), and the spatial send limits/constants (maxReplicationDistance, maxDecayRate, sequenceNumberModulo). Requires a bearer game token. Read-only: does not open a UDP proxy session. Call this once after login to initialize a play session. */
   gameClientBootstrap: GameClientBootstrap;
-  /** Returns the single elected host user for an app (game). Deterministic across all game-api replicas behind the LB: the user whose earliest still-connected actor row was created first wins, with a uuid tiebreaker. Returns null when no actors exist for the app. Stale actors (no recent actorHeartbeat) are excluded once HOST_ACTOR_FRESHNESS_SECONDS is enabled. Clients should poll; there is no host-change subscription in v1. */
+  /** Returns the single elected host user for an app (game). Deterministic across all Application API replicas behind the LB: the user whose earliest still-connected actor row was created first wins, with a uuid tiebreaker. Returns null when no actors exist for the app. Stale actors (no recent actorHeartbeat) are excluded once HOST_ACTOR_FRESHNESS_SECONDS is enabled. Clients should poll; there is no host-change subscription in v1. */
   gameHost: Maybe<GameHost>;
   /** List the feature keys defined for an app. Requires app-admin ('manage_apps'). */
   gameModelFeatures: Array<GmAppFeature>;
@@ -9025,7 +9084,7 @@ export type Query = {
   paymentEventsConnection: PaymentEventsConnection;
   /** The datacenters this deployment can create an app in. Call this before createApp and use a returned `code` as input.datacenter: the argument is REQUIRED and permanent, because an app is distributed on its app_id and all of its data lives in one datacenter for the life of the app. Requires authentication. Offer only entries with placeable=true; an empty list means no datacenter topology has been pushed here and app creation will refuse until it has. Cheap and stable — the answer changes only when the fleet does, and it is served from Citus reference tables on whichever instance answers. */
   placeableDatacenters: PlaceableDatacenters;
-  /** Public platform discovery. Returns the shared game-api URL clients use for shared-environment apps (served by the platform shared environment). No auth required. */
+  /** Public platform discovery. Returns the shared Application API URL clients use for shared-environment apps (served by the platform shared environment). No auth required. */
   platformConfig: PlatformConfig;
   /** The caller's player-wallet auto-recharge settings (off-session card top-up before the player gate denies for funds). */
   playerAutoBilling: PlayerAutoBilling;
@@ -9068,7 +9127,7 @@ export type Query = {
   runtimePermissions: Array<Scalars['String']['output']>;
   /** The app's safety reports, newest first, with open CHILD_SAFETY reports ahead of the rest; only those with the given status if one is given. At most `first` (default 50, at most 200). Requires 'moderate_safety' on the app (an org role, or the org's admins); super admins bypass. Send the identity session to the app's datacenter. */
   safetyReports: Array<SafetyReport>;
-  /** Pick a low-load game server for a native (direct-UDP) client to connect to: returns a random server from the least-loaded ~20% (by client count) of ReadyForClients servers to spread load, always CO-LOCATED with the datacenter that holds the data for this app (all rows for one app live in a single datacenter). This REFUSES rather than returning a Buddy elsewhere, because every gameplay write for the session would otherwise cross datacenters — invisible, because each write still succeeds — and the refusal tells you which of three situations you are in. If you reached the wrong datacenter (the shared entry name resolves to all of them, so this is the common case for a client that has not re-discovered) it is WRONG_DATACENTER, carrying gameApiUrl and gameApiWsUrl in extensions: reconnect there and retry, which the CrowdyJS and CrowdyCPP clients do for you. If the app’s own datacenter is not serving at all it is APP_UNAVAILABLE, deliberately with no endpoint. Only when this IS the app’s datacenter and it has no healthy co-located Buddy is it NO_LOCAL_BUDDY — also with no endpoint, because there is nowhere else to go; that one needs an operator. Requires a bearer game token; as a side effect it authorizes that token’s P2P session with the chosen Buddy so the native client’s spatial datagrams are accepted. Connect the native client to the returned ip4 and clientPort. Browser clients should instead use the UDP proxy (connectUdpProxy / udpNotifications) and do not need this. */
+  /** Pick a low-load game server for a native (direct-UDP) client to connect to: returns a random server from the least-loaded ~20% (by client count) of ReadyForClients servers to spread load, always CO-LOCATED with the datacenter that holds the data for this app (all rows for one app live in a single datacenter). This REFUSES rather than returning a Buddy elsewhere, because every gameplay write for the session would otherwise cross datacenters — invisible, because each write still succeeds — and the refusal tells you which of three situations you are in. If you reached the wrong datacenter (the shared entry name resolves to all of them, so this is the common case for a client that has not re-discovered) it is WRONG_DATACENTER, carrying applicationApiUrl and applicationApiWsUrl in extensions: reconnect there and retry, which the CrowdyJS and CrowdyCPP clients do for you. If the app’s own datacenter is not serving at all it is APP_UNAVAILABLE, deliberately with no endpoint. Only when this IS the app’s datacenter and it has no healthy co-located Buddy is it NO_LOCAL_BUDDY — also with no endpoint, because there is nowhere else to go; that one needs an operator. Requires a bearer game token; as a side effect it authorizes that token’s P2P session with the chosen Buddy so the native client’s spatial datagrams are accepted. Connect the native client to the returned ip4 and clientPort. Browser clients should instead use the UDP proxy (connectUdpProxy / udpNotifications) and do not need this. */
   serverWithLeastClients: ServerStatus;
   /** @deprecated Legacy monthly app-slot subscription catalog. New shared publishes use wallet usage billing only. */
   sharedEnvPlans: Array<SharedEnvPlan>;
@@ -11629,7 +11688,7 @@ export type UpdateAppInput = {
   status?: InputMaybe<AppStatus>;
   /** New visibility (PUBLIC/UNLISTED/PRIVATE). Omit to leave unchanged. */
   visibility?: InputMaybe<AppVisibility>;
-  /** Open (true) or close (false) the app's wilderness to voxel and chunk writes: chunks that no grid but the app's world grid covers. Closing refuses every write there, whoever makes it; each game API replica, and each realtime server for a client's direct voxel updates, acts on the change within about 15 seconds. Omit to leave unchanged. */
+  /** Open (true) or close (false) the app's wilderness to voxel and chunk writes: chunks that no grid but the app's world grid covers. Closing refuses every write there, whoever makes it; each Application API replica, and each realtime server for a client's direct voxel updates, acts on the change within about 15 seconds. Omit to leave unchanged. */
   wildernessWritesOpen?: InputMaybe<Scalars['Boolean']['input']>;
 };
 
@@ -11997,7 +12056,7 @@ export type VoxelState = {
   __typename?: 'VoxelState';
   /** BASE64-encoded binary state blob for this voxel (decode from base64); null/empty when the voxel has no extra state. */
   state: Maybe<Scalars['String']['output']>;
-  /** When this entry was last written: the recorded voxel edit's time, or for a state stored with the chunk, when the chunk's voxels were last written whole (Chunk.voxelsUpdatedAt; the chunk's last write when that is null). A client that also hears realtime voxel updates keeps, per voxel, the newer of this and a notification's time (a realtime edit is recorded at the time its notification carries, replication servers v0.46.0). Null when the read did not apply recorded edits. Game API v2.69.0; stored states dated by the whole-chunk write since v2.70.0. */
+  /** When this entry was last written: the recorded voxel edit's time, or for a state stored with the chunk, when the chunk's voxels were last written whole (Chunk.voxelsUpdatedAt; the chunk's last write when that is null). A client that also hears realtime voxel updates keeps, per voxel, the newer of this and a notification's time (a realtime edit is recorded at the time its notification carries, replication servers v0.46.0). Null when the read did not apply recorded edits. Application API v2.69.0; stored states dated by the whole-chunk write since v2.70.0. */
   updatedAt: Maybe<Scalars['DateTime']['output']>;
   /** Voxel position within the chunk (signed 16-bit per axis, app-defined). */
   voxelCoord: VoxelCoordinates;

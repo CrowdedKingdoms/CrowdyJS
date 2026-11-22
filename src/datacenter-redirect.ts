@@ -22,8 +22,12 @@ import { WRONG_DATACENTER_CODE } from './errors.js';
 /** Where the server says this client should go instead. */
 export interface DatacenterMove {
   /** Absolute HTTP origin or GraphQL URL of the app's own datacenter. */
-  gameApiUrl: string;
+  applicationApiUrl: string;
   /** Matching websocket URL, when the server named one. */
+  applicationApiWsUrl?: string;
+  /** @deprecated Use applicationApiUrl: the Game API is now the Application API. Removed on January 1, 2027. */
+  gameApiUrl: string;
+  /** @deprecated Use applicationApiWsUrl: the Game API is now the Application API. Removed on January 1, 2027. */
   gameApiWsUrl?: string;
   /** The app the move is about, for logging. */
   appId?: string;
@@ -51,15 +55,21 @@ export function moveFromError(
   if (!extensions) return null;
   if (extensions.code !== WRONG_DATACENTER_CODE) return null;
 
-  const gameApiUrl = asString(extensions.gameApiUrl);
+  // An Application API older than v2.85.0 names only the gameApi* keys.
+  const applicationApiUrl =
+    asString(extensions.applicationApiUrl) ?? asString(extensions.gameApiUrl);
   // No endpoint means no move. See the note at the top: this is a contract
   // violation rather than an ordinary case, and guessing would send the client
   // somewhere it was not told to go.
-  if (!gameApiUrl) return null;
+  if (!applicationApiUrl) return null;
+  const applicationApiWsUrl =
+    asString(extensions.applicationApiWsUrl) ?? asString(extensions.gameApiWsUrl);
 
   return {
-    gameApiUrl,
-    gameApiWsUrl: asString(extensions.gameApiWsUrl),
+    applicationApiUrl,
+    applicationApiWsUrl,
+    gameApiUrl: applicationApiUrl,
+    gameApiWsUrl: applicationApiWsUrl,
     appId: asString(extensions.appId),
     appDatacenter: asString(extensions.appDatacenter),
   };

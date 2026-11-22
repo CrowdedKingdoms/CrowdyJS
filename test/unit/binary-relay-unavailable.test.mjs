@@ -116,10 +116,24 @@ test('createMintRediscover returns the URLs mintAppToken hands back', async () =
     mintAppToken: async (appId) => {
       assert.equal(appId, '42');
       return {
-        gameApiUrl: 'https://ck-api-2.example.test',
-        gameApiWsUrl: 'wss://ck-api-2.example.test',
+        applicationApiUrl: 'https://ck-api-2.example.test',
+        applicationApiWsUrl: 'wss://ck-api-2.example.test',
       };
     },
+  });
+
+  assert.deepEqual(await rediscover('42'), {
+    httpUrl: 'https://ck-api-2.example.test',
+    wsUrl: 'wss://ck-api-2.example.test',
+  });
+});
+
+test('createMintRediscover reads a mint function that still returns the gameApi* names', async () => {
+  const rediscover = createMintRediscover({
+    mintAppToken: async () => ({
+      gameApiUrl: 'https://ck-api-2.example.test',
+      gameApiWsUrl: 'wss://ck-api-2.example.test',
+    }),
   });
 
   assert.deepEqual(await rediscover('42'), {
