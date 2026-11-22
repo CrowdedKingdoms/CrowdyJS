@@ -2,7 +2,9 @@ query AppDiscovery($appIds: [BigInt!]!) {
   appDiscovery(appIds: $appIds) {
     appId
     datacenterCode
-    gameApiUrl
-    gameApiWsUrl
+    applicationApiUrl
+    gameApiUrl: applicationApiUrl
+    applicationApiWsUrl
+    gameApiWsUrl: applicationApiWsUrl
   }
 }

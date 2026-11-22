@@ -282,7 +282,7 @@ export class GraphQLClient {
 
       this.logger.info?.(
         `moved to ${move.appDatacenter ?? 'the app\u2019s datacenter'} at ` +
-          `${move.gameApiUrl} and retrying`,
+          `${move.applicationApiUrl} and retrying`,
       );
       return await this.attempt<T>(query, variables, options);
     }

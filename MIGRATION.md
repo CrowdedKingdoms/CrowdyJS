@@ -120,6 +120,19 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.39.0: the Game API is now the Application API
+
+Rename as you go; nothing breaks before January 1, 2027. Every result that named the Game API's URLs now carries
+the Application API names beside the old ones:
+
+| Was (deprecated) | Now |
+|---|---|
+| `gameApiUrl`, `gameApiWsUrl` (mint results, discovery, `AppRoute`, datacenter moves) | `applicationApiUrl`, `applicationApiWsUrl` |
+| `sharedGameApiUrl`, `sharedGameApiWsUrl` (`client.platform.config()`) | `sharedApplicationApiUrl`, `sharedApplicationApiWsUrl` |
+
+The old properties hold the same values and are removed on January 1, 2027, when the Application API removes the
+old GraphQL fields. This release needs Application API v2.85.0 or later.
+
 ## 18.38.0: choose the speakers each player receives
 
 Nothing changes until you call it. With Buddy v0.49.0, `game.udp.setSpeakers({ voice, video })` tells the server

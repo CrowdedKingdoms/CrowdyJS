@@ -69,9 +69,13 @@ export interface AppTokenResponse {
   appId: string;
   /** ISO-8601 UTC expiry. Refresh (same app) or re-portal before this. */
   expiresAt: string;
-  /** Base HTTPS URL of the Game API serving this app (null if unrouted). */
+  /** Base HTTPS URL of the Application API serving this app (null if unrouted). */
+  applicationApiUrl: string | null;
+  /** WebSocket URL of the Application API serving this app. */
+  applicationApiWsUrl: string | null;
+  /** @deprecated Use applicationApiUrl: the Game API is now the Application API. Removed on January 1, 2027. */
   gameApiUrl: string | null;
-  /** WebSocket URL of the Game API serving this app. */
+  /** @deprecated Use applicationApiWsUrl: the Game API is now the Application API. Removed on January 1, 2027. */
   gameApiWsUrl: string | null;
   /**
    * Stable entry origin that reaches SOME healthy instance, whatever has failed.
@@ -146,7 +150,7 @@ export class BrowserSessionPkceStore implements PkceStore {
 }
 
 const APP_TOKEN_FIELDS =
-  'token gameTokenId appId expiresAt gameApiUrl gameApiWsUrl discoveryUrl launchUrl runtimeGate { status reason }';
+  'token gameTokenId appId expiresAt applicationApiUrl applicationApiWsUrl gameApiUrl: applicationApiUrl gameApiWsUrl: applicationApiWsUrl discoveryUrl launchUrl runtimeGate { status reason }';
 
 const MintAppTokenDocument = parse(
   `mutation MintAppToken($input: MintAppTokenInput!) { mintAppToken(input: $input) { ${APP_TOKEN_FIELDS} } }`,

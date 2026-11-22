@@ -7,8 +7,10 @@ query PlaceableDatacenters {
       placeable
       serving
       appShardCount
-      gameApiUrl
-      gameApiWsUrl
+      applicationApiUrl
+      gameApiUrl: applicationApiUrl
+      applicationApiWsUrl
+      gameApiWsUrl: applicationApiWsUrl
     }
   }
 }
