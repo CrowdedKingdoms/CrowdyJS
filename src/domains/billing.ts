@@ -102,13 +102,15 @@ export class BillingAPI {
   }
 
   /**
-   * Set (or clear) an app's monthly spend cap. Requires the `manage_billing`
+   * Set (or clear) an app's monthly spend cap. Once the app's spend this calendar
+   * month (UTC) reaches it, the platform pauses the app (`spend_cap`) until the month
+   * ends or the cap is raised (Application API v2.84.0). Requires the `manage_billing`
    * app permission.
    *
    * @param orgId - Numeric org id.
    * @param appId - Numeric app id.
    * @param monthlyLimitCents - Monthly cap in minor currency units (decimal
-   *   string); `"0"` disables the cap.
+   *   string); `"0"` removes the cap.
    * @returns The updated app budget.
    */
   async setAppBudget(

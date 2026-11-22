@@ -14,7 +14,8 @@ query MarketplaceApps(
       status
       metadata
       splitMode
-      gameApiUrl
+      applicationApiUrl
+      gameApiUrl: applicationApiUrl
       createdAt
       updatedAt
       org {
@@ -49,7 +50,8 @@ query AppsConnection(
         status
         metadata
         splitMode
-        gameApiUrl
+        applicationApiUrl
+        gameApiUrl: applicationApiUrl
         createdAt
         updatedAt
         org {

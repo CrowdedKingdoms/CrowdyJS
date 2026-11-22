@@ -1,7 +1,9 @@
 query PlatformConfig {
   platformConfig {
-    sharedGameApiUrl
-    sharedGameApiWsUrl
+    sharedApplicationApiUrl
+    sharedGameApiUrl: sharedApplicationApiUrl
+    sharedApplicationApiWsUrl
+    sharedGameApiWsUrl: sharedApplicationApiWsUrl
     freeAppsPerOrg
   }
 }

@@ -484,7 +484,7 @@ export class CrowdyClient {
     // holds none of the app's shards and would refuse the subscription too.
     this.graphql.setWrongDatacenterHandler((move) => {
       const endpoint =
-        toGraphqlEndpoint(move.gameApiUrl, 'graphql') ?? move.gameApiUrl;
+        toGraphqlEndpoint(move.applicationApiUrl, 'graphql') ?? move.applicationApiUrl;
       if (endpoint === this.graphql.getEndpoint()) {
         // Already there. Returning false stops the transport retrying, because a
         // retry to the same instance is refused identically and a handler that
@@ -493,8 +493,8 @@ export class CrowdyClient {
       }
       this.graphql.setEndpoint(endpoint);
       this.realtime.moveToDatacenter({
-        httpUrl: move.gameApiUrl,
-        wsUrl: toGraphqlEndpoint(move.gameApiWsUrl, 'graphql') ?? null,
+        httpUrl: move.applicationApiUrl,
+        wsUrl: toGraphqlEndpoint(move.applicationApiWsUrl, 'graphql') ?? null,
         datacenter: move.appDatacenter,
       });
       return true;
