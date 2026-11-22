@@ -220,6 +220,17 @@ export class UdpAPI {
     this.subs.flushSends();
   }
 
+  /**
+   * Binary relay only: start or stop asking for this player's own spatial
+   * voice and video. From Buddy v0.48.0 a speaker is not sent its own
+   * `CLIENT_AUDIO_PACKET_2` or `CLIENT_VIDEO_PACKET_2` unless it asks, so turn
+   * it on for a microphone or camera check and off after it. The initial value
+   * is `realtime.ownMediaEcho`.
+   */
+  setOwnMediaEcho(on: boolean): void {
+    this.subs.setOwnMediaEcho(on);
+  }
+
   async disconnect(): Promise<boolean> {
     if (this.subs.usingBinaryTransport()) {
       this.subs.disconnect();

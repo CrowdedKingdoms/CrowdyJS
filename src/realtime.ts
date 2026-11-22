@@ -330,6 +330,14 @@ export interface RealtimeConfig {
    * {@link bundleSends} is false.
    */
   bundleWindowMs?: number;
+  /**
+   * Binary relay only: ask the server to send this session its own spatial
+   * voice and video (Buddy v0.48.0), for example to check capture by playing
+   * back what came round. Defaults to `false`: from v0.48.0 a speaker is not
+   * sent its own copy, which it does not need and which was billed as data out.
+   * Channel audio never comes back to its speaker.
+   */
+  ownMediaEcho?: boolean;
 }
 
 interface PendingWait {
@@ -396,6 +404,7 @@ export class RealtimeClient {
   private readonly binaryTransport: boolean;
   private readonly bundleSends: boolean;
   private readonly bundleWindowMs: number;
+  private ownMediaEcho: boolean;
   /** Mutable alongside wsUrl: re-discovery moves both. */
   private binaryRelayUrl: string;
   private binaryRelay: BinaryRelayTransport | null = null;
@@ -450,6 +459,7 @@ export class RealtimeClient {
     this.binaryTransport = config.binaryTransport === true;
     this.bundleSends = config.bundleSends ?? true;
     this.bundleWindowMs = config.bundleWindowMs ?? 1;
+    this.ownMediaEcho = config.ownMediaEcho === true;
     this.binaryRelayUrl =
       config.binaryRelayUrl ?? deriveBinaryRelayUrl(this.wsUrl);
 
@@ -801,6 +811,17 @@ export class RealtimeClient {
   }
 
   /**
+   * Start or stop asking for this player's own spatial voice and video, which
+   * from Buddy v0.48.0 a speaker is not sent otherwise. Binary relay only; the
+   * relay advertises the change at once, and a relay opened later starts with
+   * it. The initial value is {@link RealtimeConfig.ownMediaEcho}.
+   */
+  setOwnMediaEcho(on: boolean): void {
+    this.ownMediaEcho = on;
+    this.binaryRelay?.setOwnMediaEcho(on);
+  }
+
+  /**
    * Serialize (with the session signing context) and send one datagram over
    * the binary relay. Throws `BINARY_RELAY_UNAVAILABLE` when the relay is not
    * connected — callers fall back to the GraphQL mutation.
@@ -1061,6 +1082,7 @@ export class RealtimeClient {
           logger: this.logger,
           bundleSends: this.bundleSends,
           bundleWindowMs: this.bundleWindowMs,
+          ownMediaEcho: this.ownMediaEcho,
         },
         {
           getToken: () => this.session.getToken(),
