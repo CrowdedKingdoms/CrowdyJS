@@ -1135,7 +1135,7 @@ Each tier has its own site (`docs.dev.crowdedkingdoms.com`, `docs.test.crowdedki
 links the site of the tier its branch releases to, because the npm package carries it; a
 promotion re-points those links (`docs.dev.` → `docs.test.` → `docs.`), and `promote.mjs`
 does not do it for you.
-Published SDLs: `/schema/game-api.graphql` (whole schema),
+Published SDLs: `/schema/application-api.graphql` (whole schema; `/schema/game-api.graphql` until January 1, 2027),
 `/schema/management-api.graphql` (management surface **derived** from that
 schema — not a second source repo), `/schema/crowdyjs.graphql`.
 

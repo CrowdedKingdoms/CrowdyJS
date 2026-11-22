@@ -1559,7 +1559,7 @@ no other repositories and no network access required:
   `src/generated/graphql-schema.ts`, the generated schema types.
 
 Schema refresh is explicit, from the published
-[SDL](https://docs.dev.crowdedkingdoms.com/schema/game-api.graphql):
+[SDL](https://docs.dev.crowdedkingdoms.com/schema/application-api.graphql):
 
 ```bash
 npm run schema:sync:prod
