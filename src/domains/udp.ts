@@ -231,6 +231,26 @@ export class UdpAPI {
     this.subs.setOwnMediaEcho(on);
   }
 
+  /**
+   * Binary relay only: the speakers whose spatial voice and webcam video this
+   * player receives (Buddy v0.49.0). For each kind, an array of actor uuids
+   * receives only those (`[]` none), `null` receives everyone in range again,
+   * and an omitted kind is left as it is. Streams a list leaves out are neither
+   * sent nor billed. A list names at most the app's
+   * `gameClientBootstrap.maxVoiceSpeakers` / `maxVideoSpeakers` (never more than
+   * 32): the server refuses a longer one with a `GenericErrorResponse`
+   * (`INVALID_REQUEST`) and keeps the list it had. The lists go again after every
+   * reconnect and every 15 s, so they outlive a token refresh or a migration.
+   *
+   * @throws {CrowdyRealtimeError} `SPEAKER_LIST_TOO_LONG` for a list over 32.
+   */
+  setSpeakers(change: {
+    voice?: readonly string[] | null;
+    video?: readonly string[] | null;
+  }): void {
+    this.subs.setSpeakers(change);
+  }
+
   async disconnect(): Promise<boolean> {
     if (this.subs.usingBinaryTransport()) {
       this.subs.disconnect();

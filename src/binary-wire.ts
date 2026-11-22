@@ -86,6 +86,8 @@ export const WireMessageType = {
   // advertised BUNDLE_SIGNED receives its bundles with ONE trailing HMAC over the
   // datagram and members without per-member HMACs (containsAuth = 0).
   CLIENT_CAPABILITIES: 29,
+  // Buddy v0.49.0: the speakers whose spatial voice and video this session receives.
+  CLIENT_MEDIA_SPEAKERS: 47,
   MESSAGE_BUNDLE_SIGNED: 30,
   GENERIC_ERROR_MESSAGE: 3,
   CHANNEL_MESSAGE_REQUEST: 17,
@@ -336,6 +338,65 @@ export function serializeClientCapabilities(
   return serializeSpatial(
     ctx,
     WireMessageType.CLIENT_CAPABILITIES,
+    appId,
+    { x: 0, y: 0, z: 0 },
+    0,
+    0,
+    '',
+    payload,
+    sequenceNumber,
+  );
+}
+
+/**
+ * How a `CLIENT_MEDIA_SPEAKERS` changes one kind's list (Buddy v0.49.0): leave it,
+ * receive only the names that follow, or receive everyone in range again.
+ */
+export const SpeakerListMode = { KEEP: 0, ONLY: 1, EVERYONE: 2 } as const;
+
+/**
+ * The most speakers one list may name: what a datagram holds, and an app's
+ * number when it sets none (`gameClientBootstrap.maxVoiceSpeakers` /
+ * `maxVideoSpeakers` give the app's own).
+ */
+export const MAX_MEDIA_SPEAKERS = 32;
+
+/** One kind's change in a `CLIENT_MEDIA_SPEAKERS`. */
+export interface SpeakerListChange {
+  mode: number;
+  names: readonly string[];
+}
+
+const KEEP_LIST: SpeakerListChange = { mode: SpeakerListMode.KEEP, names: [] };
+
+/**
+ * Build a `CLIENT_MEDIA_SPEAKERS` (47) datagram: the capabilities' long-spatial
+ * layout with `[voiceMode][voiceCount][videoMode][videoCount]` and the names,
+ * each a 32-byte actor id as the spatial messages carry it.
+ */
+export function serializeClientMediaSpeakers(
+  ctx: RelaySignContext,
+  appId: string | number | bigint,
+  voice: SpeakerListChange = KEEP_LIST,
+  video: SpeakerListChange = KEEP_LIST,
+  sequenceNumber = 0,
+): Promise<Uint8Array> {
+  const names = [...voice.names, ...video.names];
+  const payload = new Uint8Array(4 + names.length * UUID_SIZE);
+  payload[0] = voice.mode;
+  payload[1] = voice.names.length;
+  payload[2] = video.mode;
+  payload[3] = video.names.length;
+  names.forEach((name, i) => {
+    const bytes = textEncoder.encode(name);
+    if (bytes.length > UUID_SIZE) {
+      throw new Error(`UUID too long: ${bytes.length} > ${UUID_SIZE}`);
+    }
+    payload.set(bytes, 4 + i * UUID_SIZE);
+  });
+  return serializeSpatial(
+    ctx,
+    WireMessageType.CLIENT_MEDIA_SPEAKERS,
     appId,
     { x: 0, y: 0, z: 0 },
     0,

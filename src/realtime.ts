@@ -16,8 +16,10 @@ import {
 import {
   BinaryRelayTransport,
   type BinaryRelaySendStats,
+  type SpeakerLists,
+  type SpeakerListsChange,
 } from './binary-relay.js';
-import type { RelaySignContext } from './binary-wire.js';
+import { MAX_MEDIA_SPEAKERS, type RelaySignContext } from './binary-wire.js';
 import { CROWDY_DEFAULT_WS_ORIGIN } from './default-origin.js';
 import type { ChannelAudioNotification, GenericSpatialNotification } from './types.js';
 
@@ -405,6 +407,7 @@ export class RealtimeClient {
   private readonly bundleSends: boolean;
   private readonly bundleWindowMs: number;
   private ownMediaEcho: boolean;
+  private readonly speakers: SpeakerLists = { voice: null, video: null };
   /** Mutable alongside wsUrl: re-discovery moves both. */
   private binaryRelayUrl: string;
   private binaryRelay: BinaryRelayTransport | null = null;
@@ -822,6 +825,28 @@ export class RealtimeClient {
   }
 
   /**
+   * Change the speakers whose spatial voice and webcam video this player
+   * receives (Buddy v0.49.0; see `udp.setSpeakers`). Binary relay only; a relay
+   * opened later starts with the lists.
+   */
+  setSpeakers(change: SpeakerListsChange): void {
+    for (const [kind, list] of [
+      ['voice', change.voice],
+      ['video', change.video],
+    ] as const) {
+      if (list && list.length > MAX_MEDIA_SPEAKERS) {
+        throw new CrowdyRealtimeError(
+          `A ${kind} speaker list names at most ${MAX_MEDIA_SPEAKERS} actors (got ${list.length}); the app's own number is gameClientBootstrap.max${kind === 'voice' ? 'Voice' : 'Video'}Speakers`,
+          { code: 'SPEAKER_LIST_TOO_LONG' },
+        );
+      }
+    }
+    if (change.voice !== undefined) this.speakers.voice = change.voice ? [...change.voice] : null;
+    if (change.video !== undefined) this.speakers.video = change.video ? [...change.video] : null;
+    this.binaryRelay?.setSpeakers(change);
+  }
+
+  /**
    * Serialize (with the session signing context) and send one datagram over
    * the binary relay. Throws `BINARY_RELAY_UNAVAILABLE` when the relay is not
    * connected — callers fall back to the GraphQL mutation.
@@ -1083,6 +1108,7 @@ export class RealtimeClient {
           bundleSends: this.bundleSends,
           bundleWindowMs: this.bundleWindowMs,
           ownMediaEcho: this.ownMediaEcho,
+          speakers: { ...this.speakers },
         },
         {
           getToken: () => this.session.getToken(),
