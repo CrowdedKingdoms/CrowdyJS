@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.37.0** (18.0.0 was published only as
+**Current package:** `package.json` is **18.38.0** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -29,6 +29,16 @@ directly. So, before adding a wrapper:
 - 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
+
+**18.38.0: the speakers each player receives (2026-11-22, cks-biz BIZ-031 Q2).** `udp.setSpeakers({ voice,
+video })` (`RealtimeClient.setSpeakers`, `BinaryRelayTransport.setSpeakers`) sends Buddy v0.49.0's
+`CLIENT_MEDIA_SPEAKERS` (47, `serializeClientMediaSpeakers`, `SpeakerListMode`): per kind an array of actor uuids
+(only those; `[]` none), `null` (everyone again) or omitted (kept). A changed kind goes at once; every list goes again
+on each capabilities tick (every `ready` and 15 s), since the server forgets it with the session; a relay opened later
+starts with the lists. Over 32 names throws `SPEAKER_LIST_TOO_LONG`; the app's own numbers are
+`gameClientBootstrap.maxVoiceSpeakers` / `maxVideoSpeakers` (ck-api v2.83.0, now in the bootstrap operation), and the
+server refuses a longer list `INVALID_REQUEST`. Relay only. Schema at cks-game-api #738. Tests:
+`test/unit/media-speakers.test.mjs`.
 
 **18.37.0: the owner echo turns on and off on a live session (2026-11-21).** `udp.setOwnMediaEcho(on)`
 (`RealtimeClient.setOwnMediaEcho`, `BinaryRelayTransport.setOwnMediaEcho`) changes the bit and

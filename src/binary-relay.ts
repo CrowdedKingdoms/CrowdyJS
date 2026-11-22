@@ -29,6 +29,9 @@ import {
   type RelaySignContext,
   SDK_CAPABILITIES,
   serializeClientCapabilities,
+  serializeClientMediaSpeakers,
+  type SpeakerListChange,
+  SpeakerListMode,
 } from './binary-wire.js';
 
 export const RELAY_SUBPROTOCOL = 'crowdy-relay-v1';
@@ -163,6 +166,29 @@ export interface BinaryRelayConfig {
    * billed as data out. Needs {@link advertiseCapabilities}.
    */
   ownMediaEcho?: boolean;
+  /** The speaker lists to start with (see {@link BinaryRelayTransport.setSpeakers}). */
+  speakers?: SpeakerLists;
+}
+
+/**
+ * The speakers whose spatial voice and webcam video a session receives (Buddy
+ * v0.49.0): a list receives only those actors, `null` everyone in range.
+ */
+export interface SpeakerLists {
+  voice: readonly string[] | null;
+  video: readonly string[] | null;
+}
+
+/** A change to {@link SpeakerLists}: an omitted kind is left as it is. */
+export interface SpeakerListsChange {
+  voice?: readonly string[] | null;
+  video?: readonly string[] | null;
+}
+
+function speakerChange(list: readonly string[] | null | undefined): SpeakerListChange {
+  if (list === undefined) return { mode: SpeakerListMode.KEEP, names: [] };
+  if (list === null) return { mode: SpeakerListMode.EVERYONE, names: [] };
+  return { mode: SpeakerListMode.ONLY, names: list };
 }
 
 /** Uplink counters kept by the relay transport (see {@link BinaryRelayTransport.stats}). */
@@ -221,6 +247,7 @@ export class BinaryRelayTransport {
   private readonly advertiseCapabilities: boolean;
   private readonly capabilitiesIntervalMs: number;
   private capabilityFlags: number;
+  private readonly speakers: { voice: readonly string[] | null; video: readonly string[] | null };
   private capsTimer: ReturnType<typeof setInterval> | null = null;
   private pendingMembers: Uint8Array[] = [];
   private pendingBytes = 0;
@@ -248,6 +275,22 @@ export class BinaryRelayTransport {
     this.capabilitiesIntervalMs = Math.max(1000, config.capabilitiesIntervalMs ?? 15_000);
     this.capabilityFlags =
       SDK_CAPABILITIES | (config.ownMediaEcho ? ClientCapability.OWN_MEDIA_ECHO : 0);
+    this.speakers = {
+      voice: config.speakers?.voice ?? null,
+      video: config.speakers?.video ?? null,
+    };
+  }
+
+  /**
+   * Change the speakers whose spatial voice and video this session receives.
+   * Each changed kind is sent at once when ready, and every list is sent again
+   * with each capabilities advertisement.
+   */
+  setSpeakers(change: SpeakerListsChange): void {
+    if (change.voice !== undefined) this.speakers.voice = change.voice;
+    if (change.video !== undefined) this.speakers.video = change.video;
+    if (change.voice !== undefined) void this.sendSpeakers(speakerChange(change.voice), speakerChange(undefined));
+    if (change.video !== undefined) void this.sendSpeakers(speakerChange(undefined), speakerChange(change.video));
   }
 
   /**
@@ -583,11 +626,15 @@ export class BinaryRelayTransport {
    */
   private startCapabilities(): void {
     this.stopCapabilities();
-    if (!this.advertiseCapabilities) return;
-    void this.sendCapabilities();
-    const timer = setInterval(() => {
-      void this.sendCapabilities();
-    }, this.capabilitiesIntervalMs);
+    // The speaker lists live with the session on the server, as the capabilities do, and
+    // go with it on a token refresh or a migration: both are sent on every tick.
+    const tick = () => {
+      if (this.advertiseCapabilities) void this.sendCapabilities();
+      if (this.speakers.voice !== null) void this.sendSpeakers(speakerChange(this.speakers.voice), speakerChange(undefined));
+      if (this.speakers.video !== null) void this.sendSpeakers(speakerChange(undefined), speakerChange(this.speakers.video));
+    };
+    tick();
+    const timer = setInterval(tick, this.capabilitiesIntervalMs);
     // Node: never keep a process alive for this timer (tests, tools).
     (timer as unknown as { unref?: () => void }).unref?.();
     this.capsTimer = timer;
@@ -611,6 +658,19 @@ export class BinaryRelayTransport {
       this.flushSends();
     } catch (error) {
       this.logger.debug?.(`capabilities not sent: ${String(error)}`);
+    }
+  }
+
+  private async sendSpeakers(voice: SpeakerListChange, video: SpeakerListChange): Promise<void> {
+    const ctx = this.signContext;
+    if (!ctx || this.appId == null || !this.isReady()) return;
+    try {
+      const frame = await serializeClientMediaSpeakers(ctx, this.appId, voice, video);
+      if (this.signContext !== ctx) return;
+      this.sendFrame(frame);
+      this.flushSends();
+    } catch (error) {
+      this.logger.debug?.(`speaker list not sent: ${String(error)}`);
     }
   }
 

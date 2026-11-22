@@ -943,6 +943,10 @@ export type App = {
   description: Maybe<Scalars['String']['output']>;
   /** Seconds a realtime session may go without gameplay input (movement, messages, edits, voice; keep-alives and keyframes that repeat an unchanged state do not count) before the replication server releases it with reason idle. 900 (15 minutes) unless the app sets its own; 0 means never. A released player is not reconnected automatically: the SDKs report the session inactive and the game reconnects on the next player input. */
   effectiveIdleTimeoutSeconds: Scalars['Int']['output'];
+  /** The most speakers whose webcam video one player's game may name in its speaker list: the app's maxVideoSpeakers, else 32. Video the list leaves out is neither sent nor billed; a player whose game sends no list receives every camera in range. */
+  effectiveMaxVideoSpeakers: Scalars['Int']['output'];
+  /** The most speakers whose spatial voice one player's game may name in its speaker list (the realtime servers' CLIENT_MEDIA_SPEAKERS): the app's maxVoiceSpeakers, else 32. The servers deliver voice only from the speakers a list names, so voice the list leaves out is neither sent nor billed; a player whose game sends no list receives every speaker in range. */
+  effectiveMaxVoiceSpeakers: Scalars['Int']['output'];
   /** The youngest age the app admits now: the higher of minPlayerAge and the platform's minimum (18 until players 13 and over are admitted, then 13). A player's country can require more (territoryPolicies); younger players are refused AGE_REQUIREMENT_NOT_MET at mint. */
   effectiveMinPlayerAge: Scalars['Int']['output'];
   /** Resolved game-api base URL for SDK/runtime calls: the per-tenant URL for dedicated apps, or the shared platform URL for shared apps. Null for legacy or not-yet-deployed apps. */
@@ -961,6 +965,10 @@ export type App = {
   launchUrl: Maybe<Scalars['String']['output']>;
   /** Whether the organization lets its org-managed players build and run mods (and use the Studio agent) in this app, paying for their mod compute, egress, storage and model tokens itself. False by default, and false on a tier that does not serve org-managed players. Set with setAppManagedPlayerMods (manage_billing). Players with a Crowded Kingdoms account are unaffected. */
   managedPlayerModsEnabled: Scalars['Boolean']['output'];
+  /** The most speakers whose webcam video one player's game may name in its speaker list, when the app sets a number: 1 to 32. null uses 32 (effectiveMaxVideoSpeakers). Set with updateApp (manage_apps). */
+  maxVideoSpeakers: Maybe<Scalars['Int']['output']>;
+  /** The most speakers whose spatial voice one player's game may name in its speaker list, when the app sets a number: 1 to 32. null uses 32 (effectiveMaxVoiceSpeakers). Set with updateApp (manage_apps). */
+  maxVoiceSpeakers: Maybe<Scalars['Int']['output']>;
   /** Opaque JSON-encoded string of marketplace media (cover image URL, screenshots, long description, etc.). Stored internally as JSONB; clients must JSON.parse on read and JSON.stringify on write. Null/"{}" when unset. */
   metadata: Maybe<Scalars['String']['output']>;
   /** The youngest age the app admits, 13 to 18, when it asks more than the platform's minimum; null for the platform's minimum. Set with updateApp (manage_apps). */
@@ -4536,6 +4544,10 @@ export type GameClientBootstrap = {
   maxDecayRate: Scalars['Int']['output'];
   /** Maximum allowed value for the `distance` (chunk fan-out radius) field on spatial sends. Currently 8; the server clamps send `distance` to 0..this. distance is the number of chunks outward the message is replicated. */
   maxReplicationDistance: Scalars['Int']['output'];
+  /** The most speakers whose webcam video this player's speaker list may name (App.effectiveMaxVideoSpeakers, 1 to 32): the realtime servers refuse a longer list. A player whose game sends no list receives every camera in range. */
+  maxVideoSpeakers: Scalars['Int']['output'];
+  /** The most speakers whose spatial voice this player's speaker list may name (App.effectiveMaxVoiceSpeakers, 1 to 32): the realtime servers refuse a longer list (CLIENT_MEDIA_SPEAKERS, opcode 47). A player whose game sends no list receives every speaker in range. */
+  maxVoiceSpeakers: Scalars['Int']['output'];
   /** The authenticated user resolved from the bearer game token on the request. Use this for the local player identity instead of a separate `me` call. */
   me: User;
   /** GraphQL WebSocket subprotocol expected by udpNotifications. */
@@ -5903,7 +5915,7 @@ export type Mutation = {
   updateActor: Actor;
   /** Replaces an actor’s `publicState` and/or `privateState` blobs (fields omitted from `input` are left unchanged). OWNER-EXCLUSIVE: only the actor’s owner may write (throws Unauthorized otherwise). Game-plane: requires an app token for the actor’s app (a session token or another app’s token is answered NotFound). `uuid` is the 32-character ASCII actor id; blobs are base64-encoded binary. */
   updateActorState: Actor;
-  /** Update mutable fields of an existing app (name, description, visibility, status, metadata, wildernessWritesOpen, claimOwnerKeys, replayLoggingEnabled, replayLoggingRecordsMedia, replayLoggingRecordsVoice, replayLoggingRecordsVideo, minPlayerAge, idleTimeoutSeconds); only fields present in the input are changed. Turning replayLoggingEnabled on is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet can spend at least the projected cost of keeping one retention period of the app's recent traffic (extensions.requiredMicrousd and spendableMicrousd say how much), or the org is billing-exempt; recordings already kept go on billing after it is turned off, until they age out. Turning it off is refused with SAFETY_LOG_REQUIRED while the app admits players under 18. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility (PUBLIC lists the app in the marketplace), or restore an archived app (status back to DRAFT/LIVE); a restore counts against the cap of 10 apps for an organization without a funded wallet or auto-billing (APP_LIMIT_REACHED). Throws if the app id does not exist. */
+  /** Update mutable fields of an existing app (name, description, visibility, status, metadata, wildernessWritesOpen, claimOwnerKeys, replayLoggingEnabled, replayLoggingRecordsMedia, replayLoggingRecordsVoice, replayLoggingRecordsVideo, minPlayerAge, idleTimeoutSeconds, maxVoiceSpeakers, maxVideoSpeakers); only fields present in the input are changed. Turning replayLoggingEnabled on is refused with INPUT_LOG_FUNDS_NEEDED unless the org's wallet can spend at least the projected cost of keeping one retention period of the app's recent traffic (extensions.requiredMicrousd and spendableMicrousd say how much), or the org is billing-exempt; recordings already kept go on billing after it is turned off, until they age out. Turning it off is refused with SAFETY_LOG_REQUIRED while the app admits players under 18. Requires the 'manage_apps' permission on the app (resolved via its org); super admins bypass. Use this to publish (status=LIVE), change visibility (PUBLIC lists the app in the marketplace), or restore an archived app (status back to DRAFT/LIVE); a restore counts against the cap of 10 apps for an organization without a funded wallet or auto-billing (APP_LIMIT_REACHED). Throws if the app id does not exist. */
   updateApp: App;
   /** Updates an avatar’s mutable fields (currently `name`) and returns it. OWNER-EXCLUSIVE: only the avatar’s owner may call this (throws Unauthorized otherwise). Requires a valid game token. To change state blobs use `updateAvatarState`. */
   updateAvatar: Avatar;
@@ -11595,6 +11607,10 @@ export type UpdateAppInput = {
   description?: InputMaybe<Scalars['String']['input']>;
   /** Seconds a realtime session may go without gameplay input before the replication server releases it with reason idle: 60 to 86400, or 0 to turn the timeout off. null returns the app to the platform default (900 seconds). Takes effect within about 15 seconds, for sessions already open too. Omit to leave unchanged. */
   idleTimeoutSeconds?: InputMaybe<Scalars['Int']['input']>;
+  /** The most speakers whose webcam video one player's game may name in its speaker list: 1 to 32. A longer list is refused. null returns the app to 32. The realtime servers apply it within about 15 seconds, to lists already sent too. Omit to leave unchanged. */
+  maxVideoSpeakers?: InputMaybe<Scalars['Int']['input']>;
+  /** The most speakers whose spatial voice one player's game may name in its speaker list: 1 to 32. A longer list is refused. null returns the app to 32. The realtime servers apply it within about 15 seconds, to lists already sent too. Omit to leave unchanged. */
+  maxVoiceSpeakers?: InputMaybe<Scalars['Int']['input']>;
   /** New JSON-encoded marketplace metadata string, replacing the existing value (see App.metadata). Omit to leave unchanged. */
   metadata?: InputMaybe<Scalars['String']['input']>;
   /** The youngest age the app admits, 13 to 18. It only ever raises the platform's minimum (18 until players 13 and over are admitted, then 13), never lowers it; younger players are refused AGE_REQUIREMENT_NOT_MET at their next mint or refresh. null returns the app to the platform's minimum. Omit to leave unchanged. */
