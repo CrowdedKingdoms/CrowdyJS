@@ -120,6 +120,16 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.39.1: a dropped build-status read no longer ends a deploy
+
+Your code needs no change. Until this release, one dropped read of a build's status ended a Studio
+deploy. Now a deploy's build wait (`CrowdyStudioController`'s draft tests and live deploys) and
+`exec.waitForModBuild` read the status again after a dropped read: no answer (a network failure or
+a timeout), an HTTP 5xx or 429 that is not the API's answer, or `PLATFORM_BUSY`. A missed read
+counts toward `compilePollLimit` (the controller) or `timeoutMs` (`waitForModBuild`), and a wait
+that runs out after misses names the last failure. A CLIENT-only project's mod listing and mod
+starter are read once more after a dropped read. A refusal still ends the wait at once.
+
 ## 18.39.0: the Game API is now the Application API
 
 Rename as you go; nothing breaks before January 1, 2027. Every result that named the Game API's URLs now carries

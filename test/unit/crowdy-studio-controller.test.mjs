@@ -1346,3 +1346,143 @@ test("a new CLIENT target starts from the platform's CLIENT half starter, and fr
   await assert.rejects(controller.createProject({ name: 'Weather HUD', kind: 'CLIENT' }), /no access/);
   controller.destroy();
 });
+
+// ----- Dropped reads ------------------------------------------------------------
+
+/** The failures a read can drop with: nothing back, a gateway's page, the API busy. */
+function droppedReads(sdk) {
+  return [
+    new sdk.CrowdyNetworkError(new Error('socket hang up')),
+    new sdk.CrowdyTimeoutError(30_000),
+    new sdk.CrowdyHttpError(502, '<html>Bad Gateway</html>'),
+    new sdk.CrowdyUserCodeFaultError([
+      { message: 'the platform is busy; retry shortly', extensions: { code: 'PLATFORM_BUSY', blame: 'PLATFORM', retryable: true } },
+    ]),
+  ];
+}
+
+test('a dropped build-status read is a missed poll, and the deploy goes on', async () => {
+  const sdk = await loadSdk();
+  const calls = [];
+  const waits = [];
+  const failures = droppedReads(sdk);
+  const mods = execMods(calls, {
+    async modBuildStatus(appId, buildId) {
+      calls.push(['status', appId, buildId]);
+      const failure = failures.shift();
+      if (failure) throw failure;
+      return { buildId, status: 'succeeded', log: 'Finished release', artifacts: [] };
+    },
+  });
+  const controller = new sdk.CrowdyStudioController(
+    options(providerFor(project('SERVER')), {
+      mods,
+      compilePollMs: 25,
+      sleep: async (ms) => {
+        waits.push(ms);
+      },
+    }),
+  );
+  await controller.initialize();
+  const result = await controller.testDraft();
+  assert.equal(result.status, 'RUNNING', result.message);
+  assert.deepEqual(calls.map(([op]) => op), ['build', 'status', 'status', 'status', 'status', 'status', 'deploy', 'enabled']);
+  assert.deepEqual(waits, [25, 25, 25, 25]);
+  controller.destroy();
+});
+
+test('a refused build-status read still ends the deploy at once', async () => {
+  const sdk = await loadSdk();
+  const calls = [];
+  const mods = execMods(calls, {
+    async modBuildStatus(appId, buildId) {
+      calls.push(['status', appId, buildId]);
+      throw new sdk.CrowdyGraphQLError([{ message: 'no build b1 of yours', extensions: { code: 'NOT_FOUND' } }]);
+    },
+  });
+  const controller = new sdk.CrowdyStudioController(options(providerFor(project('SERVER')), { mods }));
+  await controller.initialize();
+  const result = await controller.testDraft();
+  assert.equal(result.status, 'FAILED');
+  assert.match(result.message, /no build b1 of yours/);
+  assert.deepEqual(calls.map(([op]) => op), ['build', 'status']);
+
+  // A 4xx is an answer too, and a 5xx that carries GraphQL errors is the API's refusal.
+  for (const failure of [
+    new sdk.CrowdyHttpError(401, 'Unauthorized'),
+    new sdk.CrowdyHttpError(500, JSON.stringify({ errors: [{ message: 'boom', extensions: { code: 'INTERNAL_SERVER_ERROR' } }] })),
+  ]) {
+    calls.length = 0;
+    mods.modBuildStatus = async (appId, buildId) => {
+      calls.push(['status', appId, buildId]);
+      throw failure;
+    };
+    assert.equal((await controller.testDraft()).status, 'FAILED');
+    assert.deepEqual(calls.map(([op]) => op), ['build', 'status']);
+  }
+  controller.destroy();
+});
+
+test('a build wait that reaches its limit after missed polls names the last failure', async () => {
+  const sdk = await loadSdk();
+  const calls = [];
+  const mods = execMods(calls, {
+    async modBuildStatus(appId, buildId) {
+      calls.push(['status', appId, buildId]);
+      throw new sdk.CrowdyNetworkError(new Error('connect ECONNREFUSED'));
+    },
+  });
+  const controller = new sdk.CrowdyStudioController(
+    options(providerFor(project('SERVER')), { mods, compilePollLimit: 3 }),
+  );
+  await controller.initialize();
+  const result = await controller.testDraft();
+  assert.equal(result.status, 'COMPILE_FAILED');
+  assert.match(result.message, /^Compilation timed out after 3 polls; the last status read that failed: Network error: Error: connect ECONNREFUSED$/);
+  assert.equal(calls.filter(([op]) => op === 'status').length, 3);
+  assert.equal(calls.some(([op]) => op === 'deploy'), false);
+  controller.destroy();
+});
+
+test("a CLIENT-only project's mod listing and mod starter are read once more after a dropped read", async () => {
+  const sdk = await loadSdk();
+  const calls = [];
+  const dropped = { myMods: 1, modStarter: 1 };
+  const { brokerFactory } = recordingBrokers(calls);
+  const base = execMods(calls);
+  const mods = execMods(calls, {
+    async myMods(appId) {
+      if (dropped.myMods-- > 0) {
+        calls.push(['myMods:dropped', appId]);
+        throw new sdk.CrowdyHttpError(503, 'Service Unavailable');
+      }
+      return base.myMods(appId);
+    },
+    async modStarter(appId) {
+      if (dropped.modStarter-- > 0) {
+        calls.push(['starter:dropped', appId]);
+        throw new sdk.CrowdyTimeoutError(30_000);
+      }
+      return base.modStarter(appId);
+    },
+  });
+  const controller = new sdk.CrowdyStudioController(
+    options(providerFor(execProject('CLIENT')), { mods, brokerFactory }),
+  );
+  await controller.initialize();
+  const result = await controller.deployLive();
+  assert.equal(result.status, 'RUNNING', result.message);
+  assert.deepEqual(
+    calls.map(([op]) => op).slice(0, 6),
+    ['clientBuild', 'status', 'myMods:dropped', 'myMods', 'starter:dropped', 'starter'],
+  );
+
+  // A second dropped read of the same thing ends the deploy.
+  calls.length = 0;
+  dropped.myMods = 2;
+  const again = await controller.deployLive();
+  assert.equal(again.status, 'FAILED');
+  assert.match(again.message, /HTTP 503/);
+  assert.deepEqual(calls.map(([op]) => op), ['clientBuild', 'status', 'myMods:dropped', 'myMods:dropped']);
+  controller.destroy();
+});

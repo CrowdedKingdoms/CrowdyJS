@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.39.0** (18.0.0 was published only as
+**Current package:** `package.json` is **18.39.1** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -29,6 +29,18 @@ directly. So, before adding a wrapper:
 - 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
+
+**18.39.1: a dropped build-status read is a missed poll (2026-11-23, the Unreal SDK's runner asks).**
+`src/dropped-read.ts` (not exported) decides which failed read to read again: `CrowdyNetworkError`
+(a malformed body arrives as one), `CrowdyTimeoutError`, a `CrowdyHttpError` 5xx or 429 whose body
+carries no GraphQL errors, and a fault `playerFaultOf` reads as `blame: 'PLATFORM'` with an explicit
+`retryable: true` (`PLATFORM_BUSY`). Anything else, `CrowdyProtocolError` included, is an answer.
+The controller's `awaitModBuild` counts a dropped read as a missed poll (toward `compilePollLimit`,
+waiting at least `extensions.retryAfterMs`), `readAgainOnce` reads the CLIENT-only rider's
+`myMods` and `modStarter` once more, and `exec.waitForModBuild` reads again until `timeoutMs`.
+Mutations are never read again. CrowdyCPP (0.93.0) and CrowdyPy (0.39.1) apply the same rule;
+change all three together. Tests: the "Dropped reads" cases in
+`test/unit/crowdy-studio-controller.test.mjs`, `test/unit/exec-wait-for-mod-build.test.mjs`.
 
 **18.39.0: the Application API names (2026-11-22, cks-biz BIZ-039 Q5; Application API v2.85.0).** The SDK
 selects `applicationApiUrl` / `applicationApiWsUrl` (and `sharedApplicationApiUrl` / `sharedApplicationApiWsUrl`
@@ -1135,7 +1147,7 @@ Each tier has its own site (`docs.dev.crowdedkingdoms.com`, `docs.test.crowdedki
 links the site of the tier its branch releases to, because the npm package carries it; a
 promotion re-points those links (`docs.dev.` → `docs.test.` → `docs.`), and `promote.mjs`
 does not do it for you.
-Published SDLs: `/schema/game-api.graphql` (whole schema),
+Published SDLs: `/schema/application-api.graphql` (whole schema; `/schema/game-api.graphql` until January 1, 2027),
 `/schema/management-api.graphql` (management surface **derived** from that
 schema — not a second source repo), `/schema/crowdyjs.graphql`.
 

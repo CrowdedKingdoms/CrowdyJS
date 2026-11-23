@@ -14,6 +14,7 @@ import type {
   ExecStudioSource,
 } from '../domains/exec.js';
 import { CrowdyError, CrowdyGraphQLError } from '../errors.js';
+import { isDroppedRead, retryAfterMsOf } from '../dropped-read.js';
 import type { PlayerWalletAPI } from '../domains/playerWallet.js';
 import {
   digestCanonicalJson,
@@ -1830,7 +1831,11 @@ export class CrowdyStudioController {
     return built ? { target: 'CLIENT', name, versionId: built.buildId } : null;
   }
 
-  /** Polls a mod build, a mod's or a CLIENT half's, recording its log; null when it did not succeed. */
+  /**
+   * Polls a mod build, a mod's or a CLIENT half's, recording its log; null when it did not
+   * succeed. A dropped status read (no answer, an answer that is not the API's, or
+   * `PLATFORM_BUSY`) is a missed poll: it counts toward the limit, and the wait goes on.
+   */
   private async awaitModBuild(
     target: CrowdyStudioTarget,
     name: string,
@@ -1840,8 +1845,19 @@ export class CrowdyStudioController {
     const mods = this.mods;
     const limit = this.options.compilePollLimit ?? 60;
     const pollMs = this.options.compilePollMs ?? 1_500;
+    let missed: unknown;
     for (let attempt = 0; attempt < limit; attempt++) {
-      const b = await mods.modBuildStatus(this.options.appId, buildId);
+      let b: ExecBuild;
+      try {
+        b = await mods.modBuildStatus(this.options.appId, buildId);
+      } catch (error) {
+        if (!isDroppedRead(error)) throw error;
+        missed = error;
+        this.checkOperation(operation);
+        await this.sleep(Math.max(pollMs, retryAfterMsOf(error)));
+        this.checkOperation(operation);
+        continue;
+      }
       this.checkOperation(operation);
       if (b.status === 'succeeded') {
         this.recordBuild(target, b.log ?? '');
@@ -1861,7 +1877,9 @@ export class CrowdyStudioController {
       await this.sleep(pollMs);
       this.checkOperation(operation);
     }
-    const timeout = `Compilation timed out after ${limit} polls`;
+    const timeout =
+      `Compilation timed out after ${limit} polls` +
+      (missed === undefined ? '' : `; the last status read that failed: ${errorMessage(missed)}`);
     this.recordBuild(target, timeout);
     this.update({
       runtime: { phase: 'COMPILE_FAILED', target, message: timeout },
@@ -1937,7 +1955,7 @@ export class CrowdyStudioController {
   private async ensureClientOnlyMod(name: string, operation: number): Promise<void> {
     const mods = this.mods;
     const { appId, gridId } = this.scope();
-    const mine = (await mods.myMods(appId)).find(
+    const mine = (await this.readAgainOnce(() => mods.myMods(appId), operation)).find(
       (mod) => String(mod.gridId) === gridId && mod.name === name,
     );
     this.checkOperation(operation);
@@ -1950,7 +1968,7 @@ export class CrowdyStudioController {
       this.update({
         runtime: { phase: 'COMPILING', target: 'SERVER', message: `Deploying the mod starter as ${name}` },
       });
-      const starter = await mods.modStarter(appId);
+      const starter = await this.readAgainOnce(() => mods.modStarter(appId), operation);
       this.checkOperation(operation);
       const queued = await mods.modBuild(appId, { name: crateName(name), files: starter.files });
       this.checkOperation(operation);
@@ -2471,6 +2489,19 @@ export class CrowdyStudioController {
       this.options.sleep ??
       ((delay) => new Promise((resolve) => setTimeout(resolve, delay)))
     )(ms);
+  }
+
+  /** A read in a deploy, read once more after a dropped read ({@link isDroppedRead}). */
+  private async readAgainOnce<T>(read: () => Promise<T>, operation: number): Promise<T> {
+    try {
+      return await read();
+    } catch (error) {
+      if (!isDroppedRead(error)) throw error;
+      this.checkOperation(operation);
+      await this.sleep(Math.max(this.options.compilePollMs ?? 1_500, retryAfterMsOf(error)));
+      this.checkOperation(operation);
+      return read();
+    }
   }
 
   private requireProject(): CrowdyStudioProject {
