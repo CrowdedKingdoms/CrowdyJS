@@ -986,7 +986,7 @@ export type App = {
   orgId: Scalars['BigInt']['output'];
   /** What the safety log records for this app right now, for the notice and the recording indicator a client shows players. Readable with the app's own app token (app(appId)). */
   recording: AppRecording;
-  /** OAuth-style redirect-URI allow-list for the portal handoff. A portal authorization code’s redirect_uri must match one of these by origin; empty disallows browser portal entry to this app. */
+  /** OAuth-style redirect-URI allow-list for the portal handoff. A portal authorization code’s redirect_uri must match one of these by origin; empty disallows browser portal entry to this app. Empty unless the caller holds manage_apps on this app, including an anonymous appBySlug lookup. Hosted sign-in Cancel uses portalReturnAllowed instead of reading this list. */
   redirectUris: Array<Scalars['String']['output']>;
   /** Whether replay logging is on: the realtime servers record every client message they accept for this app, searchable with inputLogSessions and readable with inputLogMessages, and billed as stored input logs. False (the default) records nothing ("No replication logging"). Set with updateApp (manage_apps); turning it on needs a wallet that covers the projected cost of one retention period, or a billing-exempt org. */
   replayLoggingEnabled: Scalars['Boolean']['output'];
@@ -1005,7 +1005,7 @@ export type App = {
   reservedGraphqlOpsPerSec: Scalars['BigInt']['output'];
   /** Reserved realtime (UDP) capacity in bytes/s. Guarantees a minimum the platform provisions for you; it is not a limit on what you may send. Billed monthly whether or not used, IN ADDITION TO metered usage -- a reservation buys capacity, not volume, so reserving 5 MB/s does not make the first 5 MB/s free. Independent of reservedGraphqlOpsPerSec. 0 = none. */
   reservedUdpBytesPerSec: Scalars['BigInt']['output'];
-  /** When runtimeStatus is not "active", why the runtime is gated: "insufficient_funds", "spend_cap", "subscription_lapsed", or "payment_method_required" (the free-tier card requirement applies to the organization and it has no saved card and no exemption). Null when active. Historical rows may carry "free_allowance", which the gate no longer produces -- an app over its allowance with no way to pay is denied as "insufficient_funds". */
+  /** When runtimeStatus is not "active", why the runtime is gated: "insufficient_funds", "spend_cap", "subscription_lapsed", or "payment_method_required" (the free-tier card requirement applies to the organization and it has no saved card and no exemption). Null when active, and null unless the caller is a member of the app's organization (a super admin counts). Historical rows may carry "free_allowance", which the gate no longer produces -- an app over its allowance with no way to pay is denied as "insufficient_funds". */
   runtimeDenialReason: Maybe<Scalars['String']['output']>;
   /** Shared-environment runtime gate, mirrored to the game DB and enforced by Application API + Buddy: "active", "grace", "denied", or "suspended". */
   runtimeStatus: Scalars['String']['output'];
@@ -1013,7 +1013,7 @@ export type App = {
   slug: Maybe<Scalars['String']['output']>;
   /** True when this app's runtime data lives in a dedicated per-tenant Application API database (rather than the shared Application API). Used together with applicationApiUrl to route gameplay calls. */
   splitMode: Scalars['Boolean']['output'];
-  /** Base64-encoded binary blob of the app's persisted runtime/world state; opaque to clients and potentially large. Null when no state has been saved. */
+  /** Base64-encoded binary blob of the app's persisted runtime/world state; opaque to clients and potentially large. Null when no state has been saved, and null unless the caller holds manage_apps on this app. */
   state: Maybe<Scalars['String']['output']>;
   /** Lifecycle state (DRAFT/LIVE/ARCHIVED). See AppStatus. */
   status: AppStatus;
@@ -8736,7 +8736,7 @@ export type Query = {
   allowancePool: AllowancePoolSettings;
   /** Convenience for UI: returns true when the authenticated caller is the currently elected host for the given app (same election as gameHost), otherwise false (including when no host is elected). Not authoritative for server-side decisions. Requires a valid bearer game token (same auth as gameHost). */
   amIGameHost: Scalars['Boolean']['output'];
-  /** Fetch a single app by its numeric id. Requires authentication (any signed-in user); does NOT enforce org/app permissions, so it can read apps the caller does not own, of any visibility/status. Returns null if the id does not exist. Prefer appBySlug for slug-based marketplace lookups. */
+  /** Fetch a single app by its numeric id. Requires authentication (any signed-in user) and does not require org membership, so it can name apps the caller does not own, of any visibility/status. Returns null if the id does not exist. redirectUris and state are empty unless the caller holds manage_apps; runtimeDenialReason is null unless the caller is a member of the app's organization. Prefer appBySlug for slug-based marketplace lookups. */
   app: Maybe<App>;
   /** Public listing of an app's access tiers (the free/paid bundles of runtime permissions), ordered by tierOrder ascending. PUBLIC: no authentication required. Powers the marketplace app detail / pricing page. Includes tiers of all statuses; inspect AppAccessTier.status to skip archived tiers. */
   appAccessTiers: Array<AppAccessTier>;
@@ -8744,7 +8744,7 @@ export type Query = {
   appBudget: Maybe<AppBudget>;
   /** Lists every app spend-cap budget configured under the organization. Requires the 'view_billing' org permission. */
   appBudgets: Array<AppBudget>;
-  /** Look up a single app by its org slug + app slug (the marketplace URL path). PUBLIC: no authentication required, and NOT filtered by visibility/status, so it can resolve unlisted or draft apps when the exact slugs are known. Returns null if no matching app exists. */
+  /** Look up a single app by its org slug + app slug (the marketplace URL path). PUBLIC: no authentication required, and NOT filtered by visibility/status, so it can resolve unlisted or draft apps when the exact slugs are known. Returns null if no matching app exists. redirectUris and state are empty unless the caller holds manage_apps; runtimeDenialReason is null unless the caller is a member of the app's organization. launchUrl is returned to every caller. */
   appBySlug: Maybe<App>;
   /** Read an app's player-code admission mode. Requires 'view_compute_diagnostics'. IMPLICIT_ALLOW (the default) admits lawful player code without curation; ALLOW_LIST requires every running server/client artifact, including self-authored code, to match an active code, author, or org admission. */
   appCodeAdmissionMode: CodeAdmissionMode;
@@ -8793,7 +8793,7 @@ export type Query = {
   apps: AppsPage;
   /** Public marketplace listing of apps. PUBLIC: no authentication required. Returns ONLY apps with visibility=PUBLIC AND status=LIVE (drafts, unlisted, private, and archived apps are never returned). Results are ordered newest-first. Relay cursor connection; prefer this over the offset-based apps. */
   appsConnection: AppsConnection;
-  /** All apps belonging to an organization, identified by the org's slug, regardless of visibility or status (includes drafts and archived). Requires authentication; intended for org dashboards. Ordered newest-first. Returns an empty list for an unknown slug. */
+  /** All apps belonging to an organization, identified by the org's slug, regardless of visibility or status (includes drafts and archived). Requires authentication and an active membership of that organization (super admins pass). Ordered newest-first. Returns an empty list for an unknown slug. A known organization the caller is not a member of is FORBIDDEN. */
   appsForOrg: Array<App>;
   /** The federated sign-in providers currently enabled (e.g. ['google']). Use one with socialLoginStart. */
   availableLoginProviders: Array<Scalars['String']['output']>;
@@ -9117,6 +9117,8 @@ export type Query = {
   playerWalletTransactions: Array<PlayerWalletTransaction>;
   /** Whether portaling the calling user into an app needs a consent prompt. Trusted apps and already-granted apps return consentRequired=false. The identity origin (Studio's hosted sign-in, or a launcher holding the session) calls this before createPortalAuthorizationCode. Requires a SESSION token. */
   portalConsent: PortalConsentState;
+  /** Whether redirectUri is a return address this app registered: its origin matches a redirect URI or the launch URL, and on the games host the path must match too. Studio's hosted sign-in Cancel calls this so a decline can send the player back without the allow-list being readable. Any signed-in session. An unknown app or an unregistered address is false. Requires a SESSION token. */
+  portalReturnAllowed: Scalars['Boolean']['output'];
   /** Lists the app-scoped quota rules explicitly configured for an app (excludes org-, tier-, and free-tier-default quotas). Use `effectiveQuota` to resolve the limit actually applied for a given metric. Requires the 'view_usage' app permission. */
   quotasForApp: Array<ServiceQuota>;
   /** Lists the org-scoped quota rules explicitly configured for an organization (excludes app-, tier-, and free-tier-default quotas). Use `effectiveQuota` to resolve the limit actually applied for a given metric. Requires the 'view_usage' org permission. */
@@ -10054,6 +10056,12 @@ export type QueryPlayerWalletTransactionsArgs = {
 
 export type QueryPortalConsentArgs = {
   appId: Scalars['BigInt']['input'];
+};
+
+
+export type QueryPortalReturnAllowedArgs = {
+  appId: Scalars['BigInt']['input'];
+  redirectUri: Scalars['String']['input'];
 };
 
 
