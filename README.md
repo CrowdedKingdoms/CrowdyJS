@@ -34,6 +34,7 @@ so it needs that Application API or newer; promote the Application API before th
 
 | CrowdyJS | Needs the Application API (ck-api) |
 | --- | --- |
+| 18.39.1 | as 18.39.0 |
 | 18.39.0 | v2.85.0 or later (selects `applicationApiUrl`, `applicationApiWsUrl` and `platformConfig`'s `sharedApplicationApi*`; the `gameApi*` names stay as deprecated aliases until January 1, 2027) |
 | 18.33.0 | v2.73.0 or later (exec's mod builds, mods and CLIENT halves select `studioProjectId` and `studioRevision`; `exec.modClientStarter`, `crowdyStudio.links`) |
 | 18.32.0 | v2.70.0 or later (`chunks.get` and `chunks.byDistance` select `Chunk.voxelsUpdatedAt`) |
@@ -1559,7 +1560,7 @@ no other repositories and no network access required:
   `src/generated/graphql-schema.ts`, the generated schema types.
 
 Schema refresh is explicit, from the published
-[SDL](https://docs.dev.crowdedkingdoms.com/schema/game-api.graphql):
+[SDL](https://docs.dev.crowdedkingdoms.com/schema/application-api.graphql):
 
 ```bash
 npm run schema:sync:prod
