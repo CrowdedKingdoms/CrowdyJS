@@ -15,7 +15,9 @@
 // there is nothing left to merge.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 
-const PROD_SCHEMA_URL = 'https://docs.crowdedkingdoms.com/schema/game-api.graphql';
+// The Application API's schema; /schema/game-api.graphql is the same file under its old name,
+// served until January 1, 2027.
+const PROD_SCHEMA_URL = 'https://docs.crowdedkingdoms.com/schema/application-api.graphql';
 const LOCAL_SCHEMA = '../cks-game-api/schema.gql';
 const DEST = './schema.gql';
 

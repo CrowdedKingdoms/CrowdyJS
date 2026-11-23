@@ -4,6 +4,7 @@ import type { DecoderOptions } from '@msgpack/msgpack';
 import { isSameEstate } from '../binary-relay.js';
 import type { GraphQLClient } from '../client.js';
 import { CROWDY_DEFAULT_HTTP_ORIGIN } from '../default-origin.js';
+import { isDroppedRead, retryAfterMsOf } from '../dropped-read.js';
 import { CrowdyError, CrowdyProtocolError } from '../errors.js';
 import {
   ExecActivateVersionDocument,
@@ -1444,18 +1445,30 @@ export class ExecAPI {
     return build(data.execModBuildStatus);
   }
 
-  /** Polls a mod build, server or CLIENT, until it succeeds or fails, like {@link waitForBuild}. */
+  /**
+   * Polls a mod build, server or CLIENT, until it succeeds or fails, like {@link waitForBuild}.
+   * A dropped status read (no answer, an HTTP 5xx or 429 that is not the API's answer, or
+   * `PLATFORM_BUSY`) is read again until `timeoutMs`, then thrown; a refusal is thrown at once.
+   */
   async waitForModBuild(
     appId: string,
     buildId: string,
     options: { intervalMs?: number; timeoutMs?: number } = {},
   ): Promise<ExecBuild> {
     const until = Date.now() + (options.timeoutMs ?? 600_000);
+    const intervalMs = options.intervalMs ?? 2_000;
     for (;;) {
-      const b = await this.modBuildStatus(appId, buildId);
+      let b: ExecBuild;
+      try {
+        b = await this.modBuildStatus(appId, buildId);
+      } catch (error) {
+        if (!isDroppedRead(error) || Date.now() > until) throw error;
+        await new Promise((r) => setTimeout(r, Math.max(intervalMs, retryAfterMsOf(error))));
+        continue;
+      }
       if (b.status === 'succeeded' || b.status === 'failed') return b;
       if (Date.now() > until) throw new CrowdyError({ message: `build ${buildId} is still ${b.status}` });
-      await new Promise((r) => setTimeout(r, options.intervalMs ?? 2_000));
+      await new Promise((r) => setTimeout(r, intervalMs));
     }
   }
 
