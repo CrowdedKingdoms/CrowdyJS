@@ -2,13 +2,15 @@
  * `client.exec` against a fake gateway: a `ws` server speaking the ck-exec client protocol,
  * and a fake `execConnect` that hands out its address. Covers calls, errors, pushes,
  * reconnecting after the host goes away (subscriptions renewed), and redialing on `Moved`.
+ * The last cases are an organization's game server's connection (`execConnectAsServer`) and
+ * its calls for a player (client frame 0x05).
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { WebSocket, WebSocketServer } from 'ws';
 import { decode, encode } from '@msgpack/msgpack';
 
-import { CrowdyExecError, ExecAPI, ExecModScope, execModType } from '../../dist/index.js';
+import { CrowdyExecError, ExecAPI, ExecConnection, ExecModScope, execModType } from '../../dist/index.js';
 
 function readClientFrame(buf) {
   const b = new Uint8Array(buf);
@@ -20,11 +22,17 @@ function readClientFrame(buf) {
   const tag = u8();
   if (tag === 0x04) return { kind: 'ping', nonce: u32() };
   const rid = u32();
+  // 0x05 call-as: the player's user id, 8 bytes little endian, follows the rid.
+  const player = tag === 0x05 ? Buffer.from(b.subarray(at, (at += 8))).readBigUInt64LE() : undefined;
   const nodeType = str(u8());
   const key = str(u16());
   if (tag === 0x01) {
     const method = str(u8());
     return { kind: 'call', rid, nodeType, key, method, payload: b.slice(at) };
+  }
+  if (tag === 0x05) {
+    const method = str(u8());
+    return { kind: 'callAs', rid, player, nodeType, key, method, payload: b.slice(at) };
   }
   return { kind: tag === 0x02 ? 'subscribe' : 'unsubscribe', rid, nodeType, key, topic: str(u8()) };
 }
@@ -68,12 +76,15 @@ const LOCAL_API = 'http://127.0.0.1:3000/graphql';
 
 function api(gw) {
   const dials = [];
+  const fields = [];
   const graphql = {
     endpoint: LOCAL_API,
-    request: async (_doc, vars) => {
+    request: async (doc, vars) => {
+      const field = doc.definitions[0].selectionSet.selections[0].name.value;
       dials.push(vars);
+      fields.push(field);
       return {
-        execConnect: {
+        [field]: {
           gatewayUrl: gw.url,
           token: `token-${dials.length}`,
           host: `host-${dials.length}`,
@@ -82,7 +93,7 @@ function api(gw) {
       };
     },
   };
-  return { exec: new ExecAPI(graphql), dials };
+  return { exec: new ExecAPI(graphql), dials, fields };
 }
 
 const opts = { WebSocket, callTimeoutMs: 2_000 };
@@ -90,6 +101,9 @@ const opts = { WebSocket, callTimeoutMs: 2_000 };
 /** Answers every call with `{ method, args }` and every subscribe with Ok. */
 function echo(f, conn) {
   if (f.kind === 'call') conn.ws.send(reply(f.rid, 0, encode({ method: f.method, args: decode(f.payload) })));
+  if (f.kind === 'callAs') {
+    conn.ws.send(reply(f.rid, 0, encode({ method: f.method, args: decode(f.payload), player: String(f.player) })));
+  }
   if (f.kind === 'subscribe' || f.kind === 'unsubscribe') conn.ws.send(reply(f.rid, 0));
   if (f.kind === 'ping') conn.ws.send(pong(f.nonce));
 }
@@ -510,4 +524,143 @@ test('whole numbers past 32 bits go out as 64-bit integers, which a hub\'s integ
     ratio: 0.5,
     back: -5_000_000_000n,
   });
+});
+
+// ---- an organization's game server ----
+
+test('connectAsServer asks execConnectAsServer for a host and its plain calls are frame 0x01', async (t) => {
+  const gw = await fakeGateway(echo);
+  t.after(() => gw.wss.close());
+  const { exec, dials, fields } = api(gw);
+  const c = await exec.connectAsServer('77', { ...opts, nodeType: 'lobby', key: '' });
+  t.after(() => c.close());
+  assert.deepEqual(fields, ['execConnectAsServer']);
+  assert.deepEqual(dials, [{ appId: '77', nodeType: 'lobby', key: '' }]);
+  assert.equal(gw.sockets[0].token, 'token-1');
+  assert.equal(c.isServer, true);
+  // The server's own call: the same frame a player's connection sends.
+  assert.deepEqual(await c.call('lobby', '', 'report', { players: 3 }), { method: 'report', args: { players: 3 } });
+  assert.equal(gw.frames.at(-1).kind, 'call');
+});
+
+test('callAs sends client frame 0x05 with the player after the rid', async (t) => {
+  const raw = [];
+  const gw = await fakeGateway(echo);
+  t.after(() => gw.wss.close());
+  gw.wss.on('connection', (ws) => ws.on('message', (data) => raw.push(Buffer.from(data))));
+  const c = await api(gw).exec.connectAsServer('77', opts);
+  t.after(() => c.close());
+
+  assert.deepEqual(await c.callAs(4242n, 'player', 'p-4242', 'grant', { gold: 10 }), {
+    method: 'grant',
+    args: { gold: 10 },
+    player: '4242',
+  });
+  const frame = gw.frames.at(-1);
+  assert.equal(frame.kind, 'callAs');
+  assert.equal(frame.player, 4242n);
+  assert.equal(frame.nodeType, 'player');
+  assert.equal(frame.key, 'p-4242');
+  assert.equal(frame.method, 'grant');
+  assert.deepEqual(decode(frame.payload), { gold: 10 });
+  // rid:u32 player:u64 type:str8 key:str16 method:str8 payload:rest, byte for byte.
+  const expected = Buffer.concat([
+    Buffer.from([0x05]),
+    u32le(frame.rid),
+    Buffer.from('9210000000000000', 'hex'),
+    s8('player'),
+    s16('p-4242'),
+    s8('grant'),
+    Buffer.from(encode({ gold: 10 })),
+  ]);
+  assert.equal(raw.at(-1).toString('hex'), expected.toString('hex'));
+
+  // A user id above 2^53 goes as a decimal string or a bigint, and arrives whole.
+  await c.callAs('18446744073709551614', 'arena', 'm1', 'state');
+  assert.equal(gw.frames.at(-1).player, 18446744073709551614n);
+  await c.callAsRaw(7, 'arena', 'm1', 'state', new Uint8Array([0xc0]));
+  assert.equal(gw.frames.at(-1).player, 7n);
+  assert.deepEqual([...gw.frames.at(-1).payload], [0xc0]);
+
+  const before = gw.frames.length;
+  for (const bad of [-1, 1.5, 2 ** 60, 'abc', '18446744073709551616', '']) {
+    await assert.rejects(c.callAs(bad, 'arena', 'm1', 'state'), RangeError, String(bad));
+  }
+  assert.equal(gw.frames.length, before, 'a player id that does not fit sends nothing');
+});
+
+test('callAs is refused locally on a connection that is not a server\'s, and nothing is sent', async (t) => {
+  const gw = await fakeGateway(echo);
+  t.after(() => gw.wss.close());
+  const { exec } = api(gw);
+  const player = await exec.connect('77', opts);
+  const developer = await exec.connectAsDeveloper('77', opts);
+  t.after(() => {
+    player.close();
+    developer.close();
+  });
+  for (const c of [player, developer]) {
+    assert.equal(c.isServer, false);
+    for (const call of [
+      () => c.callAs(4242, 'player', 'p-4242', 'grant', { gold: 10 }),
+      () => c.callAsRaw(4242, 'player', 'p-4242', 'grant'),
+    ]) {
+      await assert.rejects(call(), (e) => {
+        assert.ok(e instanceof CrowdyExecError);
+        assert.equal(e.status, 'Denied');
+        assert.equal(e.retryable, false);
+        assert.match(e.message, /connectAsServer/);
+        return true;
+      });
+    }
+  }
+  assert.equal(gw.frames.length, 0, 'no frame reached the gateway');
+});
+
+test('a server connection comes back with a fresh server connect token, and callAs works again', async (t) => {
+  const gw = await fakeGateway(echo);
+  t.after(() => gw.wss.close());
+  const { exec, dials, fields } = api(gw);
+  const c = await exec.connectAsServer('77', opts);
+  t.after(() => c.close());
+  const hosts = [];
+  c.onReconnect((h) => hosts.push(h));
+  await c.subscribe('lobby', '', 'roster', () => {});
+
+  gw.sockets[0].ws.terminate();
+  await until('the reconnect', () => hosts.length === 1);
+  assert.deepEqual(fields, ['execConnectAsServer', 'execConnectAsServer'], 'a fresh execConnectAsServer');
+  assert.equal(dials.length, 2);
+  assert.equal(gw.sockets[1].token, 'token-2');
+  assert.equal(c.isServer, true);
+  assert.ok(gw.frames.some((f) => f.conn === 1 && f.kind === 'subscribe' && f.topic === 'roster'));
+  assert.deepEqual(await c.callAs(9, 'player', 'p-9', 'state'), { method: 'state', args: null, player: '9' });
+  assert.equal(gw.frames.at(-1).conn, 1);
+});
+
+test('a callAs answered Moved is tried once more on a fresh connection, as a call is', async (t) => {
+  const gw = await fakeGateway((f, conn) => {
+    if (f.kind === 'callAs' && conn.n === 0) return conn.ws.send(reply(f.rid, 3, Buffer.from('moved')));
+    echo(f, conn);
+  });
+  t.after(() => gw.wss.close());
+  const { exec, dials } = api(gw);
+  const c = await exec.connectAsServer('77', opts);
+  t.after(() => c.close());
+  assert.deepEqual(await c.callAs(9, 'player', 'p-9', 'state'), { method: 'state', args: null, player: '9' });
+  assert.equal(dials.length, 2);
+  assert.equal(gw.frames.filter((f) => f.kind === 'callAs').length, 2);
+});
+
+test('openAsServer connects with a server connect token it is given and does not reconnect', async (t) => {
+  const gw = await fakeGateway(echo);
+  t.after(() => gw.wss.close());
+  const c = await ExecConnection.openAsServer(gw.url, 'server-token', opts);
+  t.after(() => c.close());
+  assert.equal(gw.sockets[0].token, 'server-token');
+  assert.equal(c.isServer, true);
+  assert.deepEqual(await c.callAs(5, 'player', 'p-5', 'state'), { method: 'state', args: null, player: '5' });
+  const plain = await ExecConnection.open(gw.url, 'player-token', opts);
+  t.after(() => plain.close());
+  assert.equal(plain.isServer, false);
 });
