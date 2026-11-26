@@ -2566,7 +2566,7 @@ export type CreateOrgTokenInput = {
   label?: InputMaybe<Scalars['String']['input']>;
   /** Organization to mint the token for (BigInt as string). */
   orgId: Scalars['BigInt']['input'];
-  /** What the token may do: 'players:mint' and/or 'players:manage' (org-managed players). Omit for a token with no scope, which can do nothing. */
+  /** What the token may do: 'players:mint' and 'players:manage' (org-managed players), 'fleet:session' (its game servers' fleet sessions and hub connections), in any combination. Omit for a token with no scope, which can do nothing. */
   scopes?: InputMaybe<Array<Scalars['String']['input']>>;
 };
 
@@ -5661,7 +5661,7 @@ export type Mutation = {
   execConnect: ExecConnection;
   /** Connect to an app's ck-exec code as one of its developers, for studio tools, manual runs and admin endpoints. The session's calls arrive as `Caller::Developer` with your user id and may reach any node type, not only `client` ones, but never the platform's `$` methods. Requires the org 'manage_compute' permission and your own session, not an app token. */
   execConnectAsDeveloper: ExecConnection;
-  /** ORG TOKEN ONLY. Connect one of your organization's game servers to an app's hubs as itself. Open a WebSocket to the answer's gatewayUrl with its token, as a player's game does after execConnect. The connection's calls reach a hub as `Caller::Org`: the server's own, or with the call-as frame made for a player the server names. Crowded Kingdoms checks that the server is your organization's; the player a call names is your organization's word, so a hub should treat it as that. The connection may call and subscribe to any node type of the app, has its own budget of 2,000 calls a second in place of a player's, and a hub placed by it counts toward no player's limit. One connection for each game server; an organization may hold 64 to one app on one execution host. Hubs built with ckx-sdk before 0.15 answer such a call `Denied` until they are built again. Call from the server with `Authorization: Bearer cko_...` (scope fleet:session); a request with an Origin header is refused. The checks of openFleetSession apply (fleet sessions switched on for the organization, the app its own, the addendum accepted), and the connection closes when the org token is revoked or fleet sessions are switched off. The token lasts a minute and is for opening the socket once; ask again to connect again. */
+  /** ORG TOKEN ONLY. Connect one of your organization's game servers to an app's hubs as itself. Open a WebSocket to the answer's gatewayUrl with its token, as a player's game does after execConnect. The connection's calls reach a hub as `Caller::Org`: the server's own, or with the call-as frame made for a player the server names. Crowded Kingdoms checks that the server is your organization's; the player a call names is your organization's word, so a hub should treat it as that. The connection may call and subscribe to any node type of the app, has its own budget of 2,000 calls a second in place of a player's, and a hub placed by it counts toward no player's limit. One connection for each game server; an organization may hold 256 to one app on one execution host. Hubs built with ckx-sdk before 0.15 answer such a call `Denied` until they are built again. Call from the server with `Authorization: Bearer cko_...` (scope fleet:session); a request with an Origin header is refused. The checks of openFleetSession apply (fleet sessions switched on for the organization, the app its own, the addendum accepted), and the connection closes when the org token is revoked or fleet sessions are switched off. The token lasts a minute and is for opening the socket once; ask again to connect again. */
   execConnectAsServer: ExecConnection;
   /** Consent to run a mod's CLIENT half in your browser at its current capability hash. A CLIENT half whose capabilities change carries a new hash, and the consent stops holding until you consent again. Answers CONFLICT when the hash is not the current one. Requires access to the app. */
   execConsentClientMod: Scalars['Boolean']['output'];
@@ -7802,7 +7802,7 @@ export type OrgManagedPlayerSettings = {
   enabled: Scalars['Boolean']['output'];
   /** Whether the organization's game servers may open fleet sessions (openFleetSession): one realtime session a server, carrying the server's players. An operator switches it on; it needs org-managed players enabled too. */
   fleetSessionsEnabled: Scalars['Boolean']['output'];
-  /** Players one fleet session may carry at once (256 unless an operator set another, 1 to 1,024). A session opened earlier keeps the number it was opened with until it is opened again. */
+  /** Players one fleet session may carry at once (256 unless an operator set another, 1 to 1,024). A session that is already open takes the new number at its next refresh; the maxPlayers of an open or refresh answer is the one that applies. */
   maxFleetPlayers: Scalars['Int']['output'];
   /** Fleet sessions the organization may hold at once, over all its apps (512 unless an operator set another, 1 to 65,536). An organization grows by adding game servers, so an operator raises this when it needs more. */
   maxFleetSessions: Scalars['Int']['output'];
@@ -11265,7 +11265,7 @@ export type SetOrgManagedPlayerSettingsInput = {
   enabled: Scalars['Boolean']['input'];
   /** Whether the organization's game servers may open fleet sessions (openFleetSession). Left out, it stays as it is (off for an organization never given it). Switching it off, or switching the organization's managed players off, ends the fleet sessions it holds. */
   fleetSessionsEnabled?: InputMaybe<Scalars['Boolean']['input']>;
-  /** Players one fleet session may carry at once: 1 to 1,024 (256 for an organization never given another). Left out, it stays as it is. It applies to sessions opened from then on. */
+  /** Players one fleet session may carry at once: 1 to 1,024 (256 for an organization never given another). Left out, it stays as it is. It applies to a session when it is opened and again at each refresh. */
   maxFleetPlayers?: InputMaybe<Scalars['Int']['input']>;
   /** Fleet sessions the organization may hold at once, over all its apps: 1 to 65,536 (512 for an organization never given another). Left out, it stays as it is. */
   maxFleetSessions?: InputMaybe<Scalars['Int']['input']>;

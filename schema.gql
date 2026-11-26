@@ -1893,7 +1893,7 @@ type OrgManagedPlayerSettings {
   """
   maxFleetSessions: Int!
   """
-  Players one fleet session may carry at once (256 unless an operator set another, 1 to 1,024). A session opened earlier keeps the number it was opened with until it is opened again.
+  Players one fleet session may carry at once (256 unless an operator set another, 1 to 1,024). A session that is already open takes the new number at its next refresh; the maxPlayers of an open or refresh answer is the one that applies.
   """
   maxFleetPlayers: Int!
   """
@@ -10794,7 +10794,7 @@ type Mutation {
   """
   closeFleetSession(input: CloseFleetSessionInput!): Boolean!
   """
-  ORG TOKEN ONLY. Connect one of your organization's game servers to an app's hubs as itself. Open a WebSocket to the answer's gatewayUrl with its token, as a player's game does after execConnect. The connection's calls reach a hub as `Caller::Org`: the server's own, or with the call-as frame made for a player the server names. Crowded Kingdoms checks that the server is your organization's; the player a call names is your organization's word, so a hub should treat it as that. The connection may call and subscribe to any node type of the app, has its own budget of 2,000 calls a second in place of a player's, and a hub placed by it counts toward no player's limit. One connection for each game server; an organization may hold 64 to one app on one execution host. Hubs built with ckx-sdk before 0.15 answer such a call `Denied` until they are built again. Call from the server with `Authorization: Bearer cko_...` (scope fleet:session); a request with an Origin header is refused. The checks of openFleetSession apply (fleet sessions switched on for the organization, the app its own, the addendum accepted), and the connection closes when the org token is revoked or fleet sessions are switched off. The token lasts a minute and is for opening the socket once; ask again to connect again.
+  ORG TOKEN ONLY. Connect one of your organization's game servers to an app's hubs as itself. Open a WebSocket to the answer's gatewayUrl with its token, as a player's game does after execConnect. The connection's calls reach a hub as `Caller::Org`: the server's own, or with the call-as frame made for a player the server names. Crowded Kingdoms checks that the server is your organization's; the player a call names is your organization's word, so a hub should treat it as that. The connection may call and subscribe to any node type of the app, has its own budget of 2,000 calls a second in place of a player's, and a hub placed by it counts toward no player's limit. One connection for each game server; an organization may hold 256 to one app on one execution host. Hubs built with ckx-sdk before 0.15 answer such a call `Denied` until they are built again. Call from the server with `Authorization: Bearer cko_...` (scope fleet:session); a request with an Origin header is refused. The checks of openFleetSession apply (fleet sessions switched on for the organization, the app its own, the addendum accepted), and the connection closes when the org token is revoked or fleet sessions are switched off. The token lasts a minute and is for opening the socket once; ask again to connect again.
   """
   execConnectAsServer(
     """
@@ -12839,7 +12839,7 @@ input CreateOrgTokenInput {
   """Optional expiry timestamp; omit for a non-expiring token."""
   expiresAt: DateTime
   """
-  What the token may do: 'players:mint' and/or 'players:manage' (org-managed players). Omit for a token with no scope, which can do nothing.
+  What the token may do: 'players:mint' and 'players:manage' (org-managed players), 'fleet:session' (its game servers' fleet sessions and hub connections), in any combination. Omit for a token with no scope, which can do nothing.
   """
   scopes: [String!]
   """
@@ -13158,7 +13158,7 @@ input SetOrgManagedPlayerSettingsInput {
   """
   maxFleetSessions: Int
   """
-  Players one fleet session may carry at once: 1 to 1,024 (256 for an organization never given another). Left out, it stays as it is. It applies to sessions opened from then on.
+  Players one fleet session may carry at once: 1 to 1,024 (256 for an organization never given another). Left out, it stays as it is. It applies to a session when it is opened and again at each refresh.
   """
   maxFleetPlayers: Int
 }
