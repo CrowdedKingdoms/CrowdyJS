@@ -650,19 +650,26 @@ test(
         await assert.rejects(x.fleet.sendActorUpdate(old.gameTokenId, { ...spatial(1), state: b64('old-id') }), (e) => e instanceof FleetNotCarriedError);
       });
 
-      await step('9c', 'the session closed through the API notices the silence, and its refresh answers NOT_FOUND', ['3b'], async () => {
+      await step('9c', 'the session closed through the API learns of it, and its refresh answers NOT_FOUND', ['3b'], async () => {
         const z = servers.Z;
         await until('Z to see that a refresh is due', () => z.fleet.refreshDue(), 60_000 - Math.min(59_000, Date.now() - zClosedAt));
         const after = Math.round((Date.now() - zClosedAt) / 100) / 10;
-        note(`Z: refreshDue() turned true ${after} s after closeFleetSession (it tolerates 15 s of silence)`);
         assert.ok(Date.now() - zClosedAt <= 60_000, 'within 60 seconds of the close');
         assert.equal(z.fleet.moveOrdered, true);
-        assert.equal(z.seen.moves, 1, 'the moveOrdered handler fired');
-        // It was sent nothing: no release frame and no answer to its capabilities.
         const since = z.seen.datagrams.slice(z.seen.atClose);
         note(`Z was sent ${since.length} datagram(s) after the close${since.length ? `: ${since.map((d) => d.shape).slice(0, 5).join(', ')}` : ''}`);
-        assert.deepEqual(z.seen.sessionReleased, [], 'no COMMAND_SESSION_RELEASED');
-        assert.equal(z.fleet.status, 'connected', 'nothing told it otherwise');
+        if (z.seen.sessionReleased.length > 0) {
+          // Realtime servers from v0.50.1 tell the session, in a frame signed with its fleet
+          // token, within seconds of the close.
+          note(`Z: told by a signed COMMAND_SESSION_RELEASED ${after} s after closeFleetSession`);
+          assert.deepEqual(z.seen.sessionReleased, [0], 'one signed release, reason 0');
+          assert.equal(z.fleet.status, 'released');
+        } else {
+          // Before v0.50.1 the session is sent nothing and notices the silence.
+          note(`Z: refreshDue() turned true ${after} s after closeFleetSession (it tolerates 15 s of silence)`);
+          assert.equal(z.seen.moves, 1, 'the moveOrdered handler fired');
+          assert.equal(z.fleet.status, 'connected', 'nothing told it otherwise');
+        }
         assert.deepEqual(z.fleet.refreshInput(), { appId, gameTokenId: z.opened.gameTokenId }, 'the refresh names no server');
         const refusal = await api.fleetSessions.refresh(z.fleet.refreshInput()).then(
           () => null,

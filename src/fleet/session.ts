@@ -204,13 +204,14 @@ export interface FleetHandlers {
    * refusal names no player.
    *
    * `verified` is true when the refusal arrived inside a signed bundle the session verified
-   * with the fleet token. The realtime servers send a refusal alone, as `[3][seq][code]`,
-   * which has no room for an HMAC, so in practice `verified` is false: anyone who can reach
-   * the session's socket could have forged it. **Treat a refusal as a hint.** Stop sending
-   * for the player it points at, then carry the player again (the answer to a carry is
-   * always verified) or check the player's access through the Application API, and act on
-   * that answer. The session itself changes no state on a refusal, whatever its code: the
-   * signed word that the session's own token expired is `sessionReleased` with reason 2.
+   * with the fleet token. Realtime servers from v0.50.1 send a session's refusals that way.
+   * An earlier server sends a refusal alone, as `[3][seq][code]`, which has no room for an
+   * HMAC, and then `verified` is false: anyone who can reach the session's socket could have
+   * forged it. **Treat an unverified refusal as a hint.** Stop sending for the player it
+   * points at, then carry the player again (the answer to a carry is always verified) or
+   * check the player's access through the Application API, and act on that answer. The
+   * session itself changes no state on a refusal, whatever its code: the signed word that
+   * the session's own token ended is `sessionReleased`.
    */
   genericError?(notification: Notified<'genericError'>, verified: boolean): void;
   /**
@@ -226,17 +227,20 @@ export interface FleetHandlers {
    * (and keeps answering for about 5 seconds), or said nothing for `silenceTimeoutMs`.
    * `refreshDue()` is true: call `refreshFleetSession` without a `currentServer`
    * (`refreshInput()` leaves it out) and give the answer to `applyRefresh`. A session that was
-   * closed through the Application API is sent nothing at all, so this is how it shows: the
-   * refresh then answers `NOT_FOUND`.
+   * closed through the Application API is told by `sessionReleased` with reason 0 on realtime
+   * servers from v0.50.1; an earlier server sends it nothing, so the silence shows it here.
+   * Either way the refresh answers `NOT_FOUND`.
    */
   moveOrdered?(): void;
   /**
    * The realtime server released the session, in a frame signed with the fleet token
    * (`SessionReleaseReason`): it answers this session no more and its carries have ended.
-   * Reason 2 is the fleet token expiring; 1, 3 and 4 are staleness, overload and a move.
+   * Reason 0 is the fleet token revoked (the session was closed through the Application API,
+   * or its organization token was revoked); 2 is the fleet token expiring; 1, 3 and 4 are
+   * staleness, overload and a move.
    * Whatever the reason, `refreshDue()` is true and `refreshInput()` names no server, as
    * after a move order. A refresh that succeeds reconnects and carries every player again;
-   * one refused `NOT_FOUND` means the session ended (after reason 2 it has), so open a new
+   * one refused `NOT_FOUND` means the session ended (after reason 0 or 2 it has), so open a new
    * one.
    */
   sessionReleased?(reason: number): void;
