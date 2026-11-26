@@ -82,6 +82,16 @@ export function packMessageBundle(members: readonly Uint8Array[]): Uint8Array {
 /** Wire opcodes (mirror of game-api / Buddy `UdpMessageType`). */
 export const WireMessageType = {
   MESSAGE_BUNDLE: 2,
+  // Server -> client: connect to another realtime server. `[22][32B HMAC over the type byte]`,
+  // always its own datagram. The relay acts on it for a browser; a session that talks to the
+  // realtime servers itself (a fleet session) reads it.
+  COMMAND_RECONNECT: 22,
+  // Client -> server: a keepalive in the long-spatial layout, with no fan-out. Under an actor
+  // (its chunk and uuid) it keeps that actor present; with no actor it keeps the session.
+  CLIENT_ACTOR_HEARTBEAT: 26,
+  // Server -> client: this server released the session. `[28][1B reason][32B HMAC over the
+  // two leading bytes]`, always its own datagram.
+  COMMAND_SESSION_RELEASED: 28,
   // Buddy v0.30.0: the client advertises what it can read; a session that
   // advertised BUNDLE_SIGNED receives its bundles with ONE trailing HMAC over the
   // datagram and members without per-member HMACs (containsAuth = 0).
@@ -89,6 +99,22 @@ export const WireMessageType = {
   // Buddy v0.49.0: the speakers whose spatial voice and video this session receives.
   CLIENT_MEDIA_SPEAKERS: 47,
   MESSAGE_BUNDLE_SIGNED: 30,
+  // Server -> client, to a session that advertised BOUND_CONTROL with a nonce: 22 and 28 bound
+  // to that nonce, and the acknowledgement of the nonce.
+  //   44: [44][8B nonce][32B HMAC over the first 9 bytes]
+  //   45: [45][1B reason][8B nonce][32B HMAC over the first 10 bytes]
+  //   46: [46][8B nonce][32B HMAC over the first 9 bytes]
+  COMMAND_RECONNECT_BOUND: 44,
+  COMMAND_SESSION_RELEASED_BOUND: 45,
+  CONTROL_BOUND_ACK: 46,
+  // A fleet session only (realtime servers v0.50.0; see fleet-wire.ts). 49 and 50 are sent in
+  // the capabilities' long-spatial layout under the session's own game token id; 51 to 53
+  // are the server's.
+  FLEET_CARRY: 49,
+  FLEET_RELEASE: 50,
+  FLEET_CARRY_RESULT: 51,
+  FLEET_RELEASED: 52,
+  FLEET_DELIVERY: 53,
   GENERIC_ERROR_MESSAGE: 3,
   CHANNEL_MESSAGE_REQUEST: 17,
   CHANNEL_MESSAGE_NOTIFICATION: 18,
@@ -125,13 +151,17 @@ export const WireMessageType = {
   CHUNK_CHANGED_NOTIFICATION: 146,
 } as const;
 
-const SPATIAL_HEADER_SIZE = 68;
+/** The long-spatial layout's header, through the uuid: the app payload starts here. */
+export const SPATIAL_HEADER_SIZE = 68;
 const UUID_SIZE = 32;
-const HMAC_SIZE = 32;
+/** An HMAC-SHA256 tag. */
+export const HMAC_SIZE = 32;
+/** Offset of `containsAuth` in the long-spatial layout. */
+export const SPATIAL_CONTAINS_AUTH_OFFSET = 35;
 /** Client→server tail with auth: hmac(32) + gameTokenId(8) + seq(1). */
-const TAIL_AUTH_BYTES = 41;
+export const TAIL_AUTH_BYTES = 41;
 /** Server→client tail: epochMillis(8) + seq(1). */
-const TAIL_NO_AUTH_BYTES = 9;
+export const TAIL_NO_AUTH_BYTES = 9;
 
 /**
  * Wire error byte → GraphQL `UdpErrorCode` enum name (mirror of the game-api
@@ -206,7 +236,7 @@ export async function createSignContext(
     tokenBytes as unknown as BufferSource,
     { name: 'HMAC', hash: 'SHA-256' },
     false,
-    ['sign'],
+    ['sign', 'verify'],
   );
   return { gameTokenId, tokenBytes, key };
 }
@@ -215,7 +245,7 @@ export async function createSignContext(
  * Spatial-message HMAC: key = token bytes; signed data =
  * `dataBeforeHmac || tokenBytes` (mirror of `computeSpatialHmac`).
  */
-async function signWithToken(
+export async function signWithToken(
   ctx: RelaySignContext,
   dataBeforeHmac: Uint8Array,
 ): Promise<Uint8Array> {
@@ -228,6 +258,48 @@ async function signWithToken(
     signed as unknown as BufferSource,
   );
   return new Uint8Array(mac);
+}
+
+/**
+ * Whether `tag` is the HMAC {@link signWithToken} computes over `dataBeforeHmac`: the check
+ * for a signed server→client message (a long-spatial notification with `containsAuth = 1`, a
+ * `MESSAGE_BUNDLE_SIGNED`'s tail, a fleet session's 51 to 53 sent with their own HMAC).
+ * Compared in constant time by WebCrypto.
+ */
+export async function verifyWithToken(
+  ctx: RelaySignContext,
+  dataBeforeHmac: Uint8Array,
+  tag: Uint8Array,
+): Promise<boolean> {
+  if (tag.length !== HMAC_SIZE) return false;
+  const signed = new Uint8Array(dataBeforeHmac.length + ctx.tokenBytes.length);
+  signed.set(dataBeforeHmac, 0);
+  signed.set(ctx.tokenBytes, dataBeforeHmac.length);
+  return crypto.subtle.verify(
+    'HMAC',
+    ctx.key,
+    tag as unknown as BufferSource,
+    signed as unknown as BufferSource,
+  );
+}
+
+/**
+ * Whether `tag` is `HMAC-SHA256(key = token, message = leadingBytes)`: the control frames'
+ * scheme (`COMMAND_RECONNECT`, `COMMAND_SESSION_RELEASED` and their bound forms), which
+ * appends no token to the message. Compared in constant time by WebCrypto.
+ */
+export async function verifyControlHmac(
+  ctx: RelaySignContext,
+  leadingBytes: Uint8Array,
+  tag: Uint8Array,
+): Promise<boolean> {
+  if (tag.length !== HMAC_SIZE) return false;
+  return crypto.subtle.verify(
+    'HMAC',
+    ctx.key,
+    tag as unknown as BufferSource,
+    leadingBytes as unknown as BufferSource,
+  );
 }
 
 interface ChunkInput {
@@ -243,9 +315,10 @@ function clampDistance(distance: number): number {
 /**
  * Build a complete client→Buddy spatial datagram:
  * `header(68) + payload + hmac(32) + gameTokenId(8) + seq(1)` with
- * `containsAuth = 1` (mirror of `serializeSpatialMessage`).
+ * `containsAuth = 1` (mirror of `serializeSpatialMessage`). The one writer of the
+ * long-spatial layout: every typed serializer here and in fleet-wire.ts goes through it.
  */
-async function serializeSpatial(
+export async function serializeLongSpatial(
   ctx: RelaySignContext,
   messageType: number,
   appId: string | number | bigint,
@@ -309,12 +382,27 @@ export const ClientCapability = {
   /** This client parses MESSAGE_BUNDLE_SIGNED (one HMAC per downlink bundle). */
   BUNDLE_SIGNED: 1,
   /**
+   * Eight nonce bytes follow the flags, and the server sends this session
+   * `COMMAND_RECONNECT_BOUND` (44) and `COMMAND_SESSION_RELEASED_BOUND` (45) in place of 22
+   * and 28, so a control frame captured from an earlier connection never verifies in this
+   * one. The relay does not set it: the relay reads control frames for a browser.
+   */
+  BOUND_CONTROL: 2,
+  /**
    * Send this session its own spatial voice and video (Buddy v0.48.0). Without
    * it the server does not send a speaker its own `CLIENT_AUDIO_PACKET_2` or
    * `CLIENT_VIDEO_PACKET_2` back.
    */
   OWN_MEDIA_ECHO: 4,
+  /**
+   * A fleet session only: send it the state its own carried players sent, when another of
+   * its carried players is in range. Off by default: a game server simulates its own players.
+   */
+  FLEET_OWN_STATE: 8,
 } as const;
+
+/** The nonce a session sends with {@link ClientCapability.BOUND_CONTROL}. */
+export const CONTROL_NONCE_BYTES = 8;
 
 /** Every capability this SDK build understands. */
 export const SDK_CAPABILITIES: number = ClientCapability.BUNDLE_SIGNED;
@@ -326,16 +414,27 @@ export const SDK_CAPABILITIES: number = ClientCapability.BUNDLE_SIGNED;
  * app payload. Buddy binds the flags to the router serving this flow and
  * clears them when the slot goes, so the relay sends it on every `ready` and
  * again every few seconds (a relay-side Buddy migration is silent to us).
+ *
+ * `controlNonce` ({@link CONTROL_NONCE_BYTES} bytes) follows the flags and is required when
+ * `flags` carry {@link ClientCapability.BOUND_CONTROL}; without the bit it is not sent.
  */
 export function serializeClientCapabilities(
   ctx: RelaySignContext,
   appId: string | number | bigint,
   flags: number = SDK_CAPABILITIES,
   sequenceNumber = 0,
+  controlNonce?: Uint8Array,
 ): Promise<Uint8Array> {
-  const payload = new Uint8Array(4);
+  const bound = (flags & ClientCapability.BOUND_CONTROL) !== 0;
+  if (bound && controlNonce?.length !== CONTROL_NONCE_BYTES) {
+    return Promise.reject(
+      new RangeError(`BOUND_CONTROL needs a control nonce of ${CONTROL_NONCE_BYTES} bytes`),
+    );
+  }
+  const payload = new Uint8Array(bound ? 4 + CONTROL_NONCE_BYTES : 4);
   new DataView(payload.buffer).setUint32(0, flags >>> 0, true);
-  return serializeSpatial(
+  if (bound) payload.set(controlNonce as Uint8Array, 4);
+  return serializeLongSpatial(
     ctx,
     WireMessageType.CLIENT_CAPABILITIES,
     appId,
@@ -394,7 +493,7 @@ export function serializeClientMediaSpeakers(
     }
     payload.set(bytes, 4 + i * UUID_SIZE);
   });
-  return serializeSpatial(
+  return serializeLongSpatial(
     ctx,
     WireMessageType.CLIENT_MEDIA_SPEAKERS,
     appId,
@@ -404,6 +503,35 @@ export function serializeClientMediaSpeakers(
     '',
     payload,
     sequenceNumber,
+  );
+}
+
+/**
+ * Build a `CLIENT_ACTOR_HEARTBEAT` (26) datagram: the long-spatial layout with no payload,
+ * distance 0 and decay 0. Under an actor (its current `chunk` and `uuid`) it keeps that actor
+ * present without sending its state and without telling anyone. With no actor (`uuid` left
+ * out, chunk `(0,0,0)`) it is a keepalive of the session that registers no actor. It is not
+ * gameplay input: it does not hold off an app's idle timeout.
+ */
+export function serializeActorHeartbeat(
+  ctx: RelaySignContext,
+  input: {
+    appId: string | number | bigint;
+    chunk?: { x: string | number | bigint; y: string | number | bigint; z: string | number | bigint };
+    uuid?: string;
+    sequenceNumber?: number | null;
+  },
+): Promise<Uint8Array> {
+  return serializeLongSpatial(
+    ctx,
+    WireMessageType.CLIENT_ACTOR_HEARTBEAT,
+    input.appId,
+    input.chunk ?? { x: 0, y: 0, z: 0 },
+    0,
+    0,
+    input.uuid ?? '',
+    new Uint8Array(0),
+    input.sequenceNumber ?? 0,
   );
 }
 
@@ -424,7 +552,7 @@ export function serializeActorUpdate(
   ctx: RelaySignContext,
   input: SpatialSendBase & { state: string },
 ): Promise<Uint8Array> {
-  return serializeSpatial(
+  return serializeLongSpatial(
     ctx,
     WireMessageType.ACTOR_UPDATE_REQUEST_2,
     input.appId,
@@ -485,7 +613,7 @@ export function serializeVoxelUpdate(
   view.setInt16(6, input.voxelType, true);
   view.setUint16(8, voxelState.length, true);
   payload.set(voxelState, 10);
-  return serializeSpatial(
+  return serializeLongSpatial(
     ctx,
     WireMessageType.VOXEL_UPDATE_REQUEST_2,
     input.appId,
@@ -502,7 +630,7 @@ export function serializeAudioPacket(
   ctx: RelaySignContext,
   input: SpatialSendBase & { audioData: string },
 ): Promise<Uint8Array> {
-  return serializeSpatial(
+  return serializeLongSpatial(
     ctx,
     WireMessageType.CLIENT_AUDIO_PACKET_2,
     input.appId,
@@ -523,7 +651,7 @@ export function serializeVideoPacket(
   ctx: RelaySignContext,
   input: SpatialSendBase & { videoData: string },
 ): Promise<Uint8Array> {
-  return serializeSpatial(
+  return serializeLongSpatial(
     ctx,
     WireMessageType.CLIENT_VIDEO_PACKET_2,
     input.appId,
@@ -540,7 +668,7 @@ export function serializeTextPacket(
   ctx: RelaySignContext,
   input: SpatialSendBase & { text: string },
 ): Promise<Uint8Array> {
-  return serializeSpatial(
+  return serializeLongSpatial(
     ctx,
     WireMessageType.CLIENT_TEXT_PACKET_2,
     input.appId,
@@ -561,7 +689,7 @@ export function serializeClientEvent(
   const payload = new Uint8Array(2 + state.length);
   new DataView(payload.buffer).setUint16(0, input.eventType, true);
   payload.set(state, 2);
-  return serializeSpatial(
+  return serializeLongSpatial(
     ctx,
     WireMessageType.CLIENT_EVENT_NOTIFICATION_2,
     input.appId,
@@ -584,7 +712,7 @@ export function serializeSingleActorMessage(
     sequenceNumber?: number | null;
   },
 ): Promise<Uint8Array> {
-  return serializeSpatial(
+  return serializeLongSpatial(
     ctx,
     WireMessageType.SINGLE_ACTOR_MESSAGE,
     input.appId,
@@ -618,7 +746,7 @@ export async function serializeGenericSpatial(
       `payload is ${payload.length} bytes; at most ${GENERIC_SPATIAL_MAX_PAYLOAD_BYTES}`,
     );
   }
-  return serializeSpatial(
+  return serializeLongSpatial(
     ctx,
     WireMessageType.GENERIC_SPATIAL_1,
     input.appId,
@@ -1043,6 +1171,20 @@ function parseOne(bytes: Uint8Array): UdpNotification | null {
       } as UdpNotification;
     default:
       return null;
+  }
+}
+
+/**
+ * Parse one complete server→client message (never a bundle) into the notification object the
+ * `udpNotifications` subscription delivers, or `null` for a message that is not a
+ * notification or cannot be read. HMACs are not checked here: a caller that verifies does it
+ * first ({@link verifyWithToken}).
+ */
+export function parseNotification(bytes: Uint8Array): UdpNotification | null {
+  try {
+    return parseOne(bytes);
+  } catch {
+    return null;
   }
 }
 
