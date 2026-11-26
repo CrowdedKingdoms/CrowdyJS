@@ -59,7 +59,14 @@ test('client exposes the full management + game sub-client surface', async () =>
   assertMethods(client.exec, 'exec', [
     'modClientBuild', 'modClientDeploy', 'modClientDelete', 'gridClientMods',
     'consentClientMod', 'trustAuthor', 'modClientArtifact', 'modClientArtifactBytes',
+    // An organization's game server (Application API v2.89.0, ck-exec 0.25.0).
+    'serverEndpoint', 'connectAsServer',
   ]);
+  // Fleet sessions: the three calls an organization's game server makes with its org token.
+  // The realtime session itself is the Node entry point, `@crowdedkingdoms/crowdyjs/fleet`.
+  assertMethods(client.fleetSessions, 'fleetSessions', ['open', 'refresh', 'close']);
+  assert.equal(client.admin.fleetSessions, client.fleetSessions, 'admin.fleetSessions aliases client.fleetSessions');
+  assert.equal(client.fleetSessions.mint, undefined, 'the org-token sign-in is not wrapped');
   assertMethods(client.crowdyStudio, 'crowdyStudio', [
     'listProjects', 'getProject', 'createProject', 'saveProject',
     'listPersonalLibraryFiles', 'listCommonFiles',

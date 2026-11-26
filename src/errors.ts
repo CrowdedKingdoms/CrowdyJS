@@ -427,6 +427,29 @@ export const ASSERTION_REJECTED_CODE = 'ASSERTION_REJECTED';
  */
 export const ORG_LEGAL_ACCEPTANCE_REQUIRED_CODE = 'ORG_LEGAL_ACCEPTANCE_REQUIRED';
 /**
+ * `extensions.code` for "this call takes an org token, from the organization's own server"
+ * (HTTP 403): the bearer is a session token, an app token or a fleet token; see
+ * {@link orgTokenRequiredOf}. An org token sent from a browser (a request with an `Origin`
+ * header) is refused `ORG_TOKEN_NOT_ALLOWED`.
+ */
+export const ORG_TOKEN_REQUIRED_CODE = 'ORG_TOKEN_REQUIRED';
+/**
+ * `extensions.code` for "the organization holds as many fleet sessions as it may" (HTTP 403),
+ * on `openFleetSession`; see {@link fleetSessionLimitOf}.
+ */
+export const FLEET_SESSION_LIMIT_CODE = 'FLEET_SESSION_LIMIT';
+/**
+ * `extensions.code` for "nothing by that name that you may see" (HTTP 404). On
+ * `refreshFleetSession` it means the session expired, was closed, or was opened with another
+ * org token; see {@link fleetSessionNotFoundOf}.
+ */
+export const NOT_FOUND_CODE = 'NOT_FOUND';
+/**
+ * `extensions.code` for "the platform could not start this in time" (HTTP 503, retryable), with
+ * the wait in `extensions.retryAfterMs`; see {@link platformBusyOf}.
+ */
+export const PLATFORM_BUSY_CODE = 'PLATFORM_BUSY';
+/**
  * `extensions.code` for "the player has not accepted the current required documents" (HTTP
  * 403): the platform's player documents or the app's own, listed in
  * `extensions.missingDocuments`; see {@link legalAcceptanceRequiredOf}.
@@ -669,6 +692,58 @@ export function assertionRejectedOf(value: unknown): { reason: string | null } |
  */
 export function orgLegalAcceptanceRequiredOf(value: unknown): boolean {
   return errorWithCode(value, ORG_LEGAL_ACCEPTANCE_REQUIRED_CODE) !== null;
+}
+
+/**
+ * Whether an error is an `ORG_TOKEN_REQUIRED` refusal (HTTP 403): the call takes the
+ * organization's org token (`cko_…`) and was sent something else. The fleet session calls and
+ * `execConnectAsServer` take an org token and nothing else, from a server the organization
+ * runs; an org token sent from a browser (a request with an `Origin` header) is refused
+ * `ORG_TOKEN_NOT_ALLOWED`. Not fixed by retrying.
+ */
+export function orgTokenRequiredOf(value: unknown): boolean {
+  return errorWithCode(value, ORG_TOKEN_REQUIRED_CODE) !== null;
+}
+
+/**
+ * Whether an error is a `FLEET_SESSION_LIMIT` refusal (HTTP 403) from `fleetSessions.open`:
+ * the organization holds as many fleet sessions as it may (the Application API's
+ * `orgManagedPlayerSettings.maxFleetSessions`, 512 unless an operator set another).
+ * Close the sessions of game servers that have stopped, or wait for them to end at their
+ * `expiresAt`. Not fixed by retrying before one has closed.
+ */
+export function fleetSessionLimitOf(value: unknown): boolean {
+  return errorWithCode(value, FLEET_SESSION_LIMIT_CODE) !== null;
+}
+
+/**
+ * Whether an error is the `NOT_FOUND` refusal (HTTP 404) `fleetSessions.refresh` answers for
+ * a session that expired, was closed, or was opened with another org token. Open a new
+ * session. Not fixed by retrying.
+ */
+export function fleetSessionNotFoundOf(value: unknown): boolean {
+  return errorWithCode(value, NOT_FOUND_CODE) !== null;
+}
+
+/**
+ * The wait an error's `extensions.retryAfterMs` asks for, in milliseconds, or 0 when it names
+ * none. The one reader of that field: `platformBusyOf` and the SDK's own retries use it.
+ */
+export function retryAfterMsOf(error: unknown): number {
+  const extensions = (error as { extensions?: Record<string, unknown> } | null)?.extensions;
+  const value = extensions?.retryAfterMs;
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+/**
+ * A `PLATFORM_BUSY` refusal (HTTP 503), or `null`: the platform could not start the call in
+ * time, and nothing about the caller caused it. `retryAfterMs` is how long to wait before
+ * calling again (`extensions.retryAfterMs`; 0 when the server named no wait). Callers refused
+ * together are each told a different wait, so wait the one you were given.
+ */
+export function platformBusyOf(value: unknown): { retryAfterMs: number } | null {
+  const entry = errorWithCode(value, PLATFORM_BUSY_CODE);
+  return entry ? { retryAfterMs: retryAfterMsOf(entry) } : null;
 }
 
 /**

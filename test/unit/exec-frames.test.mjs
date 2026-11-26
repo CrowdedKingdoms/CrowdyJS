@@ -25,6 +25,23 @@ test('client frames encode to the golden bytes', () => {
   }
 });
 
+test('the golden frames hold call-as (0x05), with a player id past 2^53 and player 0', () => {
+  const callAs = fixture.client.filter((e) => e.frame.kind === 'callAs');
+  assert.ok(callAs.length >= 3, 'the copy carries ck-exec 0.25.0\u2019s call-as cases');
+  for (const e of callAs) assert.ok(e.hex.startsWith('05'), e.name);
+  assert.ok(callAs.some((e) => BigInt(e.frame.player) > BigInt(Number.MAX_SAFE_INTEGER)));
+  assert.ok(callAs.some((e) => e.frame.player === '0'));
+  // rid:u32 player:u64 type:str8 key:str16 method:str8 payload:rest
+  assert.equal(
+    hex(encodeExecFrame({ kind: 'callAs', rid: 1, player: 258n, nodeType: 'a', key: 'b', method: 'c', payload: bytes('ff') })),
+    '05' + '01000000' + '0201000000000000' + '0161' + '010062' + '0163' + 'ff',
+  );
+  assert.throws(
+    () => encodeExecFrame({ kind: 'callAs', rid: 1, player: -1, nodeType: 'a', key: '', method: 'm', payload: new Uint8Array() }),
+    RangeError,
+  );
+});
+
 test('gateway frames decode from the golden bytes', () => {
   assert.ok(fixture.server.length > 0);
   for (const e of fixture.server) {
