@@ -30,6 +30,10 @@
       "import": "./dist/hosting/index.js",
       "types": "./dist/hosting/index.d.ts"
     },
+    "./fleet": {
+      "import": "./dist/fleet/index.js",
+      "types": "./dist/fleet/index.d.ts"
+    },
     "./player-host": {
       "import": "./dist/player-host/index.js",
       "types": "./dist/player-host/index.d.ts"

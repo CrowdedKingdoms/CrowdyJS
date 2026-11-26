@@ -3,9 +3,9 @@
  * (50), a carried player's message, and FLEET_CARRY_RESULT (51), FLEET_RELEASED (52) and
  * FLEET_DELIVERY (53) in both of their forms.
  *
- * GOLDEN VECTORS, FOR EVERY SDK. Each expected byte string below is built in this file from
- * the written formats, with `node:crypto` and without the code under test, and then pinned as
- * hex. Another SDK reproduces them from these inputs:
+ * GOLDEN VECTORS, FOR EVERY SDK. Each expected byte string below is built from the written
+ * formats with `node:crypto` (the builders in fleet-frames.mjs), without the code under test,
+ * and then pinned as hex. Another SDK reproduces them from these inputs:
  *
  *   fleet token    "fleet-token-0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOP"  (64 octets)
  *   fleet id       9001   (the fleet session's gameTokenId)
@@ -27,7 +27,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHmac, webcrypto } from 'node:crypto';
+import { webcrypto } from 'node:crypto';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
@@ -35,93 +35,36 @@ const wire = await import('../../dist/binary-wire.js');
 const fleetWire = await import('../../dist/fleet-wire.js');
 const sdk = await import('../../dist/index.js');
 
-const FLEET_TOKEN = 'fleet-token-0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOP';
-const PLAYER_TOKEN = 'player-token-0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNO';
-const FLEET_ID = 9001n;
-const PLAYER_ID = 4242n;
-const OTHER_PLAYER_ID = 4243n;
-const USER_ID = 77n;
-const APP_ID = 7n;
-const CARRY_MS = 1795000000000n;
-const UUID = '0123456789abcdef0123456789abcdef';
-const CHUNK = { x: '1', y: '-2', z: '3' };
-
-// ---- the formats, written out independently of the SDK ----
-
-const hex = (bytes) => Buffer.from(bytes).toString('hex');
-const fromHex = (h) => new Uint8Array(Buffer.from(h, 'hex'));
-const latin1 = (s) => Buffer.from(s, 'latin1');
-const i64 = (v) => {
-  const b = Buffer.alloc(8);
-  b.writeBigInt64LE(BigInt(v));
-  return b;
-};
-const u16 = (v) => {
-  const b = Buffer.alloc(2);
-  b.writeUInt16LE(v);
-  return b;
-};
-/** HMAC-SHA256(key = token, message = data): the control frames' scheme and the proof's. */
-const rawHmac = (token, data) => createHmac('sha256', latin1(token)).update(data).digest();
-/** HMAC-SHA256(key = token, message = data || token): every signed message's scheme. */
-const tokenHmac = (token, data) => rawHmac(token, Buffer.concat([data, latin1(token)]));
-
-/** [type][appId][chunk x, y, z][distance][decay][containsAuth][32B uuid][payload] */
-function spatialHead({ type, chunk = [0, 0, 0], distance = 0, decay = 0, auth, uuid = '', payload = Buffer.alloc(0) }) {
-  const id = Buffer.alloc(32);
-  id.write(uuid, 'latin1');
-  return Buffer.concat([
-    Buffer.from([type]),
-    i64(APP_ID),
-    i64(chunk[0]),
-    i64(chunk[1]),
-    i64(chunk[2]),
-    Buffer.from([distance, decay, auth]),
-    id,
-    Buffer.from(payload),
-  ]);
-}
-/** A client message: the head, the HMAC keyed with `signToken`, the tail's id, the sequence. */
-function clientMessage(fields, { signToken, tailId, seq }) {
-  const head = spatialHead({ ...fields, auth: 1 });
-  return Buffer.concat([head, tokenHmac(signToken, head), i64(tailId), Buffer.from([seq])]);
-}
-/** A server notification with no HMAC of its own: the head, epoch ms, the sequence. */
-function plainNotification(fields, { epochMs, seq }) {
-  return Buffer.concat([spatialHead({ ...fields, auth: 0 }), i64(epochMs), Buffer.from([seq])]);
-}
-/** The same notification signed for one session: the HMAC sits before the 9-byte tail. */
-function signedNotification(fields, { epochMs, seq, token = FLEET_TOKEN }) {
-  const head = spatialHead({ ...fields, auth: 1 });
-  return Buffer.concat([head, tokenHmac(token, head), i64(epochMs), Buffer.from([seq])]);
-}
-/** [18 | 36][8B channelId][32B sender uuid][2B length][payload][8B epoch ms][1B seq] */
-function channelNotification({ type = 18, channelId, uuid, payload, epochMs, seq }) {
-  return Buffer.concat([
-    Buffer.from([type]),
-    i64(channelId),
-    latin1(uuid),
-    u16(payload.length),
-    Buffer.from(payload),
-    i64(epochMs),
-    Buffer.from([seq]),
-  ]);
-}
-const carryResult = (player, user, status) =>
-  Buffer.concat([Buffer.from([51]), i64(player), i64(user), Buffer.from([status])]);
-const released = (player, reason) => Buffer.concat([Buffer.from([52]), i64(player), Buffer.from([reason])]);
-const delivery = (players, notification) =>
-  Buffer.concat([Buffer.from([53, players.length]), ...players.map(i64), notification]);
-/** A frame followed by its own HMAC: the form sent to a session without BUNDLE_SIGNED. */
-const withOwnHmac = (frame, token = FLEET_TOKEN) => Buffer.concat([frame, tokenHmac(token, frame)]);
-/** [type]{[2B length][member]}… */
-const bundle = (type, members) =>
-  Buffer.concat([Buffer.from([type]), ...members.flatMap((m) => [u16(m.length), m])]);
-/** MESSAGE_BUNDLE_SIGNED (30): the bundle, then one HMAC over all of it. */
-function signedBundle(members, token = FLEET_TOKEN) {
-  const body = bundle(30, members);
-  return Buffer.concat([body, tokenHmac(token, body)]);
-}
+import {
+  FLEET_TOKEN,
+  PLAYER_TOKEN,
+  FLEET_ID,
+  PLAYER_ID,
+  OTHER_PLAYER_ID,
+  USER_ID,
+  APP_ID,
+  CARRY_MS,
+  UUID,
+  CHUNK,
+  hex,
+  fromHex,
+  latin1,
+  i64,
+  u16,
+  rawHmac,
+  tokenHmac,
+  spatialHead,
+  clientMessage,
+  plainNotification,
+  signedNotification,
+  channelNotification,
+  carryResult,
+  released,
+  delivery,
+  withOwnHmac,
+  bundle,
+  signedBundle,
+} from './fleet-frames.mjs';
 
 const fleet = await fleetWire.createFleetSignContext(FLEET_ID, FLEET_TOKEN);
 const parse = (datagram, options) => fleetWire.parseFleetDatagram(fleet, new Uint8Array(datagram), options);
@@ -533,10 +476,9 @@ test('a frame whose HMAC fails is dropped and counted, never returned', async ()
     for (const forged of [flippedBody, flippedTag, withOwnHmac(frame, PLAYER_TOKEN)]) {
       assert.deepEqual(await parse(forged), { messages: [], ...clean, hmacFailures: 1 }, `${type} alone`);
     }
-    // The frame with no HMAC at all, outside a signed bundle: the last 32 bytes are not a tag.
-    const bare = await parse(frame);
-    assert.equal(bare.messages.length, 0, `${type} bare`);
-    assert.equal(bare.hmacFailures + bare.malformed, 1, `${type} bare`);
+    // The frame with no HMAC at all, outside a signed bundle: its last 32 bytes are not a
+    // tag, or it is too short to hold one.
+    assert.deepEqual(await parse(frame), { messages: [], ...clean, hmacFailures: 1 }, `${type} bare`);
     // A signed bundle: one HMAC over the datagram, so one failure drops every member.
     const forgedBundle = Buffer.from(signedBundle([frame, frame]));
     forgedBundle[5] ^= 0x01;

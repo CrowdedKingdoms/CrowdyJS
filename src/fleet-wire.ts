@@ -580,9 +580,10 @@ async function readMember(
   ) {
     let frame = message;
     if (!inSignedBundle) {
-      // Its own HMAC: the last 32 bytes, over every byte before them and then the token.
+      // Its own HMAC: the last 32 bytes, over every byte before them and then the token. A
+      // frame too short to hold one came without it.
       if (message.length <= HMAC_SIZE) {
-        out.malformed += 1;
+        out.hmacFailures += 1;
         return;
       }
       const end = message.length - HMAC_SIZE;
