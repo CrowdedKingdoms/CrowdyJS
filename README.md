@@ -1301,6 +1301,8 @@ The promise resolves with how the carry ended:
 | `proofFailed` | The proof or its time failed. A clock more than 30 seconds from the server's fails too. |
 | `sessionFull` | The session carries as many players as it may (`maxPlayers`). |
 | `timedOut` | No answer came within 5 seconds of the first send. |
+| `refused` | A status this version of the SDK does not know. `wireStatus` has the byte. |
+| `released`, `closed` | You called `release` for the player, or `close`, while the carry was waiting. |
 
 - **An unanswered carry is sent again** every 250 ms, each time with a new time and a new
   proof (`carryRetryMs`, `carryTimeoutMs`).
@@ -1382,9 +1384,8 @@ or says nothing for 45 seconds (the `moveOrdered` and `sessionReleased` handlers
 - **The same server:** the carries stand. The session sends its capabilities again.
 - **Another server**, or the same one after it released the session or went quiet: the
   session connects, sends its capabilities, and carries every player again with a new time
-  and proof, paced as above. Until a player's answer arrives,
-  sends for that player reject with `FleetNotCarriedError`. Each answer reaches the
-  `carryResult` handler.
+  and proof, paced as above. Until a player's answer arrives, sends for that player reject
+  with `FleetNotCarriedError`. Each answer reaches the `carryResult` handler.
 - **A refresh refused `NOT_FOUND`** means the session ended. Open a new one and carry your
   players again.
 
