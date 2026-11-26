@@ -30,6 +30,68 @@ directly. So, before adding a wrapper:
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
 
+**Unreleased: fleet sessions, for an organization's own game servers (2026-11-25, branch
+`feat/fleet-sessions`; no version bump yet, nothing of it is on any tier).** One realtime session
+and one hub connection a game server, carrying its players (the workspace's
+`DESIGN-2026-11-fleet-session.md`; the build contract's section 8 is the wire as built, realtime
+servers v0.50.0). Four parts:
+
+- **The Application API calls** (`src/domains/fleetSessions.ts`, `client.fleetSessions` and
+  `client.admin.fleetSessions`; `exec.serverEndpoint` / `connectAsServer`): `openFleetSession`,
+  `refreshFleetSession`, `closeFleetSession`, `execConnectAsServer`, with the organization's **org
+  token as the bearer**. These are the first org-token calls the SDK wraps, on the operator's
+  instruction for this feature; the mint is still not wrapped (`managed-players.test.mjs` and
+  `fleet-sessions-api.test.mjs` both fail if a document names `mintManagedPlayerToken`).
+  `assertOrganizationServer` (`src/server-only.ts`) refuses each of them in a browser page before
+  any request: an org token and a fleet token never go into a page or a game client. The org token
+  that opened a session refreshes and closes it (another of the same organization gets `NOT_FOUND`
+  / `false`). Readers: `orgTokenRequiredOf`, `fleetSessionLimitOf`, `fleetSessionNotFoundOf`,
+  `platformBusyOf` (`retryAfterMsOf` moved from `dropped-read.ts` to `errors.ts`, one reader).
+  **`OrgManagedPlayerSettings.graphql` does not select `fleetSessionsEnabled` / `maxFleetSessions`
+  / `maxFleetPlayers` on purpose:** selecting them would make `managedPlayers.settings` need
+  v2.89.0 on every tier. Add them when test and prod have it.
+- **The hub server role** (`src/domains/exec.ts`): `ExecConnection.callAs` / `callAsRaw` (client
+  frame `0x05`, `rid:u32 player:u64 …`), `openAsServer`, `isServer`; refused locally `Denied` on any
+  other connection, because a gateway closes one that sends the frame. `player` is the user id
+  (`FleetCarryResult.userId`). `test/unit/fixtures/exec-client-frames.json` is ck-exec's copy at
+  its `feat/fleet-sessions` branch (three call-as cases); CrowdyCPP's copy still holds its own
+  three until it takes ck-exec's.
+- **The wire codecs** (`src/fleet-wire.ts`, pure, exported from the root entry): 49 and 50 are
+  built by `serializeLongSpatial`, the one writer of the layout; a carried player's message is any
+  existing serializer with `carriedPlayerContext` (the player's id in the tail, the fleet token as
+  the key). `parseFleetDatagram` **verifies before it returns** and is stricter than the relay
+  path, which verifies nothing: 51 to 53 with their own HMAC or inside a verified signed bundle;
+  a plain notification only signed (`containsAuth` 1 with a good HMAC, or inside a signed
+  bundle), else dropped and counted `unsigned` (`acceptUnsigned` takes them); control frames 22 /
+  28 and their bound forms 44 / 45 / 46 (HMAC over the leading bytes, no token appended). An error
+  frame has no room for an HMAC and is delivered marked. The golden vectors' inputs are in
+  `test/unit/fleet-frames.mjs`; 49, 50 and the carried actor update are CrowdyCPP's
+  (`tests/wire_test.cpp`), and 51, 52 and 53 in both forms are pinned in `fleet-wire.test.mjs` for
+  CrowdyCPP and CrowdyPy to take.
+- **`FleetSession`** (`src/fleet/`, entry `@crowdedkingdoms/crowdyjs/fleet`): Node, `node:dgram`,
+  straight to the realtime server the answer names (the relay is for a page). **No static `node:`
+  import anywhere:** `socket.ts` takes `process.getBuiltinModule('node:dgram')` or a dynamic import
+  with a variable specifier, `index.ts` throws at import where neither can work, and
+  `fleet-node-entry.test.mjs` fails if any other entry of `package.json` reaches `dist/fleet/` or
+  the string `node:dgram`. The session advertises `BUNDLE_SIGNED | BOUND_CONTROL` with a nonce for
+  each connection, sends under its own id only 29, 49, 50 and 26 (`sendOwn` refuses anything
+  else), paces carries at 60 a second in any second with retries taking at most half while first
+  sends wait, retries a carry every 250 ms with a new time (always later than the last one for
+  that player) and proof, times it out 5 s after its first send and then sends a
+  `FLEET_RELEASE`, keeps itself alive (26, no actor, every 2 s) and its players' actors present
+  (26 under the player's id, 2 s after an actor's last message), and never calls the API:
+  `refreshDue()`, `refreshInput()` (no `currentServer` after a move order), `applyRefresh(answer)`
+  (same server: capabilities only; another server, or the same one after
+  `COMMAND_SESSION_RELEASED`: a new socket and nonce, capabilities, then a carry for every row).
+  Handlers get `players`: a list from a `FLEET_DELIVERY`, `null` for plain state. `toJSON` and
+  Node's inspect show no token. Tests use an in-memory socket (`socket` in the config) and a clock
+  the test moves (`now`, `tickIntervalMs: 0`, `tick()`); one runs over real UDP on loopback.
+
+At release: bump the version, turn the README's "unreleased" compatibility row and "coming" notes
+into the version, and re-sync `schema.gql` from the Application API's `dev` once its
+fleet-sessions branch has merged (the copy here is that branch's, whose type order differs from
+`dev`'s by about 80 types).
+
 **18.39.1: a dropped build-status read is a missed poll (2026-11-23, the Unreal SDK's runner asks).**
 `src/dropped-read.ts` (not exported) decides which failed read to read again: `CrowdyNetworkError`
 (a malformed body arrives as one), `CrowdyTimeoutError`, a `CrowdyHttpError` 5xx or 429 whose body
@@ -937,6 +999,9 @@ not a running service and is not a schema source; gameplay data lives in
 - `src/kit/` — the Game Kit: the kit protocol, runtime, mirrors, topology and the starter
   hubs' modules (`modules/`, 18.11.0), `social`, the wire codecs (`kit/wire.ts`) and
   `runOptimisticAction`. The model-backed kit went in 18.0.0.
+- `src/fleet-wire.ts` and `src/fleet/` — the fleet session: its wire codecs (pure, in the root
+  entry) and `FleetSession` over `node:dgram` (`@crowdedkingdoms/crowdyjs/fleet`, the only entry
+  that opens a UDP socket; the core client never imports it).
 - `schema.gql` + `src/generated/graphql.ts` + `src/generated/graphql-schema.ts` — committed artifacts. Refresh from
   the published SDL (`npm run schema:sync:prod` + `npm run codegen`); never
   depend on sibling repos at build time.
@@ -1101,6 +1166,7 @@ reference consumer of the hosted flow.
 | Direct player-to-player | `udp.sendSingleActorMessage` |
 | Age, documents, the player gate | `auth.register` (`birthDate`, `country`, `parentalConfirmation`), `auth.recordPlayerAge`, `auth.playerLegalDocuments` / `appRequiredDocuments` / `recordPlayerConsents`; refusals `territoryNotSupportedOf`, `ageRequiredOf`, `ageRequirementNotMetOf`, `legalAcceptanceRequiredOf`, `safetyLogRequiredOf` |
 | A player's voice/video scopes, contacts, blocks, reports | `safety.*` (app token); the recording notice from `apps.recording`; moderators `moderation.*`; a hub checks ck-exec's `players.blocked` before relaying one player's words |
+| An organization's own game servers (coming) | `fleetSessions.open` / `refresh` / `close` and `exec.connectAsServer` / `callAs` with the org token; `FleetSession` from `@crowdedkingdoms/crowdyjs/fleet` carries the server's players. Server side only: never in a page or a game client |
 | Save / characters / teleport | `state.*`; `avatars.*`; `teleport.request` |
 | Version / capability | `serverStatus.gameClientBootstrap(appId)` |
 
