@@ -1331,17 +1331,17 @@ player sent no gameplay input for the app's idle timeout (15 minutes unless the 
 own).
 
 The platform sends `FLEET_RELEASED` once. The message can be lost, and it can arrive up to
-about 6 seconds after the carry ended, so `released` may fire late or never. `UNAUTHORIZED`
-on the next send for a player is the sign that another session carries them. For a few
-milliseconds after a crossing, and rarely for up to about 5 seconds, the previous session's
-sends for the player are still accepted, which is why your server stops sending before it
-hands the player off.
+about 6 seconds after the carry ended, so `released` may fire late or never. After a
+crossing, `UNAUTHORIZED` on the previous server's next send for the player is the sign that
+the other session carries them. For a few milliseconds after a crossing, and rarely for up
+to about 5 seconds, the previous session's sends for the player are still accepted, which
+is why your server stops sending before it hands the player off.
 
 ### A refreshed token replaces the old one with no gap
 
-A player's token expires, and the player's side refreshes it with `refreshAppToken`, which
-answers a new token and a new `gameTokenId`. Carry the player again with both, and name the
-id the player is carried under now:
+A player's token expires. Whoever holds the token refreshes it with `refreshAppToken`
+before then, and the answer has a new token and a new `gameTokenId`. Carry the player again
+with both, and name the id the player is carried under now:
 
 ```ts
 const result = await fleet.carry({
@@ -1356,8 +1356,8 @@ const result = await fleet.carry({
   `released` event fires.
 - **Every send names the new id from the moment the new `FLEET_CARRY` is sent.** The session
   does this for you: a send you make with either id goes out under the old id before that
-  moment and under the new id after it. The platform applies a send that names the new id
-  after the carry it follows.
+  moment and under the new id after it. A send that names the new id and arrives before
+  the carry took effect waits for the carry.
 - **Use the new id once the promise resolves `carried`.** From then on the old id names
   nobody: a send with it rejects with `FleetNotCarriedError`, and `fleet.carries` answers
   false for it.
@@ -1416,8 +1416,8 @@ Each handler receives the notification and the players it is for.
   of your players in range may receive it, and plain when all of them may.
 - **Your own players' state is not sent back to you.** `fleetOwnState: true` (or
   `fleet.setFleetOwnState(true)`) asks for it when another of your players is in range.
-  Two things reach the session that caused them either way: a voxel edit it sent, and the
-  departure of its own player's actor.
+  With it off, two things still reach the session that caused them: a voxel edit it sent,
+  and the departure of its own player's actor.
 - **State about a player you carry is stale.** Your server is the authority on its own
   players. Just after a crossing, the session can receive a few updates for the player it
   now carries that the previous server sent a moment before. Drop state whose actor belongs
@@ -1494,9 +1494,10 @@ shed load, or it moved the session). Every reason makes a refresh due.
 - **A session closed through the Application API is sent nothing.** If `closeFleetSession`
   ends a session while its `FleetSession` is still open, the realtime server stops
   answering, with no message to say so. The session sends its capabilities every 15 seconds
-  and expects a signed acknowledgement of each. About 45 seconds after the close,
-  `refreshDue()` turns true and `moveOrdered` fires, and `refreshFleetSession` then answers
-  `NOT_FOUND`. Open a new session and carry your players again.
+  and expects a signed acknowledgement of each. About 45 seconds after the close
+  (`silenceTimeoutMs`), `refreshDue()` turns true and `moveOrdered` fires, and
+  `refreshFleetSession` then answers `NOT_FOUND`. Open a new session and carry your players
+  again.
 
 ### The server connects to hubs as itself
 
