@@ -107,7 +107,7 @@ export const WireMessageType = {
   COMMAND_RECONNECT_BOUND: 44,
   COMMAND_SESSION_RELEASED_BOUND: 45,
   CONTROL_BOUND_ACK: 46,
-  // A fleet session only (realtime servers v0.50.0; see fleet-wire.ts). 49 and 50 are sent in
+  // A fleet session only (realtime servers v0.50.3; see fleet-wire.ts). 49 and 50 are sent in
   // the capabilities' long-spatial layout under the session's own game token id; 51 to 53
   // are the server's.
   FLEET_CARRY: 49,

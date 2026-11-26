@@ -124,7 +124,7 @@ super-admin's session). There is no SDK replacement.
 
 Your code needs no change, and nothing here changes a client that does not use it. Fleet
 sessions are coming: they are not live on any tier yet. They need Application API v2.89.0,
-realtime servers v0.50.0, and ck-exec 0.25.0, and a Crowded Kingdoms operator switches them on
+realtime servers v0.50.3, and ck-exec 0.25.0, and a Crowded Kingdoms operator switches them on
 for an organization. The README's
 [Game servers: fleet sessions](README.md#game-servers-fleet-sessions) is the guide.
 

@@ -34,7 +34,7 @@ directly. So, before adding a wrapper:
 `feat/fleet-sessions`; no version bump yet, nothing of it is on any tier).** One realtime session
 and one hub connection a game server, carrying its players (the workspace's
 `DESIGN-2026-11-fleet-session.md`; the build contract's section 8 is the wire as built, realtime
-servers v0.50.0). Four parts:
+servers v0.50.3). Four parts:
 
 - **The Application API calls** (`src/domains/fleetSessions.ts`, `client.fleetSessions` and
   `client.admin.fleetSessions`; `exec.serverEndpoint` / `connectAsServer`): `openFleetSession`,

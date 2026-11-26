@@ -1,5 +1,5 @@
 /**
- * Wire codecs for a fleet session (realtime servers v0.50.0): one realtime session an
+ * Wire codecs for a fleet session (realtime servers v0.50.3): one realtime session an
  * organization's game server opens for itself, in which it carries the players who are on it.
  *
  * Pure functions with no I/O: they build and read bytes and compute HMACs with WebCrypto, so

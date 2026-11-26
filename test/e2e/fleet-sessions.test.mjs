@@ -659,13 +659,13 @@ test(
         const since = z.seen.datagrams.slice(z.seen.atClose);
         note(`Z was sent ${since.length} datagram(s) after the close${since.length ? `: ${since.map((d) => d.shape).slice(0, 5).join(', ')}` : ''}`);
         if (z.seen.sessionReleased.length > 0) {
-          // Realtime servers from v0.50.1 tell the session, in a frame signed with its fleet
+          // Realtime servers from v0.50.3 tell the session, in a frame signed with its fleet
           // token, within seconds of the close.
           note(`Z: told by a signed COMMAND_SESSION_RELEASED ${after} s after closeFleetSession`);
           assert.deepEqual(z.seen.sessionReleased, [0], 'one signed release, reason 0');
           assert.equal(z.fleet.status, 'released');
         } else {
-          // Before v0.50.1 the session is sent nothing and notices the silence.
+          // Before v0.50.3 the session is sent nothing and notices the silence.
           note(`Z: refreshDue() turned true ${after} s after closeFleetSession (it tolerates 15 s of silence)`);
           assert.equal(z.seen.moves, 1, 'the moveOrdered handler fired');
           assert.equal(z.fleet.status, 'connected', 'nothing told it otherwise');

@@ -1211,7 +1211,7 @@ fleet token never go into a browser page or a game client. A game on a player's 
 `client.udp` with that player's own app token.
 
 **Fleet sessions are coming.** They are not live on any tier yet, and no published release
-of this SDK carries them. They need Application API v2.89.0, realtime servers v0.50.0 and,
+of this SDK carries them. They need Application API v2.89.0, realtime servers v0.50.3 and,
 for the hub connection, ck-exec 0.25.0. A Crowded Kingdoms operator switches them on for an
 organization, which also needs [org-managed players](#org-managed-players).
 
@@ -1429,19 +1429,21 @@ and no option turns that off. A frame that fails is dropped and counted in `flee
 too (`wrongApp`), since a session is in one app. The one exception is a refusal of a send,
 which the next section covers. The largest datagram a fleet session is sent is 1,242 bytes.
 
-### A refused send arrives unsigned, so treat it as a hint
+### A refused send is signed, and the handler says so
 
 The `genericError` handler receives a refused send and a second argument, `verified`. A
 refusal is 3 bytes: the message type, the sequence number of the send, and a code. It names
 no player, so match its sequence number against the numbers your sends resolved with.
 
-- **`verified` is false for a refusal that arrived alone.** The realtime servers send every
-  refusal alone, and 3 bytes leave no room for a signature, so anyone who can reach the
-  session's socket could have sent it. `verified` is true only for a refusal inside a bundle
-  signed with the fleet token.
-- **The session changes nothing on a refusal**, whatever its code. Treat it as a hint: stop
-  sending for that player, then carry the player again or check their access through the
-  Application API, and act on that answer. A carry's answer is always verified.
+- **`verified` is true for a refusal that arrived inside a bundle the session verified with
+  the fleet token.** Realtime servers from v0.50.3 send a fleet session every refusal that
+  way.
+- **`verified` is false for a refusal that arrived alone.** 3 bytes leave no room for a
+  signature, so anyone who can reach the session's socket could have sent it. Treat one as
+  a hint: stop sending for that player, then carry the player again or check their access
+  through the Application API, and act on that answer. A carry's answer is always verified.
+- **The session changes nothing on a refusal**, whatever its code and whether or not it is
+  verified. Your code decides what a refusal means for the player.
 - **`TOKEN_EXPIRED` is about a carried player's token.** A send that lands just before the
   player's token expires is answered `TOKEN_EXPIRED`, and `released` follows with reason 2.
   The fleet token's own expiry reaches the `sessionReleased` handler with reason 2, in a
@@ -1476,9 +1478,11 @@ or says nothing for 45 seconds (the `moveOrdered` and `sessionReleased` handlers
 `fleet.applyRefresh`.
 
 The realtime server signs both messages, and the session acts on them only after it has
-verified them. `sessionReleased` carries a reason: 2 means the fleet token expired, and 1,
-3, and 4 mean the server stopped serving the session (it heard nothing from the session, it
-shed load, or it moved the session). Every reason makes a refresh due.
+verified them. `sessionReleased` carries a reason: 0 means the fleet token was revoked (the
+session was closed through the Application API, or its organization token was revoked), 2
+means the fleet token expired, and 1, 3, and 4 mean the server stopped serving the session
+(it heard nothing from the session, it shed load, or it moved the session). Every reason
+makes a refresh due.
 
 - **`refreshInput()` names the server the session is on**, so the session stays there
   while that server still serves the app. After a move order it names no server, and the
@@ -1491,13 +1495,14 @@ shed load, or it moved the session). Every reason makes a refresh due.
   with `FleetNotCarriedError`. Each answer reaches the `carryResult` handler.
 - **A refresh refused `NOT_FOUND`** means the session ended. Open a new one and carry your
   players again.
-- **A session closed through the Application API is sent nothing.** If `closeFleetSession`
-  ends a session while its `FleetSession` is still open, the realtime server stops
-  answering, with no message to say so. The session sends its capabilities every 15 seconds
-  and expects a signed acknowledgement of each. About 45 seconds after the close
-  (`silenceTimeoutMs`), `refreshDue()` turns true and `moveOrdered` fires, and
-  `refreshFleetSession` then answers `NOT_FOUND`. Open a new session and carry your players
-  again.
+- **A session closed through the Application API is told.** If `closeFleetSession` ends a
+  session while its `FleetSession` is still open, the realtime server sends it a signed
+  release with reason 0 within seconds: `sessionReleased` fires, `refreshDue()` turns true,
+  and `refreshFleetSession` then answers `NOT_FOUND`. Open a new session and carry your
+  players again. That one message can be lost. The session also sends its capabilities
+  every 15 seconds and expects a signed acknowledgement of each, so about 45 seconds after
+  the close (`silenceTimeoutMs`) `refreshDue()` turns true and `moveOrdered` fires in any
+  case.
 
 ### The server connects to hubs as itself
 

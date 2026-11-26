@@ -1,5 +1,5 @@
 /**
- * The fleet session's wire codecs (realtime servers v0.50.0): FLEET_CARRY (49), FLEET_RELEASE
+ * The fleet session's wire codecs (realtime servers v0.50.3): FLEET_CARRY (49), FLEET_RELEASE
  * (50), a carried player's message, and FLEET_CARRY_RESULT (51), FLEET_RELEASED (52) and
  * FLEET_DELIVERY (53) in both of their forms.
  *

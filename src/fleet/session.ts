@@ -204,7 +204,7 @@ export interface FleetHandlers {
    * refusal names no player.
    *
    * `verified` is true when the refusal arrived inside a signed bundle the session verified
-   * with the fleet token. Realtime servers from v0.50.1 send a session's refusals that way.
+   * with the fleet token. Realtime servers from v0.50.3 send a session's refusals that way.
    * An earlier server sends a refusal alone, as `[3][seq][code]`, which has no room for an
    * HMAC, and then `verified` is false: anyone who can reach the session's socket could have
    * forged it. **Treat an unverified refusal as a hint.** Stop sending for the player it
@@ -228,7 +228,7 @@ export interface FleetHandlers {
    * `refreshDue()` is true: call `refreshFleetSession` without a `currentServer`
    * (`refreshInput()` leaves it out) and give the answer to `applyRefresh`. A session that was
    * closed through the Application API is told by `sessionReleased` with reason 0 on realtime
-   * servers from v0.50.1; an earlier server sends it nothing, so the silence shows it here.
+   * servers from v0.50.3; an earlier server sends it nothing, so the silence shows it here.
    * Either way the refresh answers `NOT_FOUND`.
    */
   moveOrdered?(): void;
@@ -486,7 +486,7 @@ function speakerChange(list: readonly string[] | null | undefined): SpeakerListC
 
 /**
  * A fleet session: one realtime session an organization's game server opens for itself, in
- * which it carries the players who are on it (realtime servers v0.50.0). It connects to the
+ * which it carries the players who are on it (realtime servers v0.50.3). It connects to the
  * realtime server over UDP, so it runs on Node, on a server the organization runs.
  *
  * **Security: an org token and a fleet token never go into a browser page or a game
