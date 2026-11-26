@@ -120,12 +120,16 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
-## Unreleased: fleet sessions for an organization's game servers
+## 18.40.0: fleet sessions for an organization's game servers
 
-Your code needs no change, and nothing here changes a client that does not use it. Fleet
-sessions are coming: they are not live on any tier yet. They need Application API v2.89.0,
-realtime servers v0.50.3, and ck-exec 0.25.0, and a Crowded Kingdoms operator switches them on
-for an organization. The README's
+Your code needs no change, and nothing here changes a client that does not use it. This
+release adds fleet sessions. They need Application API v2.89.0 or later, realtime servers
+v0.50.3, and ck-exec 0.25.0 for the hub connection. All three have been on dev, test, and prod
+since November 26, 2026. Fleet sessions stay off for an organization until a Crowded Kingdoms
+operator switches them on, and the organization also needs
+[org-managed players](README.md#org-managed-players). Until then, the Application API refuses
+`fleetSessions.open` with `FORBIDDEN`. Every other call needs what 18.39.0 needs: Application
+API v2.85.0 or later. The README's
 [Game servers: fleet sessions](README.md#game-servers-fleet-sessions) is the guide.
 
 A fleet session is one realtime session a game server opens for itself, in which it carries
@@ -174,7 +178,7 @@ fleet token never go into a browser page or a game client.
 - **Unchanged:** the relay, what a player's session advertises, and every existing call. The
   SDK still has no wrapper for `mintManagedPlayerToken`.
 
-`schema.gql` and the generated types are the Application API's at v2.89.0. Beside the fleet
+`schema.gql` and the generated types are the Application API's at v2.89.1. Beside the fleet
 session fields they carry the project profile's review, the organization's compute ceiling, and
 `portalReturnAllowed`; the SDK wraps none of those in this change.
 

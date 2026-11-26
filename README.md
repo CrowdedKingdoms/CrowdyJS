@@ -34,7 +34,7 @@ so it needs that Application API or newer; promote the Application API before th
 
 | CrowdyJS | Needs the Application API (ck-api) |
 | --- | --- |
-| unreleased | as 18.39.0; `client.fleetSessions` and `exec.connectAsServer` need v2.89.0 (see [Game servers: fleet sessions](#game-servers-fleet-sessions)) |
+| 18.40.0 | as 18.39.0; `client.fleetSessions` and `exec.connectAsServer` need v2.89.0 or later (see [Game servers: fleet sessions](#game-servers-fleet-sessions)) |
 | 18.39.1 | as 18.39.0 |
 | 18.39.0 | v2.85.0 or later (selects `applicationApiUrl`, `applicationApiWsUrl` and `platformConfig`'s `sharedApplicationApi*`; the `gameApi*` names stay as deprecated aliases until January 1, 2027) |
 | 18.33.0 | v2.73.0 or later (exec's mod builds, mods and CLIENT halves select `studioProjectId` and `studioRevision`; `exec.modClientStarter`, `crowdyStudio.links`) |
@@ -479,7 +479,7 @@ and the fleet session calls, grouped under `client.admin` and mirrored at the to
 |---|---|
 | `client.organizations` | Orgs, members, RBAC roles, org API tokens (with `scopes` and `appIds` for org-managed players). |
 | `client.managedPlayers` | Org-managed players: list, provision, rename, disable, end sessions, delete; assertion signing keys; whether the org pays for their mods in an app; where the org stands on the addendum. See [Org-managed players](#org-managed-players). |
-| `client.fleetSessions` | Coming, for an organization's own game servers: `open`, `refresh`, and `close` a fleet session with the organization's org token. The session itself is `FleetSession` from `@crowdedkingdoms/crowdyjs/fleet` (Node), and `client.exec.connectAsServer` opens the server's hub connection. An org token and a fleet token stay on a server your organization runs. See [Game servers: fleet sessions](#game-servers-fleet-sessions). |
+| `client.fleetSessions` | For an organization's own game servers (18.40.0): `open`, `refresh`, and `close` a fleet session with the organization's org token. The session itself is `FleetSession` from `@crowdedkingdoms/crowdyjs/fleet` (Node), and `client.exec.connectAsServer` opens the server's hub connection. An org token and a fleet token stay on a server your organization runs. See [Game servers: fleet sessions](#game-servers-fleet-sessions). |
 | `client.apps` | App registry, discovery + routing (`create`, `routeFor`, `marketplace`), visibility, and player-code admission mode / allow-list administration. The safety log's state for players (`recording`, readable with an app token) and the app's own documents (`setRequiredDocuments`). |
 | `client.moderation` | An app's safety reports for its moderators (`moderate_safety`): `reports`, `resolveReport`, `escalateReport`. See [Player safety](#player-safety). |
 | `client.appAccess` | Access tiers + per-user grants, and the feature keys a tier grants (`defineFeature`, `grantTierFeature`, `tierFeatures`, …), which a hub checks with the node API's `players.features`; timed bans (`suspend`, `unsuspend`) and `resyncTierGridPermissions`. |
@@ -1210,10 +1210,12 @@ opens it, and its fleet token signs for every player the session carries. An org
 fleet token never go into a browser page or a game client. A game on a player's device uses
 `client.udp` with that player's own app token.
 
-**Fleet sessions are coming.** They are not live on any tier yet, and no published release
-of this SDK carries them. They need Application API v2.89.0, realtime servers v0.50.3 and,
-for the hub connection, ck-exec 0.25.0. A Crowded Kingdoms operator switches them on for an
-organization, which also needs [org-managed players](#org-managed-players).
+**SDK 18.40.0 carries fleet sessions.** They need Application API v2.89.0 or later, realtime
+servers v0.50.3, and ck-exec 0.25.0 for the hub connection. All three have been on dev,
+test, and prod since November 26, 2026. Fleet sessions stay off for an organization until a
+Crowded Kingdoms operator switches them on, and the organization also needs
+[org-managed players](#org-managed-players). Until then, the Application API refuses
+`fleetSessions.open` with `FORBIDDEN`.
 
 The session is `FleetSession`, from the Node entry point `@crowdedkingdoms/crowdyjs/fleet`.
 It talks to the realtime server over UDP (`node:dgram`), which a page cannot open, so no
