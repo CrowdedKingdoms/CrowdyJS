@@ -138,14 +138,17 @@ fleet token never go into a browser page or a game client.
   org token (`cko_…`, scope `fleet:session`) as the client's bearer. `open` and `refresh` answer
   a `FleetSessionAnswer`: `token`, `gameTokenId`, `appId`, `expiresAt`, `maxPlayers`, `server`.
   The org token that opened a session is the one that refreshes and closes it: another org token
-  of the same organization gets `NOT_FOUND` from `refresh` and `false` from `close`. Revoking an
+  of the same organization gets `NOT_FOUND` from `refresh` and `false` from `close`. The calls
+  run on a server (Node, Bun, Deno, a server-side worker) and refuse a page or its worker. Revoking an
   org token ends every session and hub connection it opened. A session that is neither
   refreshed nor closed ends at its `expiresAt`, 24 hours after it was opened or last refreshed.
 - **`FleetSession`**, from the new Node entry point `@crowdedkingdoms/crowdyjs/fleet`: the
   session itself, over UDP (`node:dgram`). `connect`, `carry`, `release`, a send for a carried
   player for each of `client.udp`'s sends, `sendHeartbeat`, `setSpeakers`, handlers that receive
   the players a notification is for, `refreshDue`, `refreshInput`, `applyRefresh`, `stats`, and
-  `close`. Importing the entry point where `node:dgram` does not exist throws.
+  `close`. Importing the entry point where `node:dgram` does not exist throws. The
+  `genericError` handler receives `(notification, verified)`: a refusal that arrived alone
+  carries no signature, so `verified` is false for it.
 - **`client.exec.connectAsServer(appId)`** and `serverEndpoint(appId)` wrap
   `execConnectAsServer`: one hub connection for a game server. `ExecConnection.callAs(player,
   nodeType, key, method, args)` and `callAsRaw` make a call for one of the organization's players

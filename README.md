@@ -1262,7 +1262,9 @@ fleet.close();
 ### The org token that opens a session keeps it and ends it
 
 `client.fleetSessions` (also `client.admin.fleetSessions`) wraps the three Application API
-calls. Each takes the org token as the client's bearer and refuses to run in a browser page.
+calls. Each takes the org token as the client's bearer. Each refuses to run in a browser
+page or a page's worker: it runs on Node, Bun, Deno, and server-side workers (the Cloudflare
+Workers runtime and Vercel's Edge Runtime).
 
 | Call | Application API | Answer |
 | --- | --- | --- |
@@ -1302,6 +1304,7 @@ The promise resolves with how the carry ended:
 | `sessionFull` | The session carries as many players as it may (`maxPlayers`). |
 | `timedOut` | No answer came within 5 seconds of the first send. |
 | `refused` | A status this version of the SDK does not know. `wireStatus` has the byte. |
+| `tableFull` | Nothing was sent: the session's table already holds `maxPlayers` rows and 32 more, carried players and waiting carries together. Release players who left. |
 | `released`, `closed` | You called `release` for the player, or `close`, while the carry was waiting. |
 
 - **An unanswered carry is sent again** every 250 ms, each time with a new time and a new
@@ -1366,9 +1369,27 @@ Each handler receives the notification and the players it is for.
   `fleet.setFleetOwnState(true)`) asks for it when another of your players is in range. A
   voxel edit always reaches the session that sent it.
 
-`FleetSession` verifies everything it receives with the fleet token before a handler runs.
-A frame that fails is dropped and counted in `fleet.stats()` (`hmacFailures`, `unsigned`,
-`malformed`). The largest datagram a fleet session is sent is 1,242 bytes.
+`FleetSession` verifies everything it receives with the fleet token before a handler runs,
+and no option turns that off. A frame that fails is dropped and counted in `fleet.stats()`
+(`hmacFailures`, `unsigned`, `malformed`). The one exception is a refusal of a send, which
+the next section covers. The largest datagram a fleet session is sent is 1,242 bytes.
+
+### A refused send says whether the refusal was verified
+
+The `genericError` handler receives a refused send and a second argument, `verified`.
+`UNAUTHORIZED` is how your server learns that the platform refuses a carried player's sends:
+the session does not carry the player, or the player's access to the app was suspended or
+ended. Stop serving that player. Match the refusal's sequence number against the numbers
+your sends resolved with, because a refusal names no player.
+
+- **`verified` is true** when the refusal arrived inside a bundle signed with the fleet
+  token.
+- **`verified` is false** when it arrived alone. A refusal is 3 bytes with no room for a
+  signature, so anyone who can reach the session's socket could have sent it. Treat it as a
+  hint: stop sending for that player, then carry the player again or check their access
+  through the Application API, and act on that answer. A carry's answer is always verified.
+- **The session changes nothing on an unverified refusal.** An unverified `TOKEN_EXPIRED`
+  does not make a refresh due.
 
 ### The session refreshes before it expires, and follows a move
 
@@ -1430,6 +1451,20 @@ The four calls raise `CrowdyGraphQLError`. Branch on `extensions.code` with thes
 | `PLATFORM_BUSY` | The platform could not start the call in time. Wait `retryAfterMs`, then call again | `platformBusyOf(err)` |
 | `ORG_LEGAL_ACCEPTANCE_REQUIRED` | An admin has not accepted the current Org-Managed Players Addendum | `orgLegalAcceptanceRequiredOf(err)` |
 | `FORBIDDEN` | Fleet sessions are not switched on for the organization, the org token lacks the `fleet:session` scope, or the app is not in its app list | `err.code` |
+
+### Keep the tokens out of your logs, and know what a replay can do
+
+- **Never log the answers of `fleetSessions.open`, `fleetSessions.refresh`, or
+  `exec.serverEndpoint`.** The first two contain the fleet token, and the third contains a
+  hub connect token. A `FleetSession` shows no token when you log or serialize it.
+- **The hub connect token travels in the WebSocket URL's query string**, as a player's does.
+  It lasts one minute, and the connection asks for a new one at each reconnect. Keep that
+  URL out of your logs too.
+- **A replayed `FLEET_RELEASED` makes the session report a player released.** The frame is
+  signed, so a copy that someone captured verifies when it is sent again. If the player is
+  still on your server, carry them again.
+- **The UDP socket is connected to the realtime server's address**, so the operating system
+  drops datagrams from any other address before the session sees them.
 
 ### The wire codecs are pure functions
 

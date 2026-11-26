@@ -42,8 +42,12 @@ servers v0.50.0). Four parts:
   token as the bearer**. These are the first org-token calls the SDK wraps, on the operator's
   instruction for this feature; the mint is still not wrapped (`managed-players.test.mjs` and
   `fleet-sessions-api.test.mjs` both fail if a document names `mintManagedPlayerToken`).
-  `assertOrganizationServer` (`src/server-only.ts`) refuses each of them in a browser page before
-  any request: an org token and a fleet token never go into a page or a game client. The org token
+  `assertOrganizationServer` (`src/server-only.ts`) refuses each of them before any request
+  unless the runtime says it is a server: a page (`window` and `document`) is refused whatever
+  else it defines; Node, Bun, Deno, the Cloudflare Workers runtime and Vercel's Edge Runtime pass
+  by their own marks; a browser's worker and anything unmarked are refused, because a page's
+  worker has no `window`. An org token and a fleet token never go into a page or a game client.
+  A new server runtime is one more mark in `organizationServerRefusal`, never an escape option. The org token
   that opened a session refreshes and closes it (another of the same organization gets `NOT_FOUND`
   / `false`). Readers: `orgTokenRequiredOf`, `fleetSessionLimitOf`, `fleetSessionNotFoundOf`,
   `platformBusyOf` (`retryAfterMsOf` moved from `dropped-read.ts` to `errors.ts`, one reader).
@@ -62,9 +66,13 @@ servers v0.50.0). Four parts:
   the key). `parseFleetDatagram` **verifies before it returns** and is stricter than the relay
   path, which verifies nothing: 51 to 53 with their own HMAC or inside a verified signed bundle;
   a plain notification only signed (`containsAuth` 1 with a good HMAC, or inside a signed
-  bundle), else dropped and counted `unsigned` (`acceptUnsigned` takes them); control frames 22 /
-  28 and their bound forms 44 / 45 / 46 (HMAC over the leading bytes, no token appended). An error
-  frame has no room for an HMAC and is delivered marked. The golden vectors' inputs are in
+  bundle), else dropped and counted `unsigned`, with **no option to take it** (`acceptUnsigned`
+  was removed after the security review of 2026-11-25; do not bring it back, in the codec or the
+  session); control frames 22 / 28 and their bound forms 44 / 45 / 46 (HMAC over the leading
+  bytes, no token appended). An error frame (`[3][seq][code]`) has no room for an HMAC: it is
+  the one thing delivered unverified, `genericError(notification, verified)` says which, both are
+  counted (`unverifiedErrorsReceived`), and an unverified one changes no state (an unverified
+  `TOKEN_EXPIRED` orders no move). The golden vectors' inputs are in
   `test/unit/fleet-frames.mjs`; 49, 50 and the carried actor update are CrowdyCPP's
   (`tests/wire_test.cpp`), and 51, 52 and 53 in both forms are pinned in `fleet-wire.test.mjs` for
   CrowdyCPP and CrowdyPy to take.
@@ -85,6 +93,10 @@ servers v0.50.0). Four parts:
   `COMMAND_SESSION_RELEASED`, 45 s of silence or a signed `TOKEN_EXPIRED`: a new socket and nonce,
   capabilities, then a carry for every row). A new connection's capabilities are its first
   datagram: `binding` holds every other send and the tick until they are out.
+  The capabilities go again every 15 s (`capabilitiesIntervalMs`, held to a third of
+  `silenceTimeoutMs`, 45 s), and their acknowledgement (46) is the verified frame an idle session
+  hears. The table holds `maxPlayers` + 32 rows (`FLEET_TABLE_MARGIN`); a `carry` for a new player
+  past that ends `'tableFull'` with nothing sent.
   Handlers get `players`: a list from a `FLEET_DELIVERY`, `null` for plain state. `toJSON` and
   Node's inspect show no token. Tests use an in-memory socket (`socket` in the config) and a clock
   the test moves (`now`, `tickIntervalMs: 0`, `tick()`); one runs over real UDP on loopback.
