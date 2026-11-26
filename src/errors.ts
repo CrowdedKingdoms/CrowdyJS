@@ -428,8 +428,9 @@ export const ASSERTION_REJECTED_CODE = 'ASSERTION_REJECTED';
 export const ORG_LEGAL_ACCEPTANCE_REQUIRED_CODE = 'ORG_LEGAL_ACCEPTANCE_REQUIRED';
 /**
  * `extensions.code` for "this call takes an org token, from the organization's own server"
- * (HTTP 403): the bearer is a session token, an app token or a fleet token, or the request
- * came from a browser; see {@link orgTokenRequiredOf}.
+ * (HTTP 403): the bearer is a session token, an app token or a fleet token; see
+ * {@link orgTokenRequiredOf}. An org token sent from a browser (a request with an `Origin`
+ * header) is refused `ORG_TOKEN_NOT_ALLOWED`.
  */
 export const ORG_TOKEN_REQUIRED_CODE = 'ORG_TOKEN_REQUIRED';
 /**
@@ -695,9 +696,10 @@ export function orgLegalAcceptanceRequiredOf(value: unknown): boolean {
 
 /**
  * Whether an error is an `ORG_TOKEN_REQUIRED` refusal (HTTP 403): the call takes the
- * organization's org token (`cko_…`) and was sent something else, or it came from a browser
- * (a request with an `Origin` header). The fleet session calls and `execConnectAsServer` take
- * an org token and nothing else, from a server the organization runs. Not fixed by retrying.
+ * organization's org token (`cko_…`) and was sent something else. The fleet session calls and
+ * `execConnectAsServer` take an org token and nothing else, from a server the organization
+ * runs; an org token sent from a browser (a request with an `Origin` header) is refused
+ * `ORG_TOKEN_NOT_ALLOWED`. Not fixed by retrying.
  */
 export function orgTokenRequiredOf(value: unknown): boolean {
   return errorWithCode(value, ORG_TOKEN_REQUIRED_CODE) !== null;

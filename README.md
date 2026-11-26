@@ -1430,7 +1430,7 @@ await hubs.callAs(carry.userId, 'player', playerKey, 'grant', { gold: 10 }); // 
 - **`player` is the player's user id** (`FleetCarryResult.userId`), as a `bigint`, a decimal
   string, or a safe integer.
 - **Limits.** A server connection has a budget of 2,000 calls a second, and an organization
-  holds at most 64 server connections to one app on one execution host.
+  holds at most 256 server connections to one app on one execution host.
 - **Hubs built with ckx-sdk before 0.15** answer such a call `Denied` until they are built
   again.
 - **On any other connection `callAs` is refused locally** with `Denied`, and nothing is
@@ -1445,12 +1445,14 @@ The four calls raise `CrowdyGraphQLError`. Branch on `extensions.code` with thes
 
 | `extensions.code` | Meaning | Reader |
 | --- | --- | --- |
-| `ORG_TOKEN_REQUIRED` | The bearer is not an org token, or the request came from a browser | `orgTokenRequiredOf(err)` |
+| `ORG_TOKEN_REQUIRED` | The bearer is not an org token | `orgTokenRequiredOf(err)` |
+| `ORG_TOKEN_NOT_ALLOWED` | The request came from a browser (it carried an `Origin` header) | `err.code` |
 | `FLEET_SESSION_LIMIT` | `open`: the organization holds as many sessions as it may | `fleetSessionLimitOf(err)` |
 | `NOT_FOUND` | `refresh`: the session expired, was closed, or was opened with another org token | `fleetSessionNotFoundOf(err)` |
 | `PLATFORM_BUSY` | The platform could not start the call in time. Wait `retryAfterMs`, then call again | `platformBusyOf(err)` |
 | `ORG_LEGAL_ACCEPTANCE_REQUIRED` | An admin has not accepted the current Org-Managed Players Addendum | `orgLegalAcceptanceRequiredOf(err)` |
-| `FORBIDDEN` | Fleet sessions are not switched on for the organization, the org token lacks the `fleet:session` scope, or the app is not in its app list | `err.code` |
+| `FORBIDDEN` | Fleet sessions are not switched on for the organization, or the org token lacks the `fleet:session` scope | `err.code` |
+| `SCOPE_MISSING` | The app is not in the org token's app list | `err.code` |
 
 ### Keep the tokens out of your logs, and know what a replay can do
 

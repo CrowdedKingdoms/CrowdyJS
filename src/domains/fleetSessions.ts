@@ -50,12 +50,14 @@ export type FleetSessionAnswer = FleetSessionFieldsFragment;
  *
  * | Code | Meaning | Reader |
  * |---|---|---|
- * | `ORG_TOKEN_REQUIRED` | The bearer is not an org token, or the request came from a browser | `orgTokenRequiredOf` |
+ * | `ORG_TOKEN_REQUIRED` | The bearer is not an org token | `orgTokenRequiredOf` |
+ * | `ORG_TOKEN_NOT_ALLOWED` | The request came from a browser (it carried an `Origin` header) | `error.code` |
  * | `FLEET_SESSION_LIMIT` | `open`: the organization holds as many sessions as it may (512 unless an operator set another) | `fleetSessionLimitOf` |
  * | `NOT_FOUND` | `refresh`: the session expired, was closed, or was opened with another org token | `fleetSessionNotFoundOf` |
  * | `PLATFORM_BUSY` | The platform could not start the call in time; wait `retryAfterMs`, then call again | `platformBusyOf` |
  * | `ORG_LEGAL_ACCEPTANCE_REQUIRED` | An admin has not accepted the current Org-Managed Players Addendum | `orgLegalAcceptanceRequiredOf` |
- * | `FORBIDDEN` | Fleet sessions are not switched on for the organization, the org token lacks the scope, or the app is not in its app list | `error.code` |
+ * | `FORBIDDEN` | Fleet sessions are not switched on for the organization, or the org token lacks the `fleet:session` scope | `error.code` |
+ * | `SCOPE_MISSING` | The app is not in the org token's app list | `error.code` |
  * | `FEATURE_DISABLED` | The tier does not serve org-managed players | `error.code` |
  */
 export class FleetSessionsAPI {
