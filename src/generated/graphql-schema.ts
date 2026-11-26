@@ -2249,6 +2249,14 @@ export type ClientVideoPacketInput = {
   videoData: Scalars['String']['input'];
 };
 
+/** The fleet session to end. */
+export type CloseFleetSessionInput = {
+  /** The app the session is in (BigInt as a decimal string). */
+  appId: Scalars['BigInt']['input'];
+  /** The session's gameTokenId, from openFleetSession. */
+  gameTokenId: Scalars['BigInt']['input'];
+};
+
 /** Controls player-code censorship for an app. IMPLICIT_ALLOW admits lawful code by default; ALLOW_LIST requires every code target, including self-authored code, to match an active code/author/org admission. */
 export enum CodeAdmissionMode {
   AllowList = 'ALLOW_LIST',
@@ -2558,7 +2566,7 @@ export type CreateOrgTokenInput = {
   label?: InputMaybe<Scalars['String']['input']>;
   /** Organization to mint the token for (BigInt as string). */
   orgId: Scalars['BigInt']['input'];
-  /** What the token may do: 'players:mint' and/or 'players:manage' (org-managed players). Omit for a token with no scope, which can do nothing. */
+  /** What the token may do: 'players:mint' and 'players:manage' (org-managed players), 'fleet:session' (its game servers' fleet sessions and hub connections), in any combination. Omit for a token with no scope, which can do nothing. */
   scopes?: InputMaybe<Array<Scalars['String']['input']>>;
 };
 
@@ -4447,6 +4455,23 @@ export type FileSafetyReportInput = {
   reportedUserId: Scalars['BigInt']['input'];
 };
 
+/** A fleet session: one realtime session an organization's game server opens for itself, in which it carries the players who are on it. A player still signs in once, when they join (mintManagedPlayerToken); moving to another of the organization's servers is that server starting to carry them, with no call to this API. The session's token never goes to a player's device. */
+export type FleetSession = {
+  __typename?: 'FleetSession';
+  /** The app the session is in (BigInt as a decimal string). */
+  appId: Scalars['BigInt']['output'];
+  /** When the session ends unless it is refreshed first: 24 hours after it was opened or last refreshed. */
+  expiresAt: Scalars['DateTime']['output'];
+  /** The token's id (BigInt as a decimal string): what the session's own realtime messages carry, and what refreshFleetSession and closeFleetSession name it by. */
+  gameTokenId: Scalars['BigInt']['output'];
+  /** How many players the session may carry at once: the organization's maxFleetPlayers when the session was opened. A carry past it is refused, so a game with more players on one server opens a second session or asks for a higher number. */
+  maxPlayers: Scalars['Int']['output'];
+  /** The realtime server to connect the session to (ip4 and clientPort), in the datacenter that holds the app. The token is authorized there and nowhere else. */
+  server: ServerStatus;
+  /** The session's token: 64 characters, the key the game server signs the session's realtime messages with. Keep it on the server. It is not a bearer for this API. */
+  token: Scalars['String']['output'];
+};
+
 /** An org's free shared app slot quota usage. */
 export type FreeAppQuota = {
   __typename?: 'FreeAppQuota';
@@ -4525,7 +4550,7 @@ export enum FreeTierLevel {
   Domain = 'DOMAIN',
   /** One of the organization's apps had at least 10 different player accounts play on at least 3 of the last 7 UTC days; the organization's own members do not count. 500 GB. */
   Measured = 'MEASURED',
-  /** The organization has completed its project profile. 200 GB. */
+  /** The organization has completed its project profile and Crowded Kingdoms has approved it. 200 GB. */
   Profile = 'PROFILE'
 }
 
@@ -5504,6 +5529,8 @@ export type Mutation = {
   claimGridOwnership: GridClaimResult;
   /** Remove an app's compute allowance, so its ck-exec code is no longer paused for its budget. Returns true if an allowance was removed. Requires app-admin ('manage_apps'). */
   clearAppComputeBudget: Scalars['Boolean']['output'];
+  /** ORG TOKEN ONLY. End a fleet session now, when its game server stops: the realtime servers release the players it carries (their actors leave, as when a player's own session ends) and its place counts toward the organization's maxFleetSessions no longer. True when a session was ended; false when there was none by that id (already closed, or opened with another org token). A session that is neither closed nor refreshed ends by itself at expiresAt. The org token that opened the session, with scope fleet:session; to end the sessions another org token opened, revoke that token. */
+  closeFleetSession: Scalars['Boolean']['output'];
   /** RETIRED 2026-10-29: Crowded Kingdoms no longer hosts games and every tier runs with hosting off, so this answers CONTENT_HOSTING_DISABLED. Host your build on your own origin. Finish a publish: verifies every staged object against the manifest (HOSTED_PUBLISH_INCOMPLETE names what is missing), promotes the staging area to the live prefix, removes objects the previous publish left, records the publish LIVE and invalidates the content CDN. Requires manage_apps and a SESSION token. */
   completeGamePublish: CompleteGamePublishResult;
   /** Complete a magic-link sign-in with the emailed token; returns a session AuthResponse. Public (the token authorizes the call); throws if invalid/expired/used. First-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise). */
@@ -5634,6 +5661,8 @@ export type Mutation = {
   execConnect: ExecConnection;
   /** Connect to an app's ck-exec code as one of its developers, for studio tools, manual runs and admin endpoints. The session's calls arrive as `Caller::Developer` with your user id and may reach any node type, not only `client` ones, but never the platform's `$` methods. Requires the org 'manage_compute' permission and your own session, not an app token. */
   execConnectAsDeveloper: ExecConnection;
+  /** ORG TOKEN ONLY. Connect one of your organization's game servers to an app's hubs as itself. Open a WebSocket to the answer's gatewayUrl with its token, as a player's game does after execConnect. The connection's calls reach a hub as `Caller::Org`: the server's own, or with the call-as frame made for a player the server names. Crowded Kingdoms checks that the server is your organization's; the player a call names is your organization's word, so a hub should treat it as that. The connection may call and subscribe to any node type of the app, has its own budget of 2,000 calls a second in place of a player's, and a hub placed by it counts toward no player's limit. One connection for each game server; an organization may hold 256 to one app on one execution host. Hubs built with ckx-sdk before 0.15 answer such a call `Denied` until they are built again. Call from the server with `Authorization: Bearer cko_...` (scope fleet:session); a request with an Origin header is refused. The checks of openFleetSession apply (fleet sessions switched on for the organization, the app its own, the addendum accepted), and the connection closes when the org token is revoked or fleet sessions are switched off. The token lasts a minute and is for opening the socket once; ask again to connect again. */
+  execConnectAsServer: ExecConnection;
   /** Consent to run a mod's CLIENT half in your browser at its current capability hash. A CLIENT half whose capabilities change carries a new hash, and the consent stops holding until you consent again. Answers CONFLICT when the hash is not the current one. Requires access to the app. */
   execConsentClientMod: Scalars['Boolean']['output'];
   /** Deploy a new version of an app's ck-exec topology: the manifest and any modules it names that were not uploaded before. The execution manager checks the manifest's tree and bounds and each module's digest, stores them, and makes the version active. Running instances of the types it keeps pick it up when they next start; those of a type it drops are persisted and stopped at once, and the type leaves the switched-off list. Requires the org 'manage_compute' permission. */
@@ -5718,6 +5747,8 @@ export type Mutation = {
   mintGridToken: GridTokenResponse;
   /** ORG TOKEN ONLY. Sign one of your organization's own players in and get its app-scoped gameplay token, the same token mintAppToken returns: hand `token` (and the URLs) to the player's device, which plays with it exactly as with any app token and refreshes it with refreshAppToken. Call from your server with `Authorization: Bearer cko_...` (scope players:mint); a request with an Origin header is refused. The player is created on its first sign-in (no email, password or wallet), and each sign-in lasts `sessionTtlSeconds` (default and maximum: the org's settings): after it the device comes back to you. The app must be one of your organization's apps (and in the token's app list, if it has one). Free tiers grant access automatically; a paid tier needs grantAppAccess. Refused with ORG_LEGAL_ACCEPTANCE_REQUIRED until an admin of the organization has accepted the current Org-Managed Players Addendum. Pass the player's ageYears and country, and its region where the country is checked by region: the player is refused TERRITORY_NOT_SUPPORTED in a country or region Crowded Kingdoms does not serve (or without a region it needs), AGE_REQUIRED without an age once players 13 and over are admitted, and AGE_REQUIREMENT_NOT_MET under 13 or under the app's or the country's minimum age (before it is created); that refusal names no age, the same player is refused it for 24 hours whatever is sent, and a player that exists and is said to be under 13 is deleted as deleteManagedPlayer does; its bracket and country are stored on it, and a refresh is refused once its bracket is wholly below the app's minimum. */
   mintManagedPlayerToken: AppTokenResponse;
+  /** ORG TOKEN ONLY. Open a fleet session for one of your organization's game servers: one realtime session the server holds for itself, in which it carries the players who are on it. Call from the server with `Authorization: Bearer cko_...` (scope fleet:session) when the server starts; a request with an Origin header is refused. The answer is the session's token (its signing key; keep it on the server), its gameTokenId, when it expires (24 hours; keep it with refreshFleetSession), how many players it may carry at once (maxPlayers) and the realtime server to connect to. A player still signs in once, when they join the game (mintManagedPlayerToken); the server then carries that player with the player's own token, and a player who moves to another of your servers is carried by that server with no call to this API. The app must be one of your organization's apps (and in the token's app list, if it has one). Refused FORBIDDEN until a Crowded Kingdoms operator has switched fleet sessions on for the organization (orgManagedPlayerSettings.fleetSessionsEnabled), ORG_LEGAL_ACCEPTANCE_REQUIRED until an admin has accepted the current Org-Managed Players Addendum, and FLEET_SESSION_LIMIT when the organization holds as many sessions as it may (maxFleetSessions). Open one session for each game server. */
+  openFleetSession: FleetSession;
   /** Create managed players ahead of their first sign-in, up to 500 a call in one write (creating a player is a cluster-wide commit, so a large import goes in batches). A player that exists is left as it is. Refused with ORG_LEGAL_ACCEPTANCE_REQUIRED until the organization has accepted the current Org-Managed Players Addendum. An org token with players:manage, or an org admin with manage_players. */
   provisionManagedPlayers: ProvisionManagedPlayersResult;
   /** Publishes an app to the shared Application API environment. Free under the org's app-slot quota (result.free = true); beyond the quota, publish still succeeds and metered usage is charged to the org wallet. Requires the 'manage_apps' permission on the app's org. Blocked when SHARED_GAME_API_URL is not configured. */
@@ -5732,6 +5763,8 @@ export type Mutation = {
   recordPlayerConsents: Scalars['Boolean']['output'];
   /** Rotate the calling app token for a fresh one (same app, extended TTL) and revoke the old. Call before the current token expires to keep playing without signing in again. Allowed for app-scoped tokens; re-checks entitlement. NATIVE CLIENTS: pass `currentServer` (the ip4 + clientPort serverWithLeastClients gave you) and the new token is authorized on that same Buddy -- read `authorizedServer` on the response: when it is set, keep your UDP session and just switch tokens; when it is null, call serverWithLeastClients for a fresh placement. `authorizedServer` is null when the node is gone, draining, Full, on the wrong shard -- or when it is NearCapacity / running hot and a Ready sibling has room: a refresh is the cheapest moment to rebalance a resident, so expect to be moved occasionally under load. Without `currentServer` the new token is not known to any Buddy until you call serverWithLeastClients. */
   refreshAppToken: AppTokenResponse;
+  /** ORG TOKEN ONLY. Keep a fleet session: its expiry moves to 24 hours from now, with the same token and gameTokenId, and it is authorized again on a realtime server. Name the server the session is connected to (currentServer) and it stays there while that server still serves the app; leave it out, or name one that no longer serves, and the answer's server is a new one to connect to, which is how a session that a realtime server told to move finds its next server. Call it before expiresAt, from the same server, with the org token that opened the session (scope fleet:session). Refused NOT_FOUND for a session that has expired, was closed, or was opened with another org token: open a new one. The checks of openFleetSession apply again, so a session stops within a day of fleet sessions being switched off. */
+  refreshFleetSession: FleetSession;
   /** Registers a new email + password account: creates the (initially unconfirmed) account, emails a confirmation link, and returns an AuthResponse with a session `token` for immediate use (send as `Authorization: Bearer <token>`). Since 2026-11-11 a gameplay token (mintAppToken, the hosted sign-in) is refused with EMAIL_CONFIRMATION_REQUIRED until the account confirms its address (confirmEmail with the emailed link); dev and test accounts made with a provisioning token are not asked. If an account already exists for the email it is refused with extensions.code EMAIL_ALREADY_REGISTERED (409) and no session is returned: an account that already has a password is left exactly as it was (sign in, or use the emailed reset), and only a password-less account (created via magic link/social) gets the password attached pending email confirmation. It is a routine outcome rather than a fault, and it reached clients as INTERNAL_SERVER_ERROR before v1.60.0, which is why several of them match it by its message text. A browser request (Origin header present) must send acceptLegal and attestAgeOfMajority both true or it is refused with LEGAL_ACCEPTANCE_REQUIRED before an account is created; a request with no Origin may omit them, and gameplay tokens stay refused until the documents are stored. Public; first-party origins only (HOSTED_SIGN_IN_REQUIRED otherwise); rate-limited. */
   register: AuthResponse;
   /** Register the PUBLIC half of a key your organization signs its players' sign-in assertions with (exchangeManagedPlayerAssertion): its kid, algorithm (EdDSA, ES256 or RS256), the JWK, the iss your assertions carry and, if your identity provider sets its own, their aud. The private key never leaves your systems. Requires manage_players on the org. */
@@ -5884,14 +5917,18 @@ export type Mutation = {
   setOrgBillingExempt: BillingExemptOrgType;
   /** Operator only. Exempts an organization from the free-tier card requirement, or ends its exemption, records the change in billing_rate_changes (scope SHARED, metric free_tier_card), and re-evaluates the organization's apps at once. For CK's own organizations; reason is required. */
   setOrgCardRequirementExempt: OrgCardRequirement;
+  /** Operator only. Give an organization its own compute ceiling in place of the platform's default for a funded organization (16,384 instances reserving 65,536 MB for each app in each datacenter), or remove it with clear: true. Each of the organization's apps takes the change within about a minute. Lowering a ceiling stops nothing that runs, and nothing more is placed past it. It applies only while the organization is funded. Reserved memory is billed as before (meteredRateCard). */
+  setOrgComputeCeiling: OrgComputeCeiling;
   /** Operator only. Records a written agreement for a larger free allowance, for whole months starting next month or later, or revokes one (revoke: true with its startMonth). Recorded in billing_rate_changes (scope SHARED, metric free_tier_agreement); next month's level is checked again at once. */
   setOrgFreeTierAgreement: OrgFreeTier;
   /** OPERATOR ONLY. Enable or disable an organization's org-managed players and set its limits. Disabling refuses new sign-ins; sessions already running last until they lapse (end them with endManagedPlayerSessions). Enabling does not accept the addendum: an admin of the organization does that (acceptManagedPlayerTerms). */
   setOrgManagedPlayerSettings: OrgManagedPlayerSettings;
   /** Sets the domain the organization gives as its own (studio.com), or clears it with null. A member's confirmed email address at it, or at one of its subdomains, earns the DOMAIN free tier level; a free email provider's domain is refused (FREE_EMAIL_DOMAIN). Next month's level is checked again at once. Requires the 'manage_billing' org permission. */
   setOrgOwnDomain: OrgFreeTier;
-  /** Saves answers to the organization's project profile. An omitted field keeps its answer; null clears it. When every answer is in, the profile is complete and next month's free tier level is checked again at once (PROFILE). Requires the 'manage_billing' org permission. */
+  /** Saves answers to the organization's project profile. An omitted field keeps its answer; null clears it. When every answer but anythingElse is in, the profile is complete and waits for Crowded Kingdoms' review; approved, it earns the PROFILE free tier level from the start of the next month. Next month's level is checked again at once. Requires the 'manage_billing' org permission. */
   setOrgProjectProfile: OrgProjectProfile;
+  /** Operator only. Records Crowded Kingdoms' decision on an organization's project profile (APPROVED or DECLINED), or clears it (WAITING_FOR_REVIEW). The business side decides in its CRM, whose webhook records the same; this is the operator's path. Recorded in billing_rate_changes (scope SHARED, metric free_tier_profile_review); next month's level is checked again at once. */
+  setOrgProjectProfileReview: OrgProjectProfile;
   /** Super admin only. Freeze ('frozen') or unfreeze ('active') an organization platform-wide. A FROZEN organization grants its members NO org permission (super admins excepted, so it is reversible): they cannot spend its wallet, create or manage apps, or change members, and every such refusal names the freeze; its API tokens stop authenticating; the org itself still resolves by id and slug so Studio can show the state. Takes exactly 'active' or 'frozen'; 'retired' is refused in either direction — retirement is retireOrganization, which writes a tombstone. */
   setOrgStatus: Organization;
   /** Configure the caller's player-wallet auto-recharge: enable/disable, per-period ceiling, recharge amount, and low-water threshold. Enabling requires a vaulted payment method. */
@@ -6143,6 +6180,11 @@ export type MutationClaimGridOwnershipArgs = {
 
 export type MutationClearAppComputeBudgetArgs = {
   appId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationCloseFleetSessionArgs = {
+  input: CloseFleetSessionInput;
 };
 
 
@@ -6474,6 +6516,13 @@ export type MutationExecConnectAsDeveloperArgs = {
 };
 
 
+export type MutationExecConnectAsServerArgs = {
+  appId: Scalars['BigInt']['input'];
+  key?: InputMaybe<Scalars['String']['input']>;
+  nodeType?: InputMaybe<Scalars['String']['input']>;
+};
+
+
 export type MutationExecConsentClientModArgs = {
   appId: Scalars['BigInt']['input'];
   capabilityHash: Scalars['String']['input'];
@@ -6718,6 +6767,11 @@ export type MutationMintManagedPlayerTokenArgs = {
 };
 
 
+export type MutationOpenFleetSessionArgs = {
+  input: OpenFleetSessionInput;
+};
+
+
 export type MutationProvisionManagedPlayersArgs = {
   input: ProvisionManagedPlayersInput;
 };
@@ -6760,6 +6814,11 @@ export type MutationRecordPlayerConsentsArgs = {
 
 export type MutationRefreshAppTokenArgs = {
   currentServer?: InputMaybe<CurrentServerInput>;
+};
+
+
+export type MutationRefreshFleetSessionArgs = {
+  input: RefreshFleetSessionInput;
 };
 
 
@@ -7187,6 +7246,11 @@ export type MutationSetOrgCardRequirementExemptArgs = {
 };
 
 
+export type MutationSetOrgComputeCeilingArgs = {
+  input: SetOrgComputeCeilingInput;
+};
+
+
 export type MutationSetOrgFreeTierAgreementArgs = {
   input: SetOrgFreeTierAgreementInput;
 };
@@ -7205,6 +7269,11 @@ export type MutationSetOrgOwnDomainArgs = {
 
 export type MutationSetOrgProjectProfileArgs = {
   input: SetOrgProjectProfileInput;
+};
+
+
+export type MutationSetOrgProjectProfileReviewArgs = {
+  input: SetOrgProjectProfileReviewInput;
 };
 
 
@@ -7566,6 +7635,12 @@ export type NearbyGridsInput = {
   lowChunk: ChunkCoordinatesInput;
 };
 
+/** The app to open a fleet session in. */
+export type OpenFleetSessionInput = {
+  /** One of the organization's apps (BigInt as a decimal string), in the org token's app list if it has one. */
+  appId: Scalars['BigInt']['input'];
+};
+
 /** One meter of an organization's pooled free allowance this month: how large the pool is and how much of it its apps have used. */
 export type OrgAllowancePool = {
   __typename?: 'OrgAllowancePool';
@@ -7641,6 +7716,29 @@ export type OrgCardRequirement = {
   requiredNow: Scalars['Boolean']['output'];
 };
 
+/** What each of an organization's apps may run of compute modules in one datacenter once the organization is funded: the platform's default, or a ceiling an operator set for this organization. Each app has the whole of it in each datacenter. */
+export type OrgComputeCeiling = {
+  __typename?: 'OrgComputeCeiling';
+  /** The platform's default instances for a funded organization. */
+  defaultMaxInstances: Scalars['Int']['output'];
+  /** The platform's default reserved memory, in MB, for a funded organization. */
+  defaultMaxReservedMb: Scalars['Int']['output'];
+  /** Whether the organization is funded now (a spendable wallet balance, automatic billing or a billing exemption). While it is not, its apps keep the free tier limits whatever this says; execAppStatus reports what an app has. */
+  funded: Scalars['Boolean']['output'];
+  /** Instances one of its apps may have placed at once in one datacenter. */
+  maxInstances: Scalars['Int']['output'];
+  /** Memory, in MB, one of its apps' instances may reserve at once in one datacenter (each instance reserves its type's memory limit times its copies). */
+  maxReservedMb: Scalars['Int']['output'];
+  /** True when an operator set these for this organization; false when they are the platform's default for a funded organization. */
+  operatorSet: Scalars['Boolean']['output'];
+  /** The organization (BigInt as a decimal string). */
+  orgId: Scalars['BigInt']['output'];
+  /** Why the operator set it. Null for the default. */
+  reason: Maybe<Scalars['String']['output']>;
+  /** When the operator set it. Null for the default. */
+  updatedAt: Maybe<Scalars['DateTime']['output']>;
+};
+
 /** Where an organization stands on the free tier ladder: this month's level, next month's, and which conditions it meets now. A level it reaches applies from the start of the next month. */
 export type OrgFreeTier = {
   __typename?: 'OrgFreeTier';
@@ -7661,6 +7759,8 @@ export type OrgFreeTier = {
   orgId: Scalars['BigInt']['output'];
   /** The domain the organization gives as its own. */
   ownDomain: Maybe<Scalars['String']['output']>;
+  /** Where the project profile stands. PROFILE is met while it is APPROVED. */
+  profileStatus: ProjectProfileStatus;
   thisMonth: OrgFreeTierMonth;
 };
 
@@ -7700,6 +7800,12 @@ export type OrgManagedPlayerSettings = {
   defaultSessionTtlSeconds: Scalars['Int']['output'];
   /** Whether the org may sign its own players in (mintManagedPlayerToken, exchangeManagedPlayerAssertion). */
   enabled: Scalars['Boolean']['output'];
+  /** Whether the organization's game servers may open fleet sessions (openFleetSession): one realtime session a server, carrying the server's players. An operator switches it on; it needs org-managed players enabled too. */
+  fleetSessionsEnabled: Scalars['Boolean']['output'];
+  /** Players one fleet session may carry at once (256 unless an operator set another, 1 to 1,024). A session that is already open takes the new number at its next refresh; the maxPlayers of an open or refresh answer is the one that applies. */
+  maxFleetPlayers: Scalars['Int']['output'];
+  /** Fleet sessions the organization may hold at once, over all its apps (512 unless an operator set another, 1 to 65,536). An organization grows by adding game servers, so an operator raises this when it needs more. */
+  maxFleetSessions: Scalars['Int']['output'];
   /** How many managed players the org may hold. */
   maxPlayers: Scalars['BigInt']['output'];
   /** The longest sign-in the org may ask for (seconds). */
@@ -7764,10 +7870,16 @@ export type OrgPermission = {
   permissionKey: Scalars['ID']['output'];
 };
 
-/** The organization's six-question project profile. Complete, it earns the PROFILE free tier level. */
+/** The organization's project profile: seven questions, the last optional. Complete and approved by Crowded Kingdoms, it earns the PROFILE free tier level. */
 export type OrgProjectProfile = {
   __typename?: 'OrgProjectProfile';
-  /** When every answer was in; null while any is missing. */
+  /** AI agents that act in one world at launch. */
+  agentsPerWorldLaunch: Maybe<Scalars['Int']['output']>;
+  /** AI agents that act in one world a year on. */
+  agentsPerWorldYear1: Maybe<Scalars['Int']['output']>;
+  /** Anything else the organization wants Crowded Kingdoms to know. Optional. */
+  anythingElse: Maybe<Scalars['String']['output']>;
+  /** When every answer was in; null while any is missing. anythingElse is optional. */
   completedAt: Maybe<Scalars['DateTime']['output']>;
   /** The networking it uses today. */
   currentNetworking: Maybe<Scalars['String']['output']>;
@@ -7779,19 +7891,25 @@ export type OrgProjectProfile = {
   launchDate: Maybe<Scalars['DateTime']['output']>;
   logicLocation: Maybe<ProjectLogicLocation>;
   orgId: Scalars['BigInt']['output'];
-  /** Players each one sees at launch. */
+  /** Players and AI agents that see or interact with each other at once, at launch. */
   playersInViewLaunch: Maybe<Scalars['Int']['output']>;
-  /** Players each one sees a year on. */
+  /** Players and AI agents that see or interact with each other at once, a year on. */
   playersInViewYear1: Maybe<Scalars['Int']['output']>;
   /** Players in one world at launch. */
   playersPerWorldLaunch: Maybe<Scalars['Int']['output']>;
   /** Players in one world a year on. */
   playersPerWorldYear1: Maybe<Scalars['Int']['output']>;
-  /** Whether Crowded Kingdoms may name the studio as a reference. */
+  /** Whether Crowded Kingdoms may name the organization as a customer at launch. */
   referenceConsent: Maybe<Scalars['Boolean']['output']>;
+  /** When Crowded Kingdoms approved or declined the profile; null while it waits. */
+  reviewedAt: Maybe<Scalars['DateTime']['output']>;
   stage: Maybe<ProjectStage>;
+  /** True when the organization is starting from scratch, with no networking to replace. It answers the networking question in place of currentNetworking and its cost. */
+  startingFromScratch: Maybe<Scalars['Boolean']['output']>;
+  /** INCOMPLETE, WAITING_FOR_REVIEW, APPROVED or DECLINED. Crowded Kingdoms reviews a complete profile before the PROFILE level applies, and promises no time for it. */
+  status: ProjectProfileStatus;
   updatedAt: Maybe<Scalars['DateTime']['output']>;
-  /** What the game is. */
+  /** What the organization is building: a game, an experience or another application. */
   whatBuilding: Maybe<Scalars['String']['output']>;
   worldShape: Maybe<ProjectWorldShape>;
 };
@@ -8599,11 +8717,23 @@ export enum PriceBandBasis {
   Volume = 'VOLUME'
 }
 
-/** Where the game's logic runs: on the clients, in light server code, or in a full server simulation. */
+/** Where the project's logic runs: on the clients, in light server code, or in a full server simulation. */
 export enum ProjectLogicLocation {
   Clients = 'CLIENTS',
   FullServerSimulation = 'FULL_SERVER_SIMULATION',
   LightServerCode = 'LIGHT_SERVER_CODE'
+}
+
+/** Where an organization's project profile stands. The PROFILE free tier level needs it APPROVED. */
+export enum ProjectProfileStatus {
+  /** Crowded Kingdoms approved it: the PROFILE level applies from the start of the next month. */
+  Approved = 'APPROVED',
+  /** Crowded Kingdoms declined it: the organization has the level its other conditions give it. */
+  Declined = 'DECLINED',
+  /** An answer is missing (anythingElse is optional). */
+  Incomplete = 'INCOMPLETE',
+  /** Every answer is in, and Crowded Kingdoms has not decided yet. */
+  WaitingForReview = 'WAITING_FOR_REVIEW'
 }
 
 /** The project's stage. */
@@ -8615,7 +8745,7 @@ export enum ProjectStage {
   Prototype = 'PROTOTYPE'
 }
 
-/** Whether the game is one world with everyone in it or many copies of a small one. */
+/** Whether the project is one shared world or many copies of a small one. */
 export enum ProjectWorldShape {
   ManyCopies = 'MANY_COPIES',
   OneWorld = 'ONE_WORLD',
@@ -9047,6 +9177,8 @@ export type Query = {
   orgAutoBilling: OrgAutoBilling;
   /** Where an organization stands against the free-tier card requirement: from when it applies to this organization, and whether the organization has a saved card or an exemption. Studio reads it to ask for a card. Requires the 'view_billing' org permission. */
   orgCardRequirement: OrgCardRequirement;
+  /** What each of the organization's apps may run of compute modules in one datacenter once it is funded: instances placed at once and the memory they reserve, and whether an operator set them for this organization. Requires view_compute_diagnostics on the org (super-admins and operators bypass). Read-only. */
+  orgComputeCeiling: OrgComputeCeiling;
   /**
    * An org's free shared-app slot quota and how much of it is used. The slots are a count only: they never change what is free or billed, and apps beyond the quota still publish. Caller must be a member of the org.
    * @deprecated Free app slots are retired. From allowancePool.effectiveFrom an organization's apps share one free allowance a month; read orgUsageProjection.allowancePools. Before then each app has its own allowance whatever its slot.
@@ -9939,6 +10071,11 @@ export type QueryOrgCardRequirementArgs = {
 };
 
 
+export type QueryOrgComputeCeilingArgs = {
+  orgId: Scalars['BigInt']['input'];
+};
+
+
 export type QueryOrgFreeAppQuotaArgs = {
   orgId: Scalars['BigInt']['input'];
 };
@@ -10308,6 +10445,16 @@ export type RecordPlayerAgeInput = {
   country: Scalars['String']['input'];
   /** True when a player under 18 confirms that a parent or guardian agreed to their account. Required true under 18; ignored at 18 or over. */
   parentalConfirmation?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+/** The fleet session to keep, and where it is connected. */
+export type RefreshFleetSessionInput = {
+  /** The app the session is in (BigInt as a decimal string). */
+  appId: Scalars['BigInt']['input'];
+  /** The realtime server the session is connected to (the ip4 and clientPort it was given). When that server still serves the app the session stays on it. Leave it out, or name one that no longer serves, and the answer names a new server to connect to: use that after a realtime server told the session to move. */
+  currentServer?: InputMaybe<CurrentServerInput>;
+  /** The session's gameTokenId, from openFleetSession. */
+  gameTokenId: Scalars['BigInt']['input'];
 };
 
 export type RegisterOrgSigningKeyInput = {
@@ -11084,6 +11231,20 @@ export type SetMemberRolesInput = {
   userId: Scalars['BigInt']['input'];
 };
 
+/** An organization's own compute ceiling, or its return to the platform's default. */
+export type SetOrgComputeCeilingInput = {
+  /** True to remove the organization's own ceiling, so its apps go back to the platform's default. */
+  clear?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Instances one of its apps may have placed at once in one datacenter, 1 to 1,048,576. Required unless clear is true. */
+  maxInstances?: InputMaybe<Scalars['Int']['input']>;
+  /** Memory, in MB, one of its apps' instances may reserve at once in one datacenter, 1 to 4,194,304. Required unless clear is true. */
+  maxReservedMb?: InputMaybe<Scalars['Int']['input']>;
+  /** The organization (BigInt as a decimal string). */
+  orgId: Scalars['BigInt']['input'];
+  /** Why, kept with the ceiling. */
+  reason: Scalars['String']['input'];
+};
+
 /** Operator only: records a written agreement for a larger free allowance (whole months, starting next month or later), or revokes one. */
 export type SetOrgFreeTierAgreementInput = {
   /** The first instant of the last UTC month it covers. Required unless revoke. */
@@ -11102,14 +11263,26 @@ export type SetOrgFreeTierAgreementInput = {
 export type SetOrgManagedPlayerSettingsInput = {
   defaultSessionTtlSeconds?: InputMaybe<Scalars['Int']['input']>;
   enabled: Scalars['Boolean']['input'];
+  /** Whether the organization's game servers may open fleet sessions (openFleetSession). Left out, it stays as it is (off for an organization never given it). Switching it off, or switching the organization's managed players off, ends the fleet sessions it holds. */
+  fleetSessionsEnabled?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Players one fleet session may carry at once: 1 to 1,024 (256 for an organization never given another). Left out, it stays as it is. It applies to a session when it is opened and again at each refresh. */
+  maxFleetPlayers?: InputMaybe<Scalars['Int']['input']>;
+  /** Fleet sessions the organization may hold at once, over all its apps: 1 to 65,536 (512 for an organization never given another). Left out, it stays as it is. */
+  maxFleetSessions?: InputMaybe<Scalars['Int']['input']>;
   maxPlayers?: InputMaybe<Scalars['BigInt']['input']>;
   maxSessionTtlSeconds?: InputMaybe<Scalars['Int']['input']>;
   mintsPerMinute?: InputMaybe<Scalars['Int']['input']>;
   orgId: Scalars['BigInt']['input'];
 };
 
-/** Answers to the project profile. An omitted field keeps its answer; null clears it. Complete when every answer is in. */
+/** Answers to the project profile. An omitted field keeps its answer; null clears it. Complete when every answer but anythingElse is in; startingFromScratch true answers the networking question. */
 export type SetOrgProjectProfileInput = {
+  /** AI agents that act in one world at launch; 0 when none do. */
+  agentsPerWorldLaunch?: InputMaybe<Scalars['Int']['input']>;
+  /** AI agents that act in one world a year on; 0 when none do. */
+  agentsPerWorldYear1?: InputMaybe<Scalars['Int']['input']>;
+  /** Optional; 2,000 characters at most. */
+  anythingElse?: InputMaybe<Scalars['String']['input']>;
   /** 2,000 characters at most. */
   currentNetworking?: InputMaybe<Scalars['String']['input']>;
   /** US cents a month, 0 to 2,000,000,000. */
@@ -11126,9 +11299,21 @@ export type SetOrgProjectProfileInput = {
   playersPerWorldYear1?: InputMaybe<Scalars['Int']['input']>;
   referenceConsent?: InputMaybe<Scalars['Boolean']['input']>;
   stage?: InputMaybe<ProjectStage>;
-  /** What the game is (2,000 characters at most). */
+  /** True when starting from scratch: it answers the networking question in place of currentNetworking and its cost. */
+  startingFromScratch?: InputMaybe<Scalars['Boolean']['input']>;
+  /** What the organization is building: a game, an experience or another application (2,000 characters at most). */
   whatBuilding?: InputMaybe<Scalars['String']['input']>;
   worldShape?: InputMaybe<ProjectWorldShape>;
+};
+
+/** Operator only: Crowded Kingdoms' decision on an organization's project profile, or back to waiting for review. */
+export type SetOrgProjectProfileReviewInput = {
+  /** Organization id. */
+  orgId: Scalars['BigInt']['input'];
+  /** Why, for the audit (billing_rate_changes). */
+  reason: Scalars['String']['input'];
+  /** APPROVED or DECLINED, or WAITING_FOR_REVIEW to clear the decision. INCOMPLETE is refused. */
+  status: ProjectProfileStatus;
 };
 
 /** A change to when the player trial is per organization. */

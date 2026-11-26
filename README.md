@@ -34,6 +34,7 @@ so it needs that Application API or newer; promote the Application API before th
 
 | CrowdyJS | Needs the Application API (ck-api) |
 | --- | --- |
+| 18.40.0 | as 18.39.0; `client.fleetSessions` and `exec.connectAsServer` need v2.89.0 or later (see [Game servers: fleet sessions](#game-servers-fleet-sessions)) |
 | 18.39.1 | as 18.39.0 |
 | 18.39.0 | v2.85.0 or later (selects `applicationApiUrl`, `applicationApiWsUrl` and `platformConfig`'s `sharedApplicationApi*`; the `gameApi*` names stay as deprecated aliases until January 1, 2027) |
 | 18.33.0 | v2.73.0 or later (exec's mod builds, mods and CLIENT halves select `studioProjectId` and `studioRevision`; `exec.modClientStarter`, `crowdyStudio.links`) |
@@ -471,13 +472,14 @@ is refused `FORBIDDEN`.
 | `client.kit(appId)` | Game Kit: typed clients for the ck-exec starter hubs (world, matchmaking, sessions, NPCs and pets) on one shared connection, their topology, realtime conventions, and parties, guilds and chat (`kit.social`) — see [Game Kit](#game-kit). |
 | `createWorldSession(client, appId, config)` | World Stores: opt-in, SDK-managed game state from the `@crowdedkingdoms/crowdyjs/stores` subpath — see [World Stores](#world-stores). |
 
-**Studio-admin surface** (privileged; drive with an org admin's session, or an org token for the managed-player calls,
-grouped under `client.admin` and mirrored at the top level):
+**Studio-admin surface** (privileged; drive with an org admin's session, or an org token for the managed-player calls
+and the fleet session calls, grouped under `client.admin` and mirrored at the top level):
 
 | Sub-client | What it does |
 |---|---|
 | `client.organizations` | Orgs, members, RBAC roles, org API tokens (with `scopes` and `appIds` for org-managed players). |
 | `client.managedPlayers` | Org-managed players: list, provision, rename, disable, end sessions, delete; assertion signing keys; whether the org pays for their mods in an app; where the org stands on the addendum. See [Org-managed players](#org-managed-players). |
+| `client.fleetSessions` | For an organization's own game servers (18.40.0): `open`, `refresh`, and `close` a fleet session with the organization's org token. The session itself is `FleetSession` from `@crowdedkingdoms/crowdyjs/fleet` (Node), and `client.exec.connectAsServer` opens the server's hub connection. An org token and a fleet token stay on a server your organization runs. See [Game servers: fleet sessions](#game-servers-fleet-sessions). |
 | `client.apps` | App registry, discovery + routing (`create`, `routeFor`, `marketplace`), visibility, and player-code admission mode / allow-list administration. The safety log's state for players (`recording`, readable with an app token) and the app's own documents (`setRequiredDocuments`). |
 | `client.moderation` | An app's safety reports for its moderators (`moderate_safety`): `reports`, `resolveReport`, `escalateReport`. See [Player safety](#player-safety). |
 | `client.appAccess` | Access tiers + per-user grants, and the feature keys a tier grants (`defineFeature`, `grantTierFeature`, `tierFeatures`, …), which a hub checks with the node API's `players.features`; timed bans (`suspend`, `unsuspend`) and `resyncTierGridPermissions`. |
@@ -1196,6 +1198,381 @@ grid's owner is asked about their own CLIENT halves like anyone; answer yes in `
 `prompt.authorId` is the player. See
 [CLIENT halves](https://docs.dev.crowdedkingdoms.com/exec/client-halves).
 
+## Game servers: fleet sessions
+
+A fleet session is one realtime session that a game server opens for itself and uses for
+every player on that server. A player signs in once, when they join the game. When the
+player moves to another of your servers, that server starts to carry them with one UDP
+message, and neither server calls the Application API.
+
+**A fleet session runs on a server your organization runs.** Your organization's org token
+opens it, and its fleet token signs for every player the session carries. An org token and a
+fleet token never go into a browser page or a game client. A game on a player's device uses
+`client.udp` with that player's own app token.
+
+**SDK 18.40.0 carries fleet sessions.** They need Application API v2.89.0 or later, realtime
+servers v0.50.3, and ck-exec 0.25.0 for the hub connection. All three have been on dev,
+test, and prod since November 26, 2026. Fleet sessions stay off for an organization until a
+Crowded Kingdoms operator switches them on, and the organization also needs
+[org-managed players](#org-managed-players). Until then, the Application API refuses
+`fleetSessions.open` with `FORBIDDEN`.
+
+The session is `FleetSession`, from the Node entry point `@crowdedkingdoms/crowdyjs/fleet`.
+It talks to the realtime server over UDP (`node:dgram`), which a page cannot open, so no
+other entry point of the package imports it. Importing it where `node:dgram` does not exist
+throws.
+
+```ts
+import { createCrowdyClient } from '@crowdedkingdoms/crowdyjs';
+import { FleetSession } from '@crowdedkingdoms/crowdyjs/fleet';
+
+// A client for this server, holding the org token (cko_…, scope fleet:session).
+// Give it no tokenStore: the org token stays where your server keeps its secrets.
+const api = createCrowdyClient({ httpUrl: 'https://ck.dev.crowdedkingdoms.com' });
+api.setToken(process.env.CK_ORG_TOKEN);
+
+const fleet = new FleetSession({
+  session: await api.fleetSessions.open(appId), // one session for each game server
+  handlers: {
+    actorUpdate: (n) => world.apply(n), // state arrives once for the session
+    text: (n, players) => players?.forEach((p) => chat.deliver(p, n)), // only these players
+    released: (r) => roster.remove(r.playerGameTokenId), // the platform ended a carry
+  },
+});
+await fleet.connect();
+
+// A player joined this server. `player` is the app token your server minted for them
+// (mintManagedPlayerToken): its token and its gameTokenId.
+const carry = await fleet.carry({ token: player.token, gameTokenId: player.gameTokenId });
+if (carry.carried) {
+  await fleet.sendActorUpdate(player.gameTokenId, { chunk, uuid, state });
+}
+
+// The player left the game.
+await fleet.release(player.gameTokenId);
+
+// In your loop: keep the session, and follow it to another realtime server.
+if (fleet.refreshDue()) {
+  await fleet.applyRefresh(await api.fleetSessions.refresh(fleet.refreshInput()));
+}
+
+// The server stops.
+await api.fleetSessions.close({ appId: fleet.appId, gameTokenId: fleet.gameTokenId });
+fleet.close();
+```
+
+### The org token that opens a session keeps it and ends it
+
+`client.fleetSessions` (also `client.admin.fleetSessions`) wraps the three Application API
+calls. Each takes the org token as the client's bearer. Each refuses to run in a browser
+page or a page's worker: it runs on Node, Bun, Deno, and server-side workers (the Cloudflare
+Workers runtime and Vercel's Edge Runtime).
+
+| Call | Application API | Answer |
+| --- | --- | --- |
+| `open(appId)` | `openFleetSession` | `token` (64 characters), `gameTokenId`, `appId`, `expiresAt` (24 hours away), `maxPlayers`, and the realtime `server` (`ip4`, `ip6`, `clientPort`) |
+| `refresh({ appId, gameTokenId, currentServer? })` | `refreshFleetSession` | The same token and `gameTokenId`, with `expiresAt` moved to 24 hours from now |
+| `close({ appId, gameTokenId })` | `closeFleetSession` | `true` when a session was ended |
+
+- **One org token owns a session.** `refresh` and `close` work with the org token that
+  opened the session. Another org token of the same organization gets `NOT_FOUND` from
+  `refresh` and `false` from `close`.
+- **Revoking an org token ends what it opened:** every fleet session and every hub
+  connection.
+- **A session ends at its `expiresAt`** when it is neither refreshed nor closed: 24 hours
+  after it was opened or last refreshed.
+- **Limits.** An organization holds at most 512 fleet sessions at once, and a session
+  carries at most 256 players, unless an operator set other numbers for the organization.
+  The answer's `maxPlayers` is the session's own number. Open one session for each game
+  server.
+- **The fleet token is a signing key.** The Application API does not accept it as a bearer.
+
+`FleetSession` makes no Application API call. A server that calls the API with its own HTTP
+client gives `FleetSession` the same fields.
+
+### Carrying a player takes one message and proof of the player's token
+
+`fleet.carry({ token, gameTokenId })` sends `FLEET_CARRY`. The message names the player's
+`gameTokenId` and carries a proof that your server holds the player's token: an HMAC keyed
+with that token over the session's `gameTokenId`, the player's `gameTokenId`, and the time.
+The promise resolves with how the carry ended:
+
+| `status` | Meaning |
+| --- | --- |
+| `carried` | The session carries the player. `userId` is the player's user id. |
+| `noLiveToken` | The realtime servers know no live token by that id: it expired, the sign-in ended, or it belongs to another app. The session asked twice before it settled on this answer. |
+| `otherOrganization` | The token belongs to another organization's player. |
+| `proofFailed` | The proof or its time failed. A clock more than 30 seconds from the server's fails too. |
+| `sessionFull` | The session carries as many players as it may (`maxPlayers`). |
+| `timedOut` | No answer came within 5 seconds of the first send. |
+| `refused` | A status this version of the SDK does not know. `wireStatus` has the byte. |
+| `tableFull` | Nothing was sent: the session's table already holds `maxPlayers` rows and 32 more, carried players and waiting carries together. Release players who left. |
+| `released`, `closed` | You called `release` for the player, or `close`, while the carry was waiting. |
+
+- **An unanswered carry is sent again** every 250 ms, each time with a new time and a new
+  proof (`carryRetryMs`, `carryTimeoutMs`).
+- **A carry answered "no live token" is sent once more**, 250 ms later, with a new time and
+  a new proof. The promise settles on the answer to that second send.
+- **Carries are paced.** The session sends at most 60 `FLEET_CARRY` messages a second, first
+  sends and retries together (`maxCarriesPerSecond`). The realtime servers drop a session's
+  carries past 64 a second without an answer.
+- **A crossing is a carry on the next server.** Stop sending for the player on this server,
+  then give the next server the player's token over your own link. Its session carries the
+  player, and this session's `released` handler fires with reason 1.
+- **After you refresh a player's token**, call
+  `carry({ token, gameTokenId, replaces })` with the new token, the new `gameTokenId`, and
+  the `gameTokenId` the player was carried under as `replaces`. The next section covers
+  what happens to the player's sends meanwhile.
+- **`fleet.release(gameTokenId)`** sends `FLEET_RELEASE` when the player leaves the game.
+  The message has no answer. If it is lost, the carry stays on the platform until another
+  session carries the player, their sign-in ends, or they idle out.
+
+The `released` handler reports a carry the platform ended, with its reason: 1 another
+session carries the player, 2 the player's sign-in ended or their token expired, 5 the
+player sent no gameplay input for the app's idle timeout (15 minutes unless the app sets its
+own).
+
+The platform sends `FLEET_RELEASED` once. The message can be lost, and it can arrive up to
+about 6 seconds after the carry ended, so `released` may fire late or never. After a
+crossing, `UNAUTHORIZED` on the previous server's next send for the player is the sign that
+the other session carries them. For a few milliseconds after a crossing, and rarely for up
+to about 5 seconds, the previous session's sends for the player are still accepted, which
+is why your server stops sending before it hands the player off.
+
+### A refreshed token replaces the old one with no gap
+
+A player's token expires. Whoever holds the token refreshes it with `refreshAppToken`
+before then, and the answer has a new token and a new `gameTokenId`. Carry the player again
+with both, and name the id the player is carried under now:
+
+```ts
+const result = await fleet.carry({
+  token: refreshed.token,
+  gameTokenId: refreshed.gameTokenId,
+  replaces: previousGameTokenId,
+});
+```
+
+- **The player stays carried throughout.** The carry made with the old token stands until
+  the new one takes effect, and the player keeps their actors and their idle clock. No
+  `released` event fires.
+- **Every send names the new id from the moment the new `FLEET_CARRY` is sent.** The session
+  does this for you: a send you make with either id goes out under the old id before that
+  moment and under the new id after it. A send that names the new id and arrives before
+  the carry took effect waits for the carry.
+- **Use the new id once the promise resolves `carried`.** From then on the old id names
+  nobody: a send with it rejects with `FleetNotCarriedError`, and `fleet.carries` answers
+  false for it.
+- **A late message about the old id changes nothing.** The session ignores a
+  `FLEET_RELEASED` or a carry's answer that names an id it replaced, and counts it
+  (`replacedIdFrames` in `fleet.stats()`).
+- **A refused replacement leaves the player carried under the old id** until the platform
+  ends that carry, which the `released` handler reports. A replacement with no answer in 5
+  seconds ends the carry under both ids, and the promise resolves `timedOut`.
+
+A `carry` with a new token and no `replaces` also ends with the player carried under the
+new id, with a gap on the way. The session learns that the two tokens are one player only
+from the carry's answer. Until that answer arrives its sends name the old id, and the
+platform refuses the ones that arrive after the new carry took effect. Pass `replaces`.
+
+### Each send names the player it is for
+
+The sends of `client.udp` have a `FleetSession` form that takes the carried player's
+`gameTokenId` first: `sendActorUpdate`, `sendVoxelUpdate`, `sendClientEvent`,
+`sendTextPacket`, `sendAudioPacket`, `sendVideoPacket`, `sendGenericSpatial`,
+`sendSingleActorMessage`, `sendChannelMessage`, `sendChannelAudio`,
+`sendRangedChannelMessage`, and `setSpeakers`. `sendHeartbeat` keeps one of the player's
+actors present. Each send resolves with the sequence number it was sent under.
+
+- **The message is the one that player's own session would send.** Its tail carries the
+  player's `gameTokenId`, and its HMAC is keyed with the fleet token.
+- **The platform applies the player's own rules** to it: their permissions, blocks, age
+  rules, speaker lists, and a budget of 500 messages a second with bursts to 1,000.
+- **A send for a player the session does not carry** rejects with `FleetNotCarriedError`
+  and puts nothing on the wire.
+- **Under its own `gameTokenId` the session sends four kinds of message:** its capabilities,
+  `FLEET_CARRY`, `FLEET_RELEASE`, and its keepalive. The realtime servers answer any other
+  `UNAUTHORIZED`.
+
+The session keeps itself alive with a heartbeat every 2 seconds (`keepAliveIntervalMs`). It
+also keeps a carried player's actors present: an actor you sent an update for gets a
+heartbeat under the player's id after 2 seconds without a message (`actorHeartbeatMs`),
+until you call `fleet.forgetActor(player, uuid)` or the carry ends. A heartbeat is not
+gameplay input, and neither is voice or video. A carried player who sends no gameplay input
+for the app's idle timeout is released with reason 5, and the session stays.
+
+### State arrives once, and a delivery names its players
+
+Each handler receives the notification and the players it is for.
+
+- **State arrives once for the session**, with `players` null, when at least one carried
+  player may receive it: actor updates and departures, voxel edits, events, app-defined
+  spatial messages, and chunk changes. A carried player is in range of something once one
+  of their actors stands near it: a session whose players have no actor yet is sent no
+  state.
+- **Communications arrive with a list** of the carried players who may receive them, at
+  most 32 in one message: spatial voice, text and video, direct messages, channel messages,
+  and channel audio. Deliver each to the listed players and to nobody else. A block, an age
+  rule, a speaker list, or a missing permission takes a player off the list.
+- **A client's event or an app-defined spatial message** arrives with a list when only some
+  of your players in range may receive it, and plain when all of them may.
+- **Your own players' state is not sent back to you.** `fleetOwnState: true` (or
+  `fleet.setFleetOwnState(true)`) asks for it when another of your players is in range.
+  With it off, two things still reach the session that caused them: a voxel edit it sent,
+  and the departure of its own player's actor.
+- **State about a player you carry is stale.** Your server is the authority on its own
+  players. Just after a crossing, the session can receive a few updates for the player it
+  now carries that the previous server sent a moment before. Drop state whose actor belongs
+  to a player the session carries.
+
+`FleetSession` verifies everything it receives with the fleet token before a handler runs,
+and no option turns that off. A frame that fails is dropped and counted in `fleet.stats()`
+(`hmacFailures`, `unsigned`, `malformed`). A notification that names another app than the session's is dropped and counted
+too (`wrongApp`), since a session is in one app. The one exception is a refusal of a send,
+which the next section covers. The largest datagram a fleet session is sent is 1,242 bytes.
+
+### A refused send is signed, and the handler says so
+
+The `genericError` handler receives a refused send and a second argument, `verified`. A
+refusal is 3 bytes: the message type, the sequence number of the send, and a code. It names
+no player, so match its sequence number against the numbers your sends resolved with.
+
+- **`verified` is true for a refusal that arrived inside a bundle the session verified with
+  the fleet token.** Realtime servers from v0.50.3 send a fleet session every refusal that
+  way.
+- **`verified` is false for a refusal that arrived alone.** 3 bytes leave no room for a
+  signature, so anyone who can reach the session's socket could have sent it. Treat one as
+  a hint: stop sending for that player, then carry the player again or check their access
+  through the Application API, and act on that answer. A carry's answer is always verified.
+- **The session changes nothing on a refusal**, whatever its code and whether or not it is
+  verified. Your code decides what a refusal means for the player.
+- **`TOKEN_EXPIRED` is about a carried player's token.** A send that lands just before the
+  player's token expires is answered `TOKEN_EXPIRED`, and `released` follows with reason 2.
+  The fleet token's own expiry reaches the `sessionReleased` handler with reason 2, in a
+  signed message.
+
+`UNAUTHORIZED` has nine causes, and the refusal does not say which one applies:
+
+| Why the send was refused | What to do |
+| --- | --- |
+| It names the player's previous `gameTokenId` after a carry with a refreshed token took effect | `FleetSession` names the new id for you. With the codecs alone, name the new id. |
+| The session no longer carries the player: you released them, they idled out, their sign-in ended, or another session carries them | Carry the player again if your server should still serve them. |
+| The player lacks a permission the message needs: access to the app, voice, video, text, direct messages, or voxel writes | Grant the permission, or stop sending that kind of message for the player. |
+| The platform could not read the permissions for that part of the world within 2 seconds, or too many sends were waiting for them | Send again. |
+| The actor belongs to another player | Send for an actor only under the player who owns it. |
+| The platform could not confirm whose actor it is within 2 seconds | Send again. |
+| A communication rule refuses the message: a minor's direct message, or a kind of communication that is switched off | Nothing. The message is not delivered. |
+| The player's access to the app was suspended or ended | Stop serving the player. |
+| The message went under the session's own `gameTokenId` and is not one of its four kinds | Send it under a carried player's id. `FleetSession` never sends one. |
+
+Three other outcomes of a send are not `UNAUTHORIZED`:
+
+- **A player over their message budget** gets no answer. The message is dropped.
+- **A player whose token expired** gets `TOKEN_EXPIRED`, then `released` with reason 2.
+- **A paused app** gets `APP_PAUSED`.
+
+### The session refreshes before it expires, and follows a move
+
+`fleet.refreshDue()` is true once 12 of the session's 24 hours have passed. It is also true
+as soon as the realtime server tells the session to connect to another server, releases it,
+or says nothing for 45 seconds (the `moveOrdered` and `sessionReleased` handlers). Call
+`refreshFleetSession` then, with `fleet.refreshInput()`, and give the answer to
+`fleet.applyRefresh`.
+
+The realtime server signs both messages, and the session acts on them only after it has
+verified them. `sessionReleased` carries a reason: 0 means the fleet token was revoked (the
+session was closed through the Application API, or its organization token was revoked), 2
+means the fleet token expired, and 1, 3, and 4 mean the server stopped serving the session
+(it heard nothing from the session, it shed load, or it moved the session). Every reason
+makes a refresh due.
+
+- **`refreshInput()` names the server the session is on**, so the session stays there
+  while that server still serves the app. After a move order it names no server, and the
+  answer's `server` is the next one.
+- **The same server:** the carries stand. The session sends its capabilities at once,
+  because after a refresh the server sends the session nothing until it hears from it.
+- **Another server**, or the same one after it released the session or went quiet: the
+  session connects, sends its capabilities, and carries every player again with a new time
+  and proof, paced as above. Until a player's answer arrives, sends for that player reject
+  with `FleetNotCarriedError`. Each answer reaches the `carryResult` handler.
+- **A refresh refused `NOT_FOUND`** means the session ended. Open a new one and carry your
+  players again.
+- **A session closed through the Application API is told.** If `closeFleetSession` ends a
+  session while its `FleetSession` is still open, the realtime server sends it a signed
+  release with reason 0 within seconds: `sessionReleased` fires, `refreshDue()` turns true,
+  and `refreshFleetSession` then answers `NOT_FOUND`. Open a new session and carry your
+  players again. That one message can be lost. The session also sends its capabilities
+  every 15 seconds and expects a signed acknowledgement of each, so about 45 seconds after
+  the close (`silenceTimeoutMs`) `refreshDue()` turns true and `moveOrdered` fires in any
+  case.
+
+### The server connects to hubs as itself
+
+`client.exec.connectAsServer(appId)` opens one hub connection for the game server, with the
+org token as the client's bearer. Its plain calls are the server's own, and `callAs` makes a
+call for one of your players:
+
+```ts
+const hubs = await api.exec.connectAsServer(appId);
+
+await hubs.call('lobby', '', 'report', { players: roster.size }); // the server's own call
+await hubs.callAs(carry.userId, 'player', playerKey, 'grant', { gold: 10 }); // for a player
+```
+
+- **A hub sees `Caller::Org`**, with the player the server named or none. Crowded Kingdoms
+  checks that the connection is your organization's. The player a call names is your
+  organization's word, so a hub treats `Caller::Org { player }` as "this organization's
+  server says so".
+- **`player` is the player's user id** (`FleetCarryResult.userId`), as a `bigint`, a decimal
+  string, or a safe integer.
+- **Limits.** A server connection has a budget of 2,000 calls a second, and an organization
+  holds at most 256 server connections to one app on one execution host.
+- **Hubs built with ckx-sdk before 0.15** answer such a call `Denied` until they are built
+  again.
+- **On any other connection `callAs` is refused locally** with `Denied`, and nothing is
+  sent.
+- **The connection reconnects** with a fresh server connect token, as a player's does.
+  `onAccessEnded` fires when the org token is revoked or fleet sessions are switched off.
+  On Node before 22, pass `{ WebSocket }` from the `ws` package, as for `connect`.
+
+### Refusals carry a code
+
+The four calls raise `CrowdyGraphQLError`. Branch on `extensions.code` with these readers:
+
+| `extensions.code` | Meaning | Reader |
+| --- | --- | --- |
+| `ORG_TOKEN_REQUIRED` | The bearer is not an org token | `orgTokenRequiredOf(err)` |
+| `ORG_TOKEN_NOT_ALLOWED` | The request came from a browser (it carried an `Origin` header) | `err.code` |
+| `FLEET_SESSION_LIMIT` | `open`: the organization holds as many sessions as it may | `fleetSessionLimitOf(err)` |
+| `NOT_FOUND` | `refresh`: the session expired, was closed, or was opened with another org token | `fleetSessionNotFoundOf(err)` |
+| `PLATFORM_BUSY` | The platform could not start the call in time. Wait `retryAfterMs`, then call again | `platformBusyOf(err)` |
+| `ORG_LEGAL_ACCEPTANCE_REQUIRED` | An admin has not accepted the current Org-Managed Players Addendum | `orgLegalAcceptanceRequiredOf(err)` |
+| `FORBIDDEN` | Fleet sessions are not switched on for the organization, or the org token lacks the `fleet:session` scope | `err.code` |
+| `SCOPE_MISSING` | The app is not in the org token's app list | `err.code` |
+
+### Keep the tokens out of your logs, and know what a replay can do
+
+- **Never log the answers of `fleetSessions.open`, `fleetSessions.refresh`, or
+  `exec.serverEndpoint`.** The first two contain the fleet token, and the third contains a
+  hub connect token. A `FleetSession` shows no token when you log or serialize it.
+- **The hub connect token travels in the WebSocket URL's query string**, as a player's does.
+  It lasts one minute, and the connection asks for a new one at each reconnect. Keep that
+  URL out of your logs too.
+- **A replayed `FLEET_RELEASED` makes the session report a player released.** The frame is
+  signed, so a copy that someone captured verifies when it is sent again. If the player is
+  still on your server, carry them again.
+- **The UDP socket is connected to the realtime server's address**, so the operating system
+  drops datagrams from any other address before the session sees them.
+
+### The wire codecs are pure functions
+
+A server on another JavaScript runtime can build and read the messages itself, over its
+own UDP socket. The root entry point exports the codecs, which use WebCrypto and no I/O: `createFleetSignContext`,
+`carriedPlayerContext` (the signing context that gives any `serialize*` function the tail
+of a carried player's message), `fleetCarryProof`, `serializeFleetCarry`,
+`serializeFleetRelease`, `serializeActorHeartbeat`, and `parseFleetDatagram`, which
+verifies a datagram and returns its carry results, releases, deliveries, and notifications.
+
 ## Hosting your game
 
 Crowded Kingdoms no longer hosts games: on 2026-10-29 it retired Crowdy Games, with
@@ -1435,6 +1812,9 @@ still mints tokens: check `isAppPaused(token.runtimeGate)` (or the bootstrap's `
 before entering the world. For org-managed players: `assertionRejectedOf(err)`
 (`ASSERTION_REJECTED`, with the failed check as `reason`) and `managedPlayerNotAllowedOf(err)`
 (`MANAGED_PLAYER_NOT_ALLOWED`: no wallet, or mods the organization has not switched on).
+For an organization's game servers: `orgTokenRequiredOf(err)` (`ORG_TOKEN_REQUIRED`),
+`fleetSessionLimitOf(err)` (`FLEET_SESSION_LIMIT`), `fleetSessionNotFoundOf(err)` (`NOT_FOUND`
+on a fleet session's refresh), and `platformBusyOf(err)` (`PLATFORM_BUSY`, with `retryAfterMs`).
 
 The player gate and player safety (18.24.0): `legalAcceptanceRequiredOf(err)`
 (`LEGAL_ACCEPTANCE_REQUIRED`, with the `missingDocuments`), `ageRequiredOf(err)` (`AGE_REQUIRED`),
@@ -1549,6 +1929,21 @@ refused, and the players are deleted. `CROWDY_E2E_UNDER13_SIGNUP=1` also signs u
 ck-api v2.61.0 that blocks every sign-up from the machine's address and user agent for 24 hours,
 so do not set it on a shared builder.
 
+`test/e2e/fleet-sessions.test.mjs` plays an organization's two game servers against a tier's
+realtime servers. It runs only with `CROWDY_FLEET_API_URL` (the GraphQL endpoint),
+`CROWDY_FLEET_APP_ID`, and `CROWDY_FLEET_ORG_TOKEN` (scopes `players:mint` and `fleet:session`)
+all set. It opens two fleet sessions, signs in four managed players
+(`crowdyjs-fleet-e2e-0` to `-3`), carries them, sends and receives state and text, moves one
+player from one server to the other, refreshes a session, refreshes one player's token and
+carries the player again while they send, and closes everything. It also opens a third
+session, closes it through the Application API, and waits for that session to see that a
+refresh is due.
+`CROWDY_FLEET_HUB_APP_ID` adds the hub server connection, and `CROWDY_FLEET_IDLE_SECONDS` (the
+app's idle timeout) adds a wait for one player's idle release. The suite leaves the four
+players, which every run reuses, and their sign-ins, which last 10 minutes. It prints no token.
+Its last step fails when the realtime server sent a session anything that is not its own
+(another app's state, or an unsigned notification), which the SDK drops and counts.
+
 ## Maintainers: schema artifacts and fixtures
 
 CrowdyJS is a standalone public package: a clean clone builds with
@@ -1582,6 +1977,10 @@ refresh them from an explicitly supplied source:
 - The agent tool-descriptor fixture:
   `npm run agent-descriptors:drift -- --source <application-api-fixture>`; every
   build re-checks the digests.
+- The ck-exec client frames, `test/unit/fixtures/exec-client-frames.json`: a copy of
+  ck-exec's golden frames, which hold the call-as frame (`0x05`).
+- The fleet session's golden vectors, in `test/unit/fleet-wire.test.mjs`: the test builds
+  each one with `node:crypto` from the inputs in its header, which the other SDKs use too.
 
 ## Migration
 

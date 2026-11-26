@@ -1,5 +1,6 @@
 import type { OrganizationsAPI } from './organizations.js';
 import type { ManagedPlayersAPI } from './managedPlayers.js';
+import type { FleetSessionsAPI } from './fleetSessions.js';
 import type { AppsAPI } from './apps.js';
 import type { AppAccessAPI } from './appAccess.js';
 import type { BillingAPI } from './billing.js';
@@ -35,6 +36,11 @@ export class AdminAPI {
   readonly organizations: OrganizationsAPI;
   /** The organization's own players, signed in by the organization. */
   readonly managedPlayers: ManagedPlayersAPI;
+  /**
+   * Fleet sessions for the organization's own game servers (open, refresh, close), with the
+   * organization's org token as the client's bearer, on a server the organization runs.
+   */
+  readonly fleetSessions: FleetSessionsAPI;
   /** App registry, routing, and player-code admission policy. */
   readonly apps: AppsAPI;
   /** App access tiers + per-user access grants. */
@@ -57,6 +63,7 @@ export class AdminAPI {
   constructor(deps: {
     organizations: OrganizationsAPI;
     managedPlayers: ManagedPlayersAPI;
+    fleetSessions: FleetSessionsAPI;
     apps: AppsAPI;
     appAccess: AppAccessAPI;
     billing: BillingAPI;
@@ -69,6 +76,7 @@ export class AdminAPI {
   }) {
     this.organizations = deps.organizations;
     this.managedPlayers = deps.managedPlayers;
+    this.fleetSessions = deps.fleetSessions;
     this.apps = deps.apps;
     this.appAccess = deps.appAccess;
     this.billing = deps.billing;
