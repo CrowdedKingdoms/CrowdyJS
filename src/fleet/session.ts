@@ -308,10 +308,21 @@ export interface FleetSessionStats {
   malformed: number;
   /** Notifications dropped because they carried no signature. */
   unsigned: number;
+  /**
+   * Notifications dropped because they named another app than the session's. A fleet
+   * session is in one app, so state or a communication of another app is never its own,
+   * however it was signed. Anything but 0 is worth reporting to Crowded Kingdoms.
+   */
+  wrongApp: number;
   /** Datagrams dropped because they were above 1,242 bytes. */
   oversized: number;
   /** Control frames dropped: bound to another connection, or unbound after the server acknowledged the bound forms. */
   staleControl: number;
+  /**
+   * `CONTROL_BOUND_ACK`s (46) verified for this connection's nonce: the realtime server's
+   * answer to each of the session's capabilities.
+   */
+  boundControlAcks: number;
   /** `FLEET_CARRY_RESULT`s that matched no carry waiting for one. */
   unmatchedCarryResults: number;
   /** `GenericErrorResponse`s received, verified or not. */
@@ -465,6 +476,7 @@ function speakerChange(list: readonly string[] | null | undefined): SpeakerListC
  * What it receives: state once for the session, and communications inside `FLEET_DELIVERY`
  * with the carried players who may receive them ({@link FleetPlayers}). Every notification
  * is verified with the fleet token before a handler sees it, and no option turns that off.
+ * One that names another app than the session's is dropped and counted (`stats().wrongApp`).
  * A refusal of a send has no room for a signature when it arrives alone, so `genericError`
  * is told whether it was verified.
  *
@@ -530,8 +542,10 @@ export class FleetSession {
     hmacFailures: 0,
     malformed: 0,
     unsigned: 0,
+    wrongApp: 0,
     oversized: 0,
     staleControl: 0,
+    boundControlAcks: 0,
     unmatchedCarryResults: 0,
     errorsReceived: 0,
     unauthorizedReceived: 0,
@@ -1372,6 +1386,7 @@ export class FleetSession {
     switch (message.kind) {
       case 'controlBoundAck':
         this.boundAcked = true;
+        this.counters.boundControlAcks += 1;
         return;
       case 'reconnect':
         if (!message.bound && this.boundAcked) {
@@ -1527,6 +1542,13 @@ export class FleetSession {
     // A refusal inside a FLEET_DELIVERY is not a thing the servers send, and the codec
     // refuses one; it has no handler here.
     if (notification.__typename === 'GenericErrorResponse') return;
+    // The session is in one app. A notification that names another is not this session's,
+    // even verified: it reaches no handler. (A channel notification names no app.)
+    const app = (notification as { appId?: unknown }).appId;
+    if (typeof app === 'string' && app !== this.grant.appId) {
+      this.counters.wrongApp += 1;
+      return;
+    }
     this.call(() => h.any?.(notification, players));
     this.call(() => {
       switch (notification.__typename) {

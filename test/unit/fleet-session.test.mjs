@@ -213,9 +213,11 @@ test('connect binds with the capabilities first, under the session\u2019s own id
   assert.equal(h.sentOfType(29).length, 1);
   await h.advance(1);
   assert.equal(h.sentOfType(29).length, 2);
+  assert.equal(h.fleet.stats().boundControlAcks, 0);
   await h.acknowledge();
   assert.equal(h.fleet.status, 'connected');
   assert.deepEqual(h.events.statuses, ['connecting', 'connected']);
+  assert.equal(h.fleet.stats().boundControlAcks, 1);
   // Once it has, every 15 seconds.
   await h.advance(14_999);
   assert.equal(h.sentOfType(29).length, 2);
@@ -676,6 +678,45 @@ test('no option makes a session dispatch a notification the realtime server did 
     const declarations = readFileSync(new URL(`../../dist/${file}`, import.meta.url), 'utf8');
     assert.doesNotMatch(declarations, /acceptUnsigned/, file);
   }
+});
+
+test('a notification that names another app reaches no handler, however it was signed', async () => {
+  // Seen on the dev tier on 2026-11-26: a session of one app was sent, inside bundles signed
+  // with its own fleet token, actor updates of another app of the same organization.
+  const h = harness();
+  await h.connect();
+  await h.carry(ME, USER_ID);
+  const other = (type, payload) => {
+    const mine = plainNotification({ type, chunk: [-26, 43, 0], distance: 8, uuid: UUID, payload }, { epochMs: 1n, seq: 1 });
+    const theirs = Buffer.from(mine);
+    theirs.writeBigInt64LE(116465110449664n, 1); // [1B type][8B appId]…
+    return { mine, theirs };
+  };
+  const actor = other(130, Buffer.from([1, 2, 3]));
+  const text = other(137, Buffer.from('not yours'));
+  const voxel = other(133, Buffer.alloc(10));
+  // Plain in a signed bundle, with its own HMAC, and inside a delivery: all verified.
+  await h.receive(signedBundle([actor.theirs, voxel.theirs]));
+  const head = Buffer.from(actor.theirs.subarray(0, actor.theirs.length - 9));
+  head[35] = 1;
+  await h.receive(Buffer.concat([head, tokenHmac(FLEET_TOKEN, head), actor.theirs.subarray(actor.theirs.length - 9)]));
+  await h.receive(signedBundle([delivery([PLAYER_ID], text.theirs)]));
+  await h.receive(withOwnHmac(delivery([PLAYER_ID], text.theirs)));
+  assert.deepEqual(h.events.notifications, [], 'no handler ran');
+  const stats = h.fleet.stats();
+  assert.equal(stats.wrongApp, 5);
+  assert.equal(stats.hmacFailures, 0, 'they verified: the check is on what they say, after who sent them');
+  assert.equal(stats.unsigned, 0);
+  // The session's own app, in the same forms, is delivered.
+  await h.receive(signedBundle([actor.mine, voxel.mine, delivery([PLAYER_ID], text.mine)]));
+  assert.deepEqual(h.events.notifications.map((e) => e.name), ['actorUpdate', 'voxelUpdate', 'text']);
+  assert.equal(h.fleet.stats().wrongApp, 5);
+  // A channel notification names no app, so it is not judged by one.
+  const channel = channelNotification({ channelId: 55, uuid: UUID, payload: [1], epochMs: 1n, seq: 2 });
+  await h.receive(signedBundle([delivery([PLAYER_ID], channel)]));
+  assert.equal(h.events.notifications.at(-1).name, 'channelMessage');
+  // It still counts as the server speaking: the session is connected and not silent.
+  assert.equal(h.fleet.status, 'connected');
 });
 
 test('a refusal reaches genericError with whether it was verified, and an unverified one changes no state', async () => {

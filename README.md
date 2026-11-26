@@ -1358,7 +1358,9 @@ Each handler receives the notification and the players it is for.
 
 - **State arrives once for the session**, with `players` null, when at least one carried
   player may receive it: actor updates and departures, voxel edits, events, app-defined
-  spatial messages, and chunk changes.
+  spatial messages, and chunk changes. A carried player is in range of something once one
+  of their actors stands near it: a session whose players have no actor yet is sent no
+  state.
 - **Communications arrive with a list** of the carried players who may receive them, at
   most 32 in one message: spatial voice, text and video, direct messages, channel messages,
   and channel audio. Deliver each to the listed players and to nobody else. A block, an age
@@ -1371,8 +1373,9 @@ Each handler receives the notification and the players it is for.
 
 `FleetSession` verifies everything it receives with the fleet token before a handler runs,
 and no option turns that off. A frame that fails is dropped and counted in `fleet.stats()`
-(`hmacFailures`, `unsigned`, `malformed`). The one exception is a refusal of a send, which
-the next section covers. The largest datagram a fleet session is sent is 1,242 bytes.
+(`hmacFailures`, `unsigned`, `malformed`). A notification that names another app than the session's is dropped and counted
+too (`wrongApp`), since a session is in one app. The one exception is a refusal of a send,
+which the next section covers. The largest datagram a fleet session is sent is 1,242 bytes.
 
 ### A refused send says whether the refusal was verified
 
@@ -1832,6 +1835,18 @@ sign-up. With `CROWDY_ORG_TOKEN` (`players:mint` and `players:manage`) and
 refused, and the players are deleted. `CROWDY_E2E_UNDER13_SIGNUP=1` also signs up under 13; since
 ck-api v2.61.0 that blocks every sign-up from the machine's address and user agent for 24 hours,
 so do not set it on a shared builder.
+
+`test/e2e/fleet-sessions.test.mjs` plays an organization's two game servers against a tier's
+realtime servers. It runs only with `CROWDY_FLEET_API_URL` (the GraphQL endpoint),
+`CROWDY_FLEET_APP_ID`, and `CROWDY_FLEET_ORG_TOKEN` (scopes `players:mint` and `fleet:session`)
+all set. It opens two fleet sessions, signs in four managed players
+(`crowdyjs-fleet-e2e-0` to `-3`), carries them, sends and receives state and text, moves one
+player from one server to the other, refreshes a session, and closes everything.
+`CROWDY_FLEET_HUB_APP_ID` adds the hub server connection, and `CROWDY_FLEET_IDLE_SECONDS` (the
+app's idle timeout) adds a wait for one player's idle release. The suite leaves the four
+players, which every run reuses, and their sign-ins, which last 10 minutes. It prints no token.
+Its last step fails when the realtime server sent a session anything that is not its own
+(another app's state, or an unsigned notification), which the SDK drops and counts.
 
 ## Maintainers: schema artifacts and fixtures
 

@@ -101,6 +101,31 @@ servers v0.50.0). Four parts:
   Node's inspect show no token. Tests use an in-memory socket (`socket` in the config) and a clock
   the test moves (`now`, `tickIntervalMs: 0`, `tick()`); one runs over real UDP on loopback.
 
+**The live suite, `test/e2e/fleet-sessions.test.mjs` (2026-11-26, first run on dev).** Gated on
+`CROWDY_FLEET_API_URL`, `CROWDY_FLEET_APP_ID` and `CROWDY_FLEET_ORG_TOKEN` together; it makes the
+org-token sign-in itself (`mintManagedPlayerToken`, stable `externalId`s
+`crowdyjs-fleet-e2e-0..3`, `sessionTtlSeconds` 600) and leaves only those four players and their
+10-minute sign-ins. Every failure and diagnostic is scrubbed of the org token, the fleet tokens,
+the players' tokens and the hub connect token, and no assertion takes a token as an operand: keep
+both when you add a step. What the first runs taught, all of it now in the suite or the SDK:
+
+- **A session whose players have no actor is sent no state.** Give every player an actor before
+  expecting anything to arrive (the suite's step 5 sends one update for each first).
+- **A just-carried player's first actor updates can go undelivered for seconds, with no refusal**
+  (0.3 s usually; 2 to 17 s in about one run in ten on dev). The suite sends until the other
+  server sees the actor. A game should keep sending position updates, as it does anyway.
+- **A refused send comes back alone and unsigned** (`03 <seq> 07`, 3 bytes), also to a session
+  that advertised signed bundles, so `genericError`'s `verified` is false in practice.
+- **`stats().wrongApp`.** On dev, with a load run of the same organization in another app going
+  on from the same machine, about half of the sessions were sent that other app's actor updates
+  inside bundles signed with their own fleet token. The session now drops and counts a
+  notification that names another app (unit test: "a notification that names another app"), and
+  the suite's step 12 fails on it, naming the app, the chunks and the form. It is the realtime
+  servers' to fix; do not relax the step.
+- A session that takes a local UDP port another live session of this machine was using is sent
+  that session's datagrams, signed with the other token: they fail the HMAC check and are counted
+  (`hmacFailures`), as they should be.
+
 At release: bump the version, turn the README's "unreleased" compatibility row and "coming" notes
 into the version, and re-sync `schema.gql` from the Application API's `dev` once its
 fleet-sessions branch has merged (the copy here is that branch's, whose type order differs from
