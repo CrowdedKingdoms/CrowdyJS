@@ -73,6 +73,15 @@ export interface FleetPlayerToken {
   token: string;
   /** The player's app token's id. */
   gameTokenId: FleetId;
+  /**
+   * After `refreshAppToken`: the game token id this session carries the same player under
+   * now. With it the row moves to the new id at once and the player stays carried
+   * throughout: sends for the player name the new id from the moment the `FLEET_CARRY` goes
+   * out, and the old id's late frames are ignored. Without it the session learns that the two
+   * tokens are one player only from the carry's answer, so sends for the new id are refused
+   * here until then. It must name the same player.
+   */
+  replaces?: FleetId | null;
 }
 
 /**
@@ -82,7 +91,11 @@ export interface FleetPlayerToken {
 export type FleetCarryOutcome =
   /** The session carries the player; the result names their user id. */
   | 'carried'
-  /** No live token by that id: it expired, the sign-in ended, or it is another app's. */
+  /**
+   * No live token by that id: it expired, the sign-in ended, or it is another app's. The
+   * session asks once more, 250 ms later, before it settles on this: a token minted a moment
+   * ago may not have reached the realtime server yet.
+   */
   | 'noLiveToken'
   /** The token belongs to another organization's player. */
   | 'otherOrganization'
@@ -184,18 +197,20 @@ export interface FleetHandlers {
   /**
    * The server refused one send, by its sequence number. `UNAUTHORIZED` answers a message for
    * a player the server does not count as carried by this session, or a player whose access
-   * to the app was suspended or ended: stop serving that player. The sequence number is one
-   * byte shared by everything the session sends, so match it against the sequence numbers
-   * your sends resolved with, soon after: a refusal names no player.
+   * to the app was suspended or ended: stop serving that player. `TOKEN_EXPIRED` answers a
+   * send that landed just before the carried player's own token expired; `FLEET_RELEASED`
+   * with reason 2 follows. The sequence number is one byte shared by everything the session
+   * sends, so match it against the sequence numbers your sends resolved with, soon after: a
+   * refusal names no player.
    *
    * `verified` is true when the refusal arrived inside a signed bundle the session verified
-   * with the fleet token. An error frame alone (`[3][seq][code]`) has no room for an HMAC, so
-   * `verified` is false for one: anyone who can reach the session's socket could have forged
-   * it. **Treat an unverified `UNAUTHORIZED` as a hint.** Stop sending for the player it
-   * points at, then carry the player again (the answer to a carry is always verified) or
-   * check the player's access through the Application API, and act on that answer. The
-   * session itself changes no state on an unverified refusal: an unverified `TOKEN_EXPIRED`
-   * does not make a refresh due.
+   * with the fleet token. The realtime servers send a refusal alone, as `[3][seq][code]`,
+   * which has no room for an HMAC, so in practice `verified` is false: anyone who can reach
+   * the session's socket could have forged it. **Treat a refusal as a hint.** Stop sending
+   * for the player it points at, then carry the player again (the answer to a carry is
+   * always verified) or check the player's access through the Application API, and act on
+   * that answer. The session itself changes no state on a refusal, whatever its code: the
+   * signed word that the session's own token expired is `sessionReleased` with reason 2.
    */
   genericError?(notification: Notified<'genericError'>, verified: boolean): void;
   /**
@@ -208,16 +223,21 @@ export interface FleetHandlers {
   released?(released: FleetReleased): void;
   /**
    * The session needs another realtime server: the one it is on told it to connect elsewhere
-   * (and keeps answering for about 5 seconds), said the session's token expired, or said
-   * nothing for `silenceTimeoutMs`. `refreshDue()` is true: call `refreshFleetSession` without
-   * a `currentServer` (`refreshInput()` leaves it out) and give the answer to `applyRefresh`.
+   * (and keeps answering for about 5 seconds), or said nothing for `silenceTimeoutMs`.
+   * `refreshDue()` is true: call `refreshFleetSession` without a `currentServer`
+   * (`refreshInput()` leaves it out) and give the answer to `applyRefresh`. A session that was
+   * closed through the Application API is sent nothing at all, so this is how it shows: the
+   * refresh then answers `NOT_FOUND`.
    */
   moveOrdered?(): void;
   /**
-   * The realtime server released the session (`SessionReleaseReason`): it answers this
-   * session no more and its carries have ended. `refreshDue()` is true. A refresh that
-   * succeeds reconnects and carries every player again; one refused `NOT_FOUND` means the
-   * session ended, so open a new one.
+   * The realtime server released the session, in a frame signed with the fleet token
+   * (`SessionReleaseReason`): it answers this session no more and its carries have ended.
+   * Reason 2 is the fleet token expiring; 1, 3 and 4 are staleness, overload and a move.
+   * Whatever the reason, `refreshDue()` is true and `refreshInput()` names no server, as
+   * after a move order. A refresh that succeeds reconnects and carries every player again;
+   * one refused `NOT_FOUND` means the session ended (after reason 2 it has), so open a new
+   * one.
    */
   sessionReleased?(reason: number): void;
   status?(status: FleetSessionStatus): void;
@@ -325,6 +345,14 @@ export interface FleetSessionStats {
   boundControlAcks: number;
   /** `FLEET_CARRY_RESULT`s that matched no carry waiting for one. */
   unmatchedCarryResults: number;
+  /** Carries answered "no live token" that were asked once more before settling. */
+  noLiveTokenRetries: number;
+  /**
+   * `FLEET_CARRY_RESULT` and `FLEET_RELEASED` frames that named a game token id this session
+   * has replaced with the same player's newer one. They are late words about the old token,
+   * and change nothing.
+   */
+  replacedIdFrames: number;
   /** `GenericErrorResponse`s received, verified or not. */
   errorsReceived: number;
   /** Of those, `UNAUTHORIZED`. */
@@ -369,6 +397,20 @@ interface Attempt {
   /** Queue order between attempts due at the same time. */
   order: number;
   resolvers: Array<(result: FleetCarryResult) => void>;
+  /**
+   * A status 1 is asked about once more: `waiting` while that retry is due, `retried` once it
+   * went out. Only an answer that comes after it settles the carry as refused.
+   */
+  noLiveToken: 'none' | 'waiting' | 'retried';
+}
+
+/** The token a player was carried under before the one that is being carried now. */
+interface Previous {
+  gameTokenId: string;
+  token: string;
+  ctx: RelaySignContext;
+  /** The reason of a `FLEET_RELEASED` that named this id while the new carry waited. */
+  ended: number | null;
 }
 
 interface Actor {
@@ -377,9 +419,16 @@ interface Actor {
 }
 
 interface Player {
+  /** The newest game token id the player was carried or asked for under: the table's key. */
   gameTokenId: string;
   token: string;
+  /**
+   * What sends for the player are signed with now. It names `previous`'s id until the
+   * `FLEET_CARRY` for `gameTokenId` goes out, and `gameTokenId` from that moment.
+   */
   ctx: RelaySignContext;
+  /** Set while a carry with a refreshed token waits: the carry that stands meanwhile. */
+  previous: Previous | null;
   userId: string | null;
   carried: boolean;
   attempt: Attempt | null;
@@ -522,6 +571,10 @@ export class FleetSession {
   private grantedAtMs: number;
 
   private readonly table = new Map<string, Player>();
+  /** A player's previous game token id, while the carry that replaces it waits: id -> row key. */
+  private readonly aliases = new Map<string, string>();
+  /** Game token ids replaced by the same player's newer one, and when: late frames are ignored. */
+  private readonly replaced = new Map<string, number>();
   private attemptOrder = 0;
   /** Each `FLEET_CARRY` of the last second: when it was sent, and whether it was a retry. */
   private carrySends: Array<{ at: number; retry: boolean }> = [];
@@ -547,6 +600,8 @@ export class FleetSession {
     staleControl: 0,
     boundControlAcks: 0,
     unmatchedCarryResults: 0,
+    noLiveTokenRetries: 0,
+    replacedIdFrames: 0,
     errorsReceived: 0,
     unauthorizedReceived: 0,
     unverifiedErrorsReceived: 0,
@@ -726,14 +781,17 @@ export class FleetSession {
       this.settle(player, { status: 'closed', wireStatus: null, userId: null }, false);
     }
     this.table.clear();
+    this.aliases.clear();
+    this.replaced.clear();
     this.setStatus('closed');
   }
 
   // ----- Refreshing ----------------------------------------------------------------
 
   /**
-   * True after the realtime server told the session to move, released it, said its token
-   * expired or went quiet for `silenceTimeoutMs`, until a refresh is applied.
+   * True after the realtime server told the session to move, released it (for any reason, the
+   * fleet token expiring among them) or went quiet for `silenceTimeoutMs`, until a refresh is
+   * applied.
    */
   get moveOrdered(): boolean {
     return this.moveWasOrdered;
@@ -829,11 +887,19 @@ export class FleetSession {
     const now = this.now();
     for (const player of this.table.values()) {
       player.carried = false;
+      if (player.previous) {
+        // The new server holds no carry to stand meanwhile: the newest token is the only one.
+        this.aliases.delete(player.previous.gameTokenId);
+        this.retire(player.previous.gameTokenId);
+        player.previous = null;
+        if (this.ctx) player.ctx = carriedPlayerContext(this.ctx, player.gameTokenId);
+      }
       player.attempt = {
         nextSendAt: now,
         deadline: 0,
         order: this.attemptOrder++,
         resolvers: player.attempt?.resolvers ?? [],
+        noLiveToken: 'none',
       };
     }
     await this.open({ ...answer.server });
@@ -868,11 +934,19 @@ export class FleetSession {
    * with how it ended; it does not reject for a refusal. Sends for the player are accepted
    * from the moment the result is `'carried'`.
    *
-   * Call it again with the player's refreshed token: once that carry is confirmed it replaces
-   * the row the same user had under the older token, and keeps that row's actors and speaker
-   * lists. A carry that is refused or times out leaves the player not carried under that
-   * game token id; the session sends `FLEET_RELEASE` for one that timed out, since the server
-   * may hold a carry whose answers were lost.
+   * **After you refresh a carried player's token**, call it with the new token and
+   * `replaces: <the id the player is carried under>`. The player stays carried throughout,
+   * with their actors and speaker lists: the carry made with the old token stands until the
+   * new one takes effect, and there is no `released` event. From the moment the new
+   * `FLEET_CARRY` goes out, every send for the player names the new id, whichever of the two
+   * ids you pass to the send; the realtime server holds those sends behind the carry. Once
+   * the result is `'carried'` the old id names nothing in this session. If the new carry is
+   * refused, the player stays carried under the old id.
+   *
+   * A carry answered "no live token" is asked once more, 250 ms later, before it settles. A
+   * carry that is refused or times out leaves the player not carried under that game token
+   * id; the session sends `FLEET_RELEASE` for one that timed out, since the server may hold a
+   * carry whose answers were lost.
    *
    * A carry for a new player when the table is full ends `'tableFull'` with nothing sent
    * ({@link tableLimit}).
@@ -891,8 +965,14 @@ export class FleetSession {
     if (this.currentStatus === 'closed') {
       return { playerGameTokenId: id, userId: null, status: 'closed', wireStatus: null, carried: false };
     }
+    const replaces = player.replaces == null ? null : idString(player.replaces, 'replaces');
     this.ctx ??= await createFleetSignContext(this.grant.gameTokenId, this.grant.token);
     let row = this.table.get(id);
+    if (!row && replaces !== null && replaces !== id) {
+      // The same player with a refreshed token: the row moves to the new id at once.
+      const old = this.rowOf(replaces);
+      if (old) row = this.supersede(old, id, player.token);
+    }
     if (!row && this.table.size >= this.tableLimit) {
       // A game server that never releases anyone must not grow the table without bound.
       this.counters.carriesRefusedTableFull += 1;
@@ -903,6 +983,7 @@ export class FleetSession {
         gameTokenId: id,
         token: player.token,
         ctx: carriedPlayerContext(this.ctx, id),
+        previous: null,
         userId: null,
         carried: false,
         attempt: null,
@@ -919,10 +1000,64 @@ export class FleetSession {
       if (target.attempt) {
         target.attempt.resolvers.push(resolve);
       } else {
-        target.attempt = { nextSendAt: this.now(), deadline: 0, order: this.attemptOrder++, resolvers: [resolve] };
+        target.attempt = {
+          nextSendAt: this.now(),
+          deadline: 0,
+          order: this.attemptOrder++,
+          resolvers: [resolve],
+          noLiveToken: 'none',
+        };
       }
       if (this.tickIntervalMs > 0) void this.tick();
     });
+  }
+
+  /** The row a game token id names: its own, or the one a waiting replacement moved it to. */
+  private rowOf(id: string): Player | undefined {
+    return this.table.get(id) ?? this.table.get(this.aliases.get(id) ?? '');
+  }
+
+  /** `id` was replaced by the same player's newer token: late frames that name it are ignored. */
+  private retire(id: string): void {
+    this.replaced.set(id, this.now());
+  }
+
+  /**
+   * Move a player's row to the id of their refreshed token. A carried player stays carried:
+   * the carry under the old id stands, and sends keep naming it, until the `FLEET_CARRY` for
+   * the new id goes out. A row whose own carry was never confirmed simply takes the new token.
+   */
+  private supersede(row: Player, id: string, token: string): Player {
+    const from = row.gameTokenId;
+    this.table.delete(from);
+    if (!row.carried) {
+      if (row.previous) {
+        this.aliases.delete(row.previous.gameTokenId);
+        this.retire(row.previous.gameTokenId);
+        row.previous = null;
+      }
+      this.retire(from);
+      if (this.ctx) row.ctx = carriedPlayerContext(this.ctx, id);
+    } else if (row.previous) {
+      // A newer token while the last replacement still waited: the id that waited is dropped.
+      this.retire(from);
+      row.ctx = row.previous.ctx;
+    } else {
+      row.previous = { gameTokenId: from, token: row.token, ctx: row.ctx, ended: null };
+    }
+    if (row.previous) this.aliases.set(row.previous.gameTokenId, id);
+    row.gameTokenId = id;
+    row.token = token;
+    this.table.set(id, row);
+    // The carry with the new token starts over; whoever waited on the old one hears its answer.
+    row.attempt = {
+      nextSendAt: this.now(),
+      deadline: 0,
+      order: this.attemptOrder++,
+      resolvers: row.attempt?.resolvers ?? [],
+      noLiveToken: 'none',
+    };
+    return row;
   }
 
   /**
@@ -930,22 +1065,40 @@ export class FleetSession {
    * Their actors leave as when a player's own session ends, about 5 seconds after their last
    * message. A carry still waiting for the player ends `'released'`. The message has no
    * answer; one that is lost leaves the carry on the server until the player is carried
-   * elsewhere, their sign-in ends, or they idle out.
+   * elsewhere, their sign-in ends, or they idle out. Stop sending for a player before you hand
+   * them to another server: the other session's carry is what moves them, and no release is
+   * needed for it.
    */
   async release(playerGameTokenId: FleetId): Promise<void> {
     const id = idString(playerGameTokenId, 'the player gameTokenId');
-    const row = this.table.get(id);
+    // An id this session replaced with the player's newer one names nothing here any more,
+    // and a release under it could end the carry that replaced it.
+    if (this.replaced.has(id) && !this.table.has(id)) return;
+    const row = this.rowOf(id);
+    const ids = [id];
     if (row) {
-      this.table.delete(id);
+      ids.length = 0;
+      ids.push(row.gameTokenId);
+      this.table.delete(row.gameTokenId);
+      if (row.previous) {
+        // A replacement was waiting: the player is let go under both of their ids.
+        ids.push(row.previous.gameTokenId);
+        this.aliases.delete(row.previous.gameTokenId);
+        row.previous = null;
+      }
+      row.carried = false;
       this.settle(row, { status: 'released', wireStatus: null, userId: null }, false);
     }
     if (!this.socket || this.currentStatus === 'released') return;
-    await this.sendRelease(id);
+    for (const each of ids) await this.sendRelease(each);
   }
 
-  /** True when the server confirmed a carry of this game token id and nothing ended it. */
+  /**
+   * True when the server confirmed a carry of this player and nothing ended it. While a carry
+   * with a refreshed token waits, both of the player's ids answer true.
+   */
   carries(playerGameTokenId: FleetId): boolean {
-    return this.table.get(idString(playerGameTokenId, 'the player gameTokenId'))?.carried === true;
+    return this.rowOf(idString(playerGameTokenId, 'the player gameTokenId'))?.carried === true;
   }
 
   /** Every row of the table: carried players and carries still waiting. */
@@ -1088,7 +1241,7 @@ export class FleetSession {
 
   /** Stop keeping one of the player's actors present. It leaves about 5 seconds later. */
   forgetActor(player: FleetId, uuid: string): void {
-    this.table.get(idString(player, 'the player gameTokenId'))?.actors.delete(uuid);
+    this.rowOf(idString(player, 'the player gameTokenId'))?.actors.delete(uuid);
   }
 
   /**
@@ -1111,7 +1264,7 @@ export class FleetSession {
         );
       }
     }
-    const row = this.table.get(id);
+    const row = this.rowOf(id);
     if (!row?.carried) throw new FleetNotCarriedError(id);
     // One kind a message: 32 names of each would not fit one datagram.
     if (change.voice !== undefined) {
@@ -1141,7 +1294,7 @@ export class FleetSession {
   }
 
   private touchActor(player: FleetId, uuid: string, chunk: { x: string; y: string; z: string }): void {
-    const row = this.table.get(idString(player, 'the player gameTokenId'));
+    const row = this.rowOf(idString(player, 'the player gameTokenId'));
     if (!row?.carried || !uuid) return;
     row.actors.set(uuid, { chunk: { x: String(chunk.x), y: String(chunk.y), z: String(chunk.z) }, lastSentAt: this.now() });
   }
@@ -1170,16 +1323,23 @@ export class FleetSession {
     build: (ctx: RelaySignContext, sequenceNumber: number) => Promise<Uint8Array>,
   ): Promise<number> {
     const id = idString(player, 'the player gameTokenId');
-    const row = this.table.get(id);
+    const row = this.rowOf(id);
     if (!row?.carried) throw new FleetNotCarriedError(id);
     if (!this.socket || this.currentStatus === 'released') {
       throw new CrowdyRealtimeError('the fleet session is not connected', { code: 'FLEET_NOT_CONNECTED', retryable: true });
     }
     const generation = this.generation;
     const seq = this.sequence();
-    const datagram = await build(row.ctx, seq);
+    let ctx = row.ctx;
+    let datagram = await build(ctx, seq);
+    // The id the player's sends name can change while a message is being signed (a carry with
+    // a refreshed token went out, or was refused): no message leaves under the id of before.
+    while (row.ctx !== ctx) {
+      ctx = row.ctx;
+      datagram = await build(ctx, seq);
+    }
     // The carry may have ended while the message was being signed.
-    if (!row.carried || this.table.get(id) !== row) throw new FleetNotCarriedError(id);
+    if (!row.carried || this.table.get(row.gameTokenId) !== row) throw new FleetNotCarriedError(id);
     if (!this.transmit(generation, datagram)) {
       throw new CrowdyRealtimeError('the fleet session is not connected', { code: 'FLEET_NOT_CONNECTED', retryable: true });
     }
@@ -1193,6 +1353,8 @@ export class FleetSession {
   private async sendOwn(
     type: number,
     build: (ctx: RelaySignContext, sequenceNumber: number) => Promise<Uint8Array>,
+    /** Runs in the same turn as the send, just before it, when the message does go out. */
+    beforeTransmit?: () => void,
   ): Promise<boolean> {
     if (!OWN_TYPES.has(type)) {
       throw new CrowdyError({ message: `a fleet session sends no message of type ${type} under its own id` });
@@ -1206,6 +1368,8 @@ export class FleetSession {
     if (datagram[0] !== type) {
       throw new CrowdyError({ message: `built a message of type ${datagram[0]} where ${type} was meant` });
     }
+    if (!this.socket || generation !== this.generation) return false;
+    beforeTransmit?.();
     return this.transmit(generation, datagram);
   }
 
@@ -1254,6 +1418,8 @@ export class FleetSession {
       }
       await this.driveCarries(now);
       if (this.actorHeartbeatMs > 0) await this.heartbeatActors(now);
+      // A replaced id's late frames arrive within seconds: a minute on, it can be forgotten.
+      for (const [id, at] of this.replaced) if (now - at > 60_000) this.replaced.delete(id);
     } catch (error) {
       this.report(error);
     } finally {
@@ -1269,9 +1435,17 @@ export class FleetSession {
       if (!attempt) continue;
       if (attempt.deadline !== 0 && now >= attempt.deadline) {
         this.table.delete(row.gameTokenId);
+        const ids = [row.gameTokenId];
+        if (row.previous) {
+          // Nothing says which of the player's two carries the server holds: neither stands.
+          ids.push(row.previous.gameTokenId);
+          this.aliases.delete(row.previous.gameTokenId);
+          row.previous = null;
+        }
+        row.carried = false;
         this.settle(row, { status: 'timedOut', wireStatus: null, userId: null }, true);
         // The server may hold a carry whose answers were lost: both sides now agree it ended.
-        await this.sendRelease(row.gameTokenId);
+        for (const id of ids) await this.sendRelease(id);
         continue;
       }
       if (attempt.nextSendAt <= now) (attempt.deadline === 0 ? firsts : retries).push(row);
@@ -1299,14 +1473,25 @@ export class FleetSession {
       // A new time for every send, later than the last one this player's carry was made for.
       const epoch = Math.max(now, row.lastCarryEpoch + 1);
       row.lastCarryEpoch = epoch;
-      const sent = await this.sendOwn(WireMessageType.FLEET_CARRY, (ctx, seq) =>
-        serializeFleetCarry(ctx, {
-          appId: this.appId,
-          playerGameTokenId: row.gameTokenId,
-          playerToken: row.token,
-          epochMillis: epoch,
-          sequenceNumber: seq,
-        }),
+      const carriedId = row.gameTokenId;
+      const sent = await this.sendOwn(
+        WireMessageType.FLEET_CARRY,
+        (ctx, seq) =>
+          serializeFleetCarry(ctx, {
+            appId: this.appId,
+            playerGameTokenId: carriedId,
+            playerToken: row.token,
+            epochMillis: epoch,
+            sequenceNumber: seq,
+          }),
+        () => {
+          if (attempt.noLiveToken === 'waiting') attempt.noLiveToken = 'retried';
+          // A refreshed token's carry: from the moment it goes out, the player's sends name
+          // the new id. The realtime server holds them behind the carry.
+          if (row.previous && row.gameTokenId === carriedId && row.ctx === row.previous.ctx && this.ctx) {
+            row.ctx = carriedPlayerContext(this.ctx, carriedId);
+          }
+        },
       );
       if (!sent) break;
       this.carrySends.push({ at: now, retry });
@@ -1414,11 +1599,9 @@ export class FleetSession {
         return;
       case 'notification':
         if (message.notification.__typename === 'GenericErrorResponse') {
-          // The server says the session's token expired. Only a signed one counts: an error
-          // frame alone carries no HMAC, and one that is not verified changes no state.
-          if (message.verified && (message.notification.errorCode as string) === 'TOKEN_EXPIRED') {
-            this.orderMove(true);
-          }
+          // A refusal of one send changes no state here, whatever its code. TOKEN_EXPIRED is
+          // about the token of the player the send named, and FLEET_RELEASED follows it; the
+          // signed word that the session's own token expired is COMMAND_SESSION_RELEASED.
           this.dispatchError(message.notification, message.verified);
           return;
         }
@@ -1435,7 +1618,7 @@ export class FleetSession {
 
   /**
    * The session needs a refresh before anything else: the server asked it to move, or went
-   * quiet, or said its token expired. `carriesLost` when the server may hold no carry.
+   * quiet. `carriesLost` when the server may hold no carry.
    */
   private orderMove(carriesLost: boolean): void {
     if (carriesLost) this.carriesLost = true;
@@ -1460,6 +1643,11 @@ export class FleetSession {
   }
 
   private async onCarryResult(id: string, userId: string, status: number): Promise<void> {
+    if (this.aliases.has(id) || (this.replaced.has(id) && !this.table.has(id))) {
+      // A late answer about a token the player's newer one replaced, or is replacing.
+      this.counters.replacedIdFrames += 1;
+      return;
+    }
     const row = this.table.get(id);
     if (!row) {
       this.counters.unmatchedCarryResults += 1;
@@ -1467,26 +1655,88 @@ export class FleetSession {
       if (status === FleetCarryStatus.CARRIED && this.socket) await this.sendRelease(id);
       return;
     }
-    if (!row.attempt) {
+    const attempt = row.attempt;
+    if (!attempt) {
       // An answer to a carry sent twice: the first one settled it.
       if (status !== FleetCarryStatus.CARRIED || !row.carried) this.counters.unmatchedCarryResults += 1;
       return;
     }
+    if (status === FleetCarryStatus.NO_LIVE_TOKEN && attempt.noLiveToken !== 'retried') {
+      // A token minted or refreshed a moment ago may not have reached this server yet: ask
+      // once more, with a new time and proof. Answers to carries sent before that one wait.
+      if (attempt.noLiveToken === 'none') {
+        attempt.noLiveToken = 'waiting';
+        attempt.nextSendAt = this.now() + this.carryRetryMs;
+        this.counters.noLiveTokenRetries += 1;
+      }
+      return;
+    }
     if (status !== FleetCarryStatus.CARRIED) {
+      const refusal = { status: CARRY_OUTCOMES[status] ?? 'refused', wireStatus: status, userId: null } as const;
+      const previous = row.previous;
+      if (previous) {
+        // The refreshed token's carry was refused: the carry under the old id stands.
+        this.table.delete(id);
+        this.aliases.delete(previous.gameTokenId);
+        this.retire(id);
+        this.settle(row, refusal, true);
+        row.gameTokenId = previous.gameTokenId;
+        row.token = previous.token;
+        row.ctx = previous.ctx;
+        row.previous = null;
+        if (previous.ended === null && row.carried) {
+          this.table.set(row.gameTokenId, row);
+          return;
+        }
+        // Unless the server said meanwhile that it ended: then the player is carried no more.
+        if (row.carried) {
+          row.carried = false;
+          const reason = previous.ended ?? 0;
+          this.call(() => this.handlers.released?.({ playerGameTokenId: row.gameTokenId, userId: row.userId, reason }));
+        }
+        return;
+      }
       const wasCarried = row.carried;
       row.carried = false;
       this.table.delete(id);
-      this.settle(row, { status: CARRY_OUTCOMES[status] ?? 'refused', wireStatus: status, userId: null }, true);
+      this.settle(row, refusal, true);
       // The carry that stood before this one was refused is let go, so both sides agree.
       if (wasCarried && this.socket) await this.sendRelease(id);
       return;
     }
     row.carried = true;
+    const previous = row.previous;
+    if (previous) {
+      // The new carry took effect: the old id names nothing now, and its late frames are ignored.
+      this.aliases.delete(previous.gameTokenId);
+      this.retire(previous.gameTokenId);
+      row.previous = null;
+      if (this.ctx) row.ctx = carriedPlayerContext(this.ctx, row.gameTokenId);
+      if (row.userId !== null && row.userId !== userId) {
+        // `replaces` named another player. That player's carry still stands on the server
+        // under the old id, with nobody here to send for it: let it go.
+        this.report(
+          new CrowdyError({
+            message: `carry: replaces named game token id ${previous.gameTokenId}, which is another player's; that player was released`,
+          }),
+        );
+        this.replaced.delete(previous.gameTokenId);
+        row.actors.clear();
+        row.voice = undefined;
+        row.video = undefined;
+        if (this.socket) await this.sendRelease(previous.gameTokenId);
+      }
+    }
     row.userId = userId;
     // The carry belongs to the player: a row the same user had under an older token is replaced.
     for (const other of [...this.table.values()]) {
       if (other === row || other.userId !== userId) continue;
       this.table.delete(other.gameTokenId);
+      this.retire(other.gameTokenId);
+      if (other.previous) {
+        this.aliases.delete(other.previous.gameTokenId);
+        this.retire(other.previous.gameTokenId);
+      }
       for (const [uuid, actor] of other.actors) if (!row.actors.has(uuid)) row.actors.set(uuid, actor);
       if (row.voice === undefined) row.voice = other.voice;
       if (row.video === undefined) row.video = other.video;
@@ -1497,6 +1747,19 @@ export class FleetSession {
   }
 
   private onReleased(id: string, reason: number): void {
+    const moved = this.aliases.get(id);
+    if (moved !== undefined) {
+      // The carry under the old id ended while the refreshed token's carry waits. The player
+      // is not dropped: the new carry's answer decides, and remembers this if it is refused.
+      const waiting = this.table.get(moved);
+      if (waiting?.previous) waiting.previous.ended = reason;
+      this.counters.replacedIdFrames += 1;
+      return;
+    }
+    if (this.replaced.has(id) && !this.table.has(id)) {
+      this.counters.replacedIdFrames += 1;
+      return;
+    }
     const row = this.table.get(id);
     if (!row) return;
     const wasCarried = row.carried;

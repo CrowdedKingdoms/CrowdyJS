@@ -316,7 +316,8 @@ test('an unanswered carry is sent again with a new time and a new proof, then ti
 });
 
 test('each refusal of a carry reads as itself and leaves the player not carried', async () => {
-  const outcomes = { 1: 'noLiveToken', 2: 'otherOrganization', 3: 'proofFailed', 4: 'sessionFull', 9: 'refused' };
+  // Status 1 is asked about once more before it settles: its own test is below.
+  const outcomes = { 2: 'otherOrganization', 3: 'proofFailed', 4: 'sessionFull', 9: 'refused' };
   for (const [status, name] of Object.entries(outcomes)) {
     const h = harness();
     await h.connect();
@@ -341,8 +342,8 @@ test('each refusal of a carry reads as itself and leaves the player not carried'
   await again.carry(ME, USER_ID);
   const refused = again.fleet.carry(ME);
   await again.advance();
-  await again.receive(signedBundle([carryResult(PLAYER_ID, 0, 1)]));
-  assert.equal((await refused).status, 'noLiveToken');
+  await again.receive(signedBundle([carryResult(PLAYER_ID, 0, 2)]));
+  assert.equal((await refused).status, 'otherOrganization');
   assert.equal(again.fleet.carries(PLAYER_ID), false);
   assert.deepEqual(again.sentOfType(50).map((d) => read(d).payload.readBigInt64LE(0)), [PLAYER_ID]);
 
@@ -757,9 +758,14 @@ test('a refusal reaches genericError with whether it was verified, and an unveri
   assert.equal(h.fleet.carriedCount, 1);
   assert.equal(h.events.notifications.filter((e) => e.verified === false).length, 7);
   assert.equal(h.fleet.stats().unverifiedErrorsReceived, 7);
-  // Verified, TOKEN_EXPIRED makes a refresh due, and the handler is told it was verified.
+  // Inside a signed bundle it would be verified, and the handler is told so. It still changes
+  // nothing: TOKEN_EXPIRED answers a send that landed just before the carried PLAYER's token
+  // expired. The signed word that the session's own token expired is a session release.
   await h.receive(signedBundle([Buffer.from([3, 9, 32])]));
-  assert.equal(h.fleet.moveOrdered, true);
+  assert.equal(h.fleet.moveOrdered, false);
+  assert.equal(h.fleet.refreshDue(), false);
+  assert.equal(h.fleet.status, 'connected');
+  assert.equal(h.fleet.carriedCount, 1);
   assert.deepEqual(h.events.notifications.at(-1), {
     name: 'genericError',
     n: { __typename: 'GenericErrorResponse', sequenceNumber: 9, errorCode: 'TOKEN_EXPIRED' },
@@ -1107,6 +1113,10 @@ test('coming back on another server after COMMAND_RECONNECT: capabilities, then 
   await h.receive(
     signedBundle([carryResult(PLAYER_ID, 500, 0), carryResult(10_001, 501, 0), carryResult(10_002, 0, 1)]),
   );
+  // "No live token" is asked about once more, 250 ms later, before it settles.
+  assert.equal(h.fleet.players().length, 3);
+  await h.advance(250);
+  await h.receive(signedBundle([carryResult(10_002, 0, 1)]));
   assert.deepEqual(h.events.carryResults.map((r) => [r.playerGameTokenId, r.status]), [
     ['4242', 'carried'],
     ['10001', 'carried'],
@@ -1275,14 +1285,328 @@ test('a server that goes quiet, or says the token expired, makes a refresh due; 
   assert.equal(unheard.fleet.status, 'connecting');
   assert.equal(unheard.fleet.refreshDue(), true);
 
-  // TOKEN_EXPIRED inside a signed bundle is the server's word; alone it carries no HMAC.
-  const expired = harness();
-  await expired.connect();
-  await expired.receive(Buffer.from([3, 9, 32]));
-  assert.equal(expired.fleet.moveOrdered, false);
-  await expired.receive(signedBundle([Buffer.from([3, 9, 32])]));
-  assert.equal(expired.fleet.moveOrdered, true);
-  assert.equal(expired.events.notifications.filter((e) => e.name === 'genericError').length, 2);
+  // A session closed through the Application API is sent nothing at all, and every send
+  // goes unanswered: the same silence, and the same remedy. The refresh then answers
+  // NOT_FOUND, and the game server opens a new session.
+  const closedByApi = harness({ session: { silenceTimeoutMs: 45_000 } });
+  await closedByApi.connect();
+  await closedByApi.carry(ME, USER_ID);
+  await closedByApi.fleet.sendActorUpdate(PLAYER_ID, { chunk: CHUNK, uuid: UUID, state: B64 });
+  for (let i = 0; i < 3; i += 1) await closedByApi.advance(15_000);
+  assert.equal(closedByApi.fleet.refreshDue(), true);
+  assert.equal(closedByApi.events.moves, 1);
+  assert.equal(closedByApi.fleet.status, 'connected', 'nothing told it otherwise');
+});
+
+test('the signed word that a session ended is COMMAND_SESSION_RELEASED: every reason makes a refresh due', async () => {
+  // [45][reason][nonce][HMAC over the first 10 bytes]. 2: the fleet token expired. 1, 3, 4:
+  // stale, overload, a move. 0 and 5 are the other documented ones.
+  for (const reason of [2, 1, 3, 4, 0, 5]) {
+    const h = harness();
+    await h.connect();
+    await h.carry(ME, USER_ID);
+    assert.equal(h.fleet.refreshDue(), false);
+    const lead = Buffer.concat([Buffer.from([45, reason]), h.nonce()]);
+    await h.receive(Buffer.concat([lead, rawHmac(FLEET_TOKEN, lead)]));
+    assert.deepEqual(h.events.sessionReleased, [reason], `reason ${reason}`);
+    assert.equal(h.fleet.status, 'released');
+    assert.equal(h.fleet.refreshDue(), true, `reason ${reason}: a refresh is due`);
+    assert.equal(h.fleet.moveOrdered, true);
+    // As after a move order, the refresh names no server: the answer names the next one.
+    assert.deepEqual(h.fleet.refreshInput(), { appId: '7', gameTokenId: '9001' });
+    assert.equal(h.fleet.carriedCount, 0, 'its carries ended with it');
+    // Said once, in one frame: a second copy changes nothing more.
+    await h.receive(Buffer.concat([lead, rawHmac(FLEET_TOKEN, lead)]));
+    assert.deepEqual(h.events.sessionReleased, [reason, reason]);
+    assert.equal(h.fleet.status, 'released');
+    // A forged one (another key, another connection's nonce, a rewritten reason) is nothing.
+    const fresh = harness();
+    await fresh.connect();
+    const mine = Buffer.concat([Buffer.from([45, reason]), fresh.nonce()]);
+    await fresh.receive(Buffer.concat([mine, rawHmac(PLAYER_TOKEN, mine)]));
+    await fresh.receive(Buffer.concat([lead, rawHmac(FLEET_TOKEN, lead)]));
+    const rewritten = Buffer.concat([mine, rawHmac(FLEET_TOKEN, mine)]);
+    rewritten[1] ^= 0x07;
+    await fresh.receive(rewritten);
+    assert.equal(fresh.fleet.refreshDue(), false);
+    assert.equal(fresh.fleet.status, 'connected');
+    assert.deepEqual(fresh.events.sessionReleased, []);
+  }
+  // Without bound control acknowledged yet, the unbound form (28) says the same.
+  const early = harness();
+  await early.fleet.connect();
+  await early.receive(Buffer.concat([Buffer.from([28, 2]), rawHmac(FLEET_TOKEN, Buffer.from([28, 2]))]));
+  assert.deepEqual(early.events.sessionReleased, [2]);
+  assert.equal(early.fleet.refreshDue(), true);
+  // The unsigned error frame that says a token expired is a hint about a PLAYER's token, and
+  // makes nothing due.
+  const hint = harness();
+  await hint.connect();
+  await hint.receive(Buffer.from([3, 9, 32]));
+  assert.equal(hint.fleet.refreshDue(), false);
+  assert.deepEqual(hint.events.notifications.map((e) => [e.name, e.n.errorCode, e.verified]), [
+    ['genericError', 'TOKEN_EXPIRED', false],
+  ]);
+});
+
+test('a carry answered "no live token" is asked once more, 250 ms later, with a new time and proof', async () => {
+  const h = harness();
+  await h.connect();
+  const pending = h.fleet.carry(ME);
+  await h.advance();
+  await h.receive(signedBundle([carryResult(PLAYER_ID, 0, 1)]));
+  // Not settled: the token may not have reached the realtime server yet.
+  assert.deepEqual(h.fleet.players(), [{ gameTokenId: '4242', userId: null, carried: false, pending: true }]);
+  assert.deepEqual(h.events.carryResults, []);
+  assert.equal(h.fleet.stats().noLiveTokenRetries, 1);
+  await h.advance(249);
+  assert.equal(h.sentOfType(49).length, 1, 'not before 250 ms');
+  // A second "no live token" that arrives before the retry went out answers the first carry
+  // again (or a copy of it): it settles nothing.
+  await h.receive(signedBundle([carryResult(PLAYER_ID, 0, 1)]));
+  assert.equal(h.fleet.players().length, 1);
+  await h.advance(1);
+  const carries = h.sentOfType(49).map((d) => readCarry(d, PLAYER_TOKEN));
+  assert.equal(carries.length, 2);
+  assert.ok(carries[1].epoch > carries[0].epoch, 'a new time');
+  assert.notEqual(carries[1].proof, carries[0].proof);
+  assert.equal(carries[1].proofHolds, true, 'and a proof that holds for it');
+  // Still no live token after the retry: now it is the answer.
+  await h.receive(signedBundle([carryResult(PLAYER_ID, 0, 1)]));
+  assert.deepEqual(await pending, { playerGameTokenId: '4242', userId: null, status: 'noLiveToken', wireStatus: 1, carried: false });
+  assert.deepEqual(h.fleet.players(), []);
+  assert.equal(h.fleet.stats().noLiveTokenRetries, 1, 'once');
+  await h.advance(1_000);
+  assert.equal(h.sentOfType(49).length, 2, 'and it is sent no more');
+
+  // The retry is carried: the first answer was only early.
+  const late = harness();
+  await late.connect();
+  const second = late.fleet.carry(ME);
+  await late.advance();
+  await late.receive(signedBundle([carryResult(PLAYER_ID, 0, 1)]));
+  await late.advance(250);
+  await late.receive(signedBundle([carryResult(PLAYER_ID, USER_ID, 0)]));
+  assert.deepEqual(await second, { playerGameTokenId: '4242', userId: '77', status: 'carried', wireStatus: 0, carried: true });
+  assert.equal(late.fleet.stats().noLiveTokenRetries, 1);
+  assert.equal(late.sentOfType(49).length, 2);
+  // Another refusal is not asked about again.
+  const other = harness();
+  await other.connect();
+  const third = other.fleet.carry(ME);
+  await other.advance();
+  await other.receive(signedBundle([carryResult(PLAYER_ID, 0, 3)]));
+  assert.equal((await third).status, 'proofFailed');
+  assert.equal(other.fleet.stats().noLiveTokenRetries, 0);
+});
+
+test('a refreshed token with `replaces`: the player stays carried and every send names the new id once the carry is out', async (t) => {
+  const h = harness();
+  await h.connect();
+  await h.carry(ME, USER_ID);
+  await h.fleet.sendActorUpdate(PLAYER_ID, { chunk: CHUNK, uuid: UUID, state: B64 });
+  await h.fleet.setSpeakers(PLAYER_ID, { voice: [UUID] });
+  const fresh = { token: 'refreshed-'.padEnd(64, 'r'), gameTokenId: '4300', replaces: '4242' };
+  const text = (id, body) => h.fleet.sendTextPacket(id, { chunk: CHUNK, uuid: UUID, text: body });
+  const named = () => h.socket.sent.map(read).filter((m) => m.type === 136).map((m) => String(m.tailId));
+
+  const pending = h.fleet.carry(fresh);
+  // The row moved to the new id at once, and the player is carried throughout.
+  await Promise.resolve();
+  assert.deepEqual(h.fleet.players(), [{ gameTokenId: '4300', userId: '77', carried: true, pending: true }]);
+  assert.equal(h.fleet.carries('4300'), true);
+  assert.equal(h.fleet.carries('4242'), true, 'the old id still names the player while the new carry waits');
+  assert.equal(h.fleet.carriedCount, 1);
+  // Until the FLEET_CARRY goes out, the old carry is the only one the server knows: sends
+  // name the old id, whichever id the game server passes.
+  await text('4300', 'before, by the new id');
+  await text('4242', 'before, by the old id');
+  assert.deepEqual(named(), ['4242', '4242']);
+
+  // A send is being signed when the carry goes out (its HMAC takes 30 ms): it must not leave
+  // under the old id after the carry.
+  const subtle = globalThis.crypto.subtle;
+  const sign = subtle.sign.bind(subtle);
+  let slow = true;
+  subtle.sign = async (...args) => {
+    if (slow) {
+      slow = false;
+      await new Promise((r) => setTimeout(r, 30));
+    }
+    return sign(...args);
+  };
+  t.after(() => {
+    delete subtle.sign;
+  });
+  const inFlight = text('4242', 'in flight');
+  await h.advance(); // the FLEET_CARRY for the new id goes out
+  await inFlight;
+  delete subtle.sign;
+  await text('4242', 'after, by the old id');
+  await text('4300', 'after, by the new id');
+  const order = h.socket.sent.map(read);
+  const carryAt = order.findIndex((m) => m.type === 49 && m.payload.readBigInt64LE(0) === 4300n);
+  assert.ok(carryAt > 0, 'the carry for the new id went out');
+  const carry = readCarry(h.socket.sent[carryAt], fresh.token);
+  assert.equal(carry.proofHolds, true, 'proved with the new token');
+  assert.equal(read(h.socket.sent[carryAt]).tailId, FLEET_ID);
+  assert.ok(order.slice(0, carryAt).every((m) => m.tailId !== 4300n), 'nothing names the new id before its carry');
+  assert.ok(order.slice(carryAt + 1).every((m) => m.tailId !== 4242n), 'nothing names the old id after it');
+  assert.deepEqual(named(), ['4242', '4242', '4300', '4300', '4300']);
+
+  // The old id's stragglers while the new carry waits: a refusal of a send that was on its
+  // way, a late copy of the old carry's answer, and the old carry's end. None drops the player.
+  await h.receive(Buffer.from([3, 7, 7]));
+  await h.receive(signedBundle([carryResult(4242, USER_ID, 0)]));
+  await h.receive(signedBundle([released(4242, 2)]));
+  assert.equal(h.fleet.carries('4300'), true);
+  assert.deepEqual(h.events.released, [], 'no released event');
+  assert.equal(h.sentOfType(50).length, 0, 'and no FLEET_RELEASE');
+  assert.equal(h.fleet.stats().replacedIdFrames, 2);
+  await text('4300', 'still carried');
+
+  // The new carry takes effect.
+  await h.receive(signedBundle([carryResult(4300, USER_ID, 0)]));
+  assert.deepEqual(await pending, { playerGameTokenId: '4300', userId: '77', status: 'carried', wireStatus: 0, carried: true });
+  assert.deepEqual(h.fleet.players(), [{ gameTokenId: '4300', userId: '77', carried: true, pending: false }]);
+  assert.deepEqual(h.events.released, []);
+  // The old id names nothing in this session now.
+  assert.equal(h.fleet.carries('4242'), false);
+  await assert.rejects(text('4242', 'old id'), FleetNotCarriedError);
+  // The player kept their actor and their speaker list, under the new id.
+  assert.equal(h.sentOfType(47).map(read).at(-1).tailId, 4300n);
+  await h.advance(2_000);
+  const beat = h.sentOfType(26).map(read).filter((m) => m.uuid === UUID).at(-1);
+  assert.equal(beat.tailId, 4300n);
+
+  // Late frames that name the old id are ignored: they are about the token that was replaced.
+  await h.receive(signedBundle([released(4242, 1), released(4242, 2), carryResult(4242, USER_ID, 0), carryResult(4242, 0, 3)]));
+  await h.receive(Buffer.from([3, 9, 7]));
+  assert.equal(h.fleet.carries('4300'), true);
+  assert.deepEqual(h.events.released, []);
+  assert.equal(h.fleet.stats().replacedIdFrames, 6);
+  assert.equal(h.fleet.stats().unmatchedCarryResults, 0);
+  // Nor does a release under the old id end the carry that replaced it.
+  await h.fleet.release('4242');
+  assert.equal(h.sentOfType(50).length, 0);
+  assert.equal(h.fleet.carries('4300'), true);
+  // A release under the new id is the player's.
+  await h.fleet.release('4300');
+  assert.deepEqual(h.sentOfType(50).map((d) => read(d).payload.readBigInt64LE(0)), [4300n]);
+  assert.deepEqual(h.fleet.players(), []);
+  assert.deepEqual(h.events.errors, []);
+});
+
+test('a refreshed token\u2019s carry that is refused or times out, and one that crosses a move', async () => {
+  const fresh = { token: 'refreshed-'.padEnd(64, 'r'), gameTokenId: '4300', replaces: '4242' };
+  const text = (h, id) => h.fleet.sendTextPacket(id, { chunk: CHUNK, uuid: UUID, text: 'x' });
+  const lastTextId = (h) => String(h.socket.sent.map(read).filter((m) => m.type === 136).at(-1).tailId);
+
+  // Refused: the carry under the old id stands, and sends name it again.
+  const refused = harness();
+  await refused.connect();
+  await refused.carry(ME, USER_ID);
+  const pending = refused.fleet.carry(fresh);
+  await refused.advance();
+  await text(refused, '4300');
+  assert.equal(lastTextId(refused), '4300');
+  await refused.receive(signedBundle([carryResult(4300, 0, 3)]));
+  assert.deepEqual(await pending, { playerGameTokenId: '4300', userId: null, status: 'proofFailed', wireStatus: 3, carried: false });
+  assert.deepEqual(refused.fleet.players(), [{ gameTokenId: '4242', userId: '77', carried: true, pending: false }]);
+  assert.equal(refused.fleet.carries('4300'), false);
+  await text(refused, '4242');
+  assert.equal(lastTextId(refused), '4242');
+  assert.deepEqual(refused.events.released, []);
+  assert.equal(refused.sentOfType(50).length, 0, 'the old carry is not let go');
+  // A late answer about the refused id changes nothing.
+  await refused.receive(signedBundle([carryResult(4300, USER_ID, 0)]));
+  assert.equal(refused.sentOfType(50).length, 0);
+  assert.equal(refused.fleet.carries('4242'), true);
+
+  // Refused, after the old carry ended meanwhile: the player is carried no more, and the
+  // game server hears why the old carry ended.
+  const ended = harness();
+  await ended.connect();
+  await ended.carry(ME, USER_ID);
+  const lost = ended.fleet.carry(fresh);
+  await ended.advance();
+  await ended.receive(signedBundle([released(4242, 2)]));
+  assert.deepEqual(ended.events.released, []);
+  await ended.receive(signedBundle([carryResult(4300, 0, 1)]));
+  await ended.advance(250);
+  await ended.receive(signedBundle([carryResult(4300, 0, 1)]));
+  assert.equal((await lost).status, 'noLiveToken');
+  assert.deepEqual(ended.events.released, [{ playerGameTokenId: '4242', userId: '77', reason: 2 }]);
+  assert.deepEqual(ended.fleet.players(), []);
+  await assert.rejects(text(ended, '4242'), FleetNotCarriedError);
+
+  // No answer at all: nothing says which carry the server holds, so neither stands.
+  const silent = harness();
+  await silent.connect();
+  await silent.carry(ME, USER_ID);
+  const unanswered = silent.fleet.carry(fresh);
+  await silent.advance();
+  await silent.advance(5_000);
+  assert.equal((await unanswered).status, 'timedOut');
+  assert.deepEqual(silent.fleet.players(), []);
+  assert.deepEqual(silent.sentOfType(50).map((d) => String(read(d).payload.readBigInt64LE(0))).sort(), ['4242', '4300']);
+
+  // A newer token again before the first replacement was answered: only the newest is asked for.
+  const twice = harness();
+  await twice.connect();
+  await twice.carry(ME, USER_ID);
+  const first = twice.fleet.carry(fresh);
+  await twice.advance();
+  const newest = twice.fleet.carry({ token: 'newest-'.padEnd(64, 'n'), gameTokenId: '4400', replaces: '4300' });
+  await Promise.resolve();
+  assert.deepEqual(twice.fleet.players(), [{ gameTokenId: '4400', userId: '77', carried: true, pending: true }]);
+  await text(twice, '4400');
+  assert.equal(lastTextId(twice), '4242', 'until the newest carry goes out, the carry that stands is the first one');
+  await twice.advance();
+  await text(twice, '4242');
+  assert.equal(lastTextId(twice), '4400');
+  await twice.receive(signedBundle([carryResult(4300, USER_ID, 0), carryResult(4400, USER_ID, 0)]));
+  assert.equal((await first).playerGameTokenId, '4400');
+  assert.equal((await newest).carried, true);
+  assert.deepEqual(twice.fleet.players(), [{ gameTokenId: '4400', userId: '77', carried: true, pending: false }]);
+  assert.equal(twice.sentOfType(50).length, 0);
+
+  // The session moves while the replacement waits: the new server is asked for the newest
+  // token only, since it holds no carry to stand meanwhile.
+  const moved = harness();
+  await moved.connect();
+  await moved.carry(ME, USER_ID);
+  const across = moved.fleet.carry(fresh);
+  await moved.advance();
+  await moved.fleet.applyRefresh(grant({ server: OTHER_SERVER }));
+  await moved.advance();
+  assert.deepEqual(moved.sentOfType(49).map((d) => String(readCarry(d, '').player)), ['4300']);
+  await assert.rejects(text(moved, '4300'), FleetNotCarriedError);
+  await moved.receive(signedBundle([carryResult(4300, USER_ID, 0)]));
+  assert.equal((await across).carried, true);
+  await text(moved, '4300');
+  assert.equal(lastTextId(moved), '4300');
+  assert.equal(moved.fleet.carries('4242'), false);
+
+  // `replaces` that names nobody is a plain carry; one that names another player lets that
+  // player go and says so.
+  const plain = harness();
+  await plain.connect();
+  const nobody = plain.fleet.carry({ ...fresh, replaces: '999' });
+  await plain.advance();
+  await plain.receive(signedBundle([carryResult(4300, USER_ID, 0)]));
+  assert.equal((await nobody).carried, true);
+  const wrong = harness();
+  await wrong.connect();
+  await wrong.carry(ME, USER_ID);
+  const mistaken = wrong.fleet.carry(fresh);
+  await wrong.advance();
+  await wrong.receive(signedBundle([carryResult(4300, 78, 0)]));
+  assert.deepEqual(await mistaken, { playerGameTokenId: '4300', userId: '78', status: 'carried', wireStatus: 0, carried: true });
+  assert.deepEqual(wrong.sentOfType(50).map((d) => read(d).payload.readBigInt64LE(0)), [PLAYER_ID]);
+  assert.equal(wrong.events.errors.length, 1);
+  assert.match(wrong.events.errors[0].message, /replaces named game token id 4242, which is another player's/);
+  await assert.rejects(plain.fleet.carry({ ...fresh, replaces: 'p-1' }), RangeError);
 });
 
 test('nothing leaves a new connection before its capabilities, even when a tick runs meanwhile', async (t) => {
@@ -1346,6 +1670,14 @@ test('a player carried again with a refreshed token replaces the row the same us
   // The proof of the new carry is keyed with the new token.
   const carry = h.sentOfType(49).map((d) => readCarry(d, fresh.token)).find((c) => c.player === 4300n);
   assert.equal(carry.proofHolds, true);
+  // Without `replaces` the session learns from the answer that the two tokens are one
+  // player. The old id's late frames are ignored from then on: a late copy of its carry's
+  // answer must not make the session release the player.
+  await h.receive(signedBundle([carryResult(PLAYER_ID, USER_ID, 0), released(PLAYER_ID, 2)]));
+  assert.equal(h.sentOfType(50).length, 0);
+  assert.equal(h.fleet.carries('4300'), true);
+  assert.deepEqual(h.events.released, []);
+  assert.equal(h.fleet.stats().replacedIdFrames, 2);
 });
 
 test('close ends what waits and sends no more; the session is not ended on the platform by it', async () => {
