@@ -30,8 +30,12 @@ directly. So, before adding a wrapper:
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
 
-**Unreleased: fleet sessions, for an organization's own game servers (2026-11-25, branch
-`feat/fleet-sessions`; no version bump yet, nothing of it is on any tier).** One realtime session
+**18.40.0: fleet sessions, for an organization's own game servers (2026-11-26, #362).** They need
+Application API v2.89.0 or later, realtime servers v0.50.3 and, for the hub connection, ck-exec
+0.25.0; all three are on dev, test and prod since 2026-11-26 21:08Z (Application API v2.89.1).
+They are off for every organization until a Crowded Kingdoms operator switches them on for one,
+which also needs org-managed players; until then `openFleetSession` answers `FORBIDDEN`. Every
+other call needs what 18.39.0 needs (v2.85.0). One realtime session
 and one hub connection a game server, carrying its players (the workspace's
 `DESIGN-2026-11-fleet-session.md`; the build contract's section 8 is the wire as built, realtime
 servers v0.50.3). Four parts:
@@ -52,13 +56,15 @@ servers v0.50.3). Four parts:
   / `false`). Readers: `orgTokenRequiredOf`, `fleetSessionLimitOf`, `fleetSessionNotFoundOf`,
   `platformBusyOf` (`retryAfterMsOf` moved from `dropped-read.ts` to `errors.ts`, one reader).
   **`OrgManagedPlayerSettings.graphql` does not select `fleetSessionsEnabled` / `maxFleetSessions`
-  / `maxFleetPlayers` on purpose:** selecting them would make `managedPlayers.settings` need
-  v2.89.0 on every tier. Add them when test and prod have it.
+  / `maxFleetPlayers` on purpose:** selecting them makes `managedPlayers.settings` need
+  v2.89.0, and 18.40.0 keeps every existing call at 18.39.0's v2.85.0. Test and prod have
+  v2.89.1 since 2026-11-26, so a later release may select them; its README compatibility row
+  then says v2.89.0 or later for the whole release.
 - **The hub server role** (`src/domains/exec.ts`): `ExecConnection.callAs` / `callAsRaw` (client
   frame `0x05`, `rid:u32 player:u64 …`), `openAsServer`, `isServer`; refused locally `Denied` on any
   other connection, because a gateway closes one that sends the frame. `player` is the user id
-  (`FleetCarryResult.userId`). `test/unit/fixtures/exec-client-frames.json` is ck-exec's copy at
-  its `feat/fleet-sessions` branch (three call-as cases); CrowdyCPP's copy still holds its own
+  (`FleetCarryResult.userId`). `test/unit/fixtures/exec-client-frames.json` is ck-exec 0.25.0's
+  copy, byte for byte (three call-as cases); CrowdyCPP's copy still holds its own
   three until it takes ck-exec's.
 - **The wire codecs** (`src/fleet-wire.ts`, pure, exported from the root entry): 49 and 50 are
   built by `serializeLongSpatial`, the one writer of the layout; a carried player's message is any
@@ -146,10 +152,22 @@ both when you add a step. What the first runs taught, all of it now in the suite
   that session's datagrams, signed with the other token: they fail the HMAC check and are counted
   (`hmacFailures`), as they should be.
 
-At release: bump the version, turn the README's "unreleased" compatibility row and "coming" notes
-into the version, and re-sync `schema.gql` from the Application API's `dev` once its
-fleet-sessions branch has merged (the copy here is that branch's, whose type order differs from
-`dev`'s by about 80 types).
+**What the release pass did (2026-11-26).** The version is 18.40.0 in `package.json`,
+`package-lock.json` and `VERSION` (`npm version 18.40.0 --no-git-tag-version`, whose `version`
+script writes `src/index.ts`). The README's compatibility row and its "coming" notes name
+18.40.0, and MIGRATION.md's section is "18.40.0: fleet sessions for an organization's game
+servers". `npm run schema:sync:local` against cks-game-api `dev` (0813b8f9, `dev/v2.89.1` plus
+the ckx-sdk 0.15.0 pin) changed nothing: `schema.gql` was already that file with the final
+newline the script adds, and `dev/v2.89.1`'s `schema.gql` is the same. There is no gate in this
+repo that compares `schema.gql` with the Application API's: `npm run check:schema` compares the
+generated types with the committed copy, and the copy against a sibling is a `cmp` by hand
+(or the no-change result of `schema:sync:local`). The live suite's last run before the release
+was on dev against realtime servers v0.50.3: 16 pass, 0 fail, 1 skipped (the release pass did
+not run it, and it has not run on test or prod). **The embedded browser authoring index is still
+ckx-sdk 0.14.0's;** cks-game-api `dev` has 0.15.0's (with `Caller::Org`), `authoring-index:drift`
+says so, no CI gate does, and the release did not move it. To publish: merge #362 into `dev`,
+then tag the merge commit `dev/v18.40.0` (`18.40.0-dev.1` on `@dev`); test and prod follow with
+`promote.mjs` and their own tags.
 
 **18.39.1: a dropped build-status read is a missed poll (2026-11-23, the Unreal SDK's runner asks).**
 `src/dropped-read.ts` (not exported) decides which failed read to read again: `CrowdyNetworkError`
@@ -1225,7 +1243,7 @@ reference consumer of the hosted flow.
 | Direct player-to-player | `udp.sendSingleActorMessage` |
 | Age, documents, the player gate | `auth.register` (`birthDate`, `country`, `parentalConfirmation`), `auth.recordPlayerAge`, `auth.playerLegalDocuments` / `appRequiredDocuments` / `recordPlayerConsents`; refusals `territoryNotSupportedOf`, `ageRequiredOf`, `ageRequirementNotMetOf`, `legalAcceptanceRequiredOf`, `safetyLogRequiredOf` |
 | A player's voice/video scopes, contacts, blocks, reports | `safety.*` (app token); the recording notice from `apps.recording`; moderators `moderation.*`; a hub checks ck-exec's `players.blocked` before relaying one player's words |
-| An organization's own game servers (coming) | `fleetSessions.open` / `refresh` / `close` and `exec.connectAsServer` / `callAs` with the org token; `FleetSession` from `@crowdedkingdoms/crowdyjs/fleet` carries the server's players. Server side only: never in a page or a game client |
+| An organization's own game servers (18.40.0; an operator switches fleet sessions on for the organization) | `fleetSessions.open` / `refresh` / `close` and `exec.connectAsServer` / `callAs` with the org token; `FleetSession` from `@crowdedkingdoms/crowdyjs/fleet` carries the server's players. Server side only: never in a page or a game client |
 | Save / characters / teleport | `state.*`; `avatars.*`; `teleport.request` |
 | Version / capability | `serverStatus.gameClientBootstrap(appId)` |
 
