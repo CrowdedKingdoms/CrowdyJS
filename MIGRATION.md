@@ -120,6 +120,68 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.40.0: fleet sessions for an organization's game servers
+
+Your code needs no change, and nothing here changes a client that does not use it. This
+release adds fleet sessions. They need Application API v2.89.0 or later, realtime servers
+v0.50.3, and ck-exec 0.25.0 for the hub connection. All three have been on dev, test, and prod
+since November 26, 2026. Fleet sessions stay off for an organization until a Crowded Kingdoms
+operator switches them on, and the organization also needs
+[org-managed players](README.md#org-managed-players). Until then, the Application API refuses
+`fleetSessions.open` with `FORBIDDEN`. Every other call needs what 18.39.0 needs: Application
+API v2.85.0 or later. The README's
+[Game servers: fleet sessions](README.md#game-servers-fleet-sessions) is the guide.
+
+A fleet session is one realtime session a game server opens for itself, in which it carries
+the players who are on it. It runs on a server your organization runs. An org token and a
+fleet token never go into a browser page or a game client.
+
+- **`client.fleetSessions`** (also `client.admin.fleetSessions`): `open(appId)`,
+  `refresh({ appId, gameTokenId, currentServer? })`, and `close({ appId, gameTokenId })` wrap
+  `openFleetSession`, `refreshFleetSession`, and `closeFleetSession`, with the organization's
+  org token (`cko_…`, scope `fleet:session`) as the client's bearer. `open` and `refresh` answer
+  a `FleetSessionAnswer`: `token`, `gameTokenId`, `appId`, `expiresAt`, `maxPlayers`, `server`.
+  The org token that opened a session is the one that refreshes and closes it: another org token
+  of the same organization gets `NOT_FOUND` from `refresh` and `false` from `close`. The calls
+  run on a server (Node, Bun, Deno, a server-side worker) and refuse a page or its worker. Revoking an
+  org token ends every session and hub connection it opened. A session that is neither
+  refreshed nor closed ends at its `expiresAt`, 24 hours after it was opened or last refreshed.
+- **`FleetSession`**, from the new Node entry point `@crowdedkingdoms/crowdyjs/fleet`: the
+  session itself, over UDP (`node:dgram`). `connect`, `carry`, `release`, a send for a carried
+  player for each of `client.udp`'s sends, `sendHeartbeat`, `setSpeakers`, handlers that receive
+  the players a notification is for, `refreshDue`, `refreshInput`, `applyRefresh`, `stats`, and
+  `close`. Importing the entry point where `node:dgram` does not exist throws. The
+  `genericError` handler receives `(notification, verified)`: a refusal that arrived alone
+  carries no signature, so `verified` is false for it, and the session changes nothing on a
+  refusal. After a player's token is refreshed,
+  `carry({ token, gameTokenId, replaces })` keeps the player carried: sends name the new id
+  from the moment the new `FLEET_CARRY` is sent, and a late message about the old id is
+  ignored (`stats().replacedIdFrames`). A carry answered "no live token" is sent once more,
+  250 ms later, before it settles (`stats().noLiveTokenRetries`).
+- **`client.exec.connectAsServer(appId)`** and `serverEndpoint(appId)` wrap
+  `execConnectAsServer`: one hub connection for a game server. `ExecConnection.callAs(player,
+  nodeType, key, method, args)` and `callAsRaw` make a call for one of the organization's players
+  (client frame `0x05`) and are refused locally, `Denied`, on a connection that is not a
+  server's. `ExecConnection.openAsServer(gatewayUrl, token)` and the `isServer` getter are new.
+  `ExecClientFrame` gains the `callAs` kind.
+- **Refusals:** `orgTokenRequiredOf` (`ORG_TOKEN_REQUIRED`), `fleetSessionLimitOf`
+  (`FLEET_SESSION_LIMIT`), `fleetSessionNotFoundOf` (`NOT_FOUND` on a refresh), and
+  `platformBusyOf` (`PLATFORM_BUSY`, with `retryAfterMs`), each with its `*_CODE` constant.
+- **Wire codecs**, pure functions in the root entry point: `createFleetSignContext`,
+  `carriedPlayerContext`, `fleetCarryProof`, `serializeFleetCarry` (49), `serializeFleetRelease`
+  (50), `parseFleetCarryResult` (51), `parseFleetReleased` (52), `parseFleetDelivery` (53), and
+  `parseFleetDatagram`, which verifies a whole datagram. Also new there:
+  `serializeActorHeartbeat` (26), `serializeClientCapabilities`, `serializeClientMediaSpeakers`,
+  `parseNotification`, `ClientCapability` (with `BOUND_CONTROL` and `FLEET_OWN_STATE`),
+  `SpeakerListMode`, and `MAX_MEDIA_SPEAKERS`. `WireMessageType` gains 22, 26, 28, 44 to 46, and
+  49 to 53.
+- **Unchanged:** the relay, what a player's session advertises, and every existing call. The
+  SDK still has no wrapper for `mintManagedPlayerToken`.
+
+`schema.gql` and the generated types are the Application API's at v2.89.1. Beside the fleet
+session fields they carry the project profile's review, the organization's compute ceiling, and
+`portalReturnAllowed`; the SDK wraps none of those in this change.
+
 ## 18.39.1: a dropped build-status read no longer ends a deploy
 
 Your code needs no change. Until this release, one dropped read of a build's status ended a Studio

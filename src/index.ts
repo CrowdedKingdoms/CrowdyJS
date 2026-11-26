@@ -47,7 +47,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '18.39.1';
+export const VERSION = '18.40.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -119,9 +119,50 @@ export {
   serializeVoxelUpdate,
   assertVoxelEdit,
   VOXEL_STATE_MAX_BYTES,
+  serializeActorHeartbeat,
+  serializeClientCapabilities,
+  serializeClientMediaSpeakers,
+  parseNotification,
+  ClientCapability,
+  CONTROL_NONCE_BYTES,
+  SpeakerListMode,
+  MAX_MEDIA_SPEAKERS,
   type ChannelSendInput,
   type RelaySignContext,
+  type SpeakerListChange,
 } from './binary-wire.js';
+// The fleet session's wire codecs: pure functions, for an organization's game server. The
+// session itself (UDP, Node) is `@crowdedkingdoms/crowdyjs/fleet`.
+export {
+  FLEET_MAX_DATAGRAM_BYTES,
+  FLEET_MAX_DELIVERY_PLAYERS,
+  FLEET_TOKEN_CHARS,
+  FLEET_CARRY_PROOF_LABEL,
+  FLEET_CARRY_CLOCK_TOLERANCE_MS,
+  FLEET_CARRY_PAYLOAD_BYTES,
+  FLEET_CARRY_RESULT_BYTES,
+  FLEET_RELEASED_BYTES,
+  FleetCarryStatus,
+  FleetReleaseReason,
+  SessionReleaseReason,
+  createFleetSignContext,
+  carriedPlayerContext,
+  fleetCarryProof,
+  serializeFleetCarry,
+  serializeFleetRelease,
+  parseFleetCarryResult,
+  parseFleetReleased,
+  parseFleetDelivery,
+  parseFleetDatagram,
+  type FleetId,
+  type FleetCarryInput,
+  type FleetCarryResultFrame,
+  type FleetReleasedFrame,
+  type FleetDeliveryFrame,
+  type FleetInbound,
+  type FleetDatagram,
+  type FleetParseOptions,
+} from './fleet-wire.js';
 export {
   VIDEO_FRAGMENT_HEADER_BYTES,
   MAX_VIDEO_FRAGMENT_BODY_BYTES,
@@ -204,6 +245,14 @@ export {
   managedPlayerNotAllowedOf,
   assertionRejectedOf,
   orgLegalAcceptanceRequiredOf,
+  ORG_TOKEN_REQUIRED_CODE,
+  FLEET_SESSION_LIMIT_CODE,
+  NOT_FOUND_CODE,
+  PLATFORM_BUSY_CODE,
+  orgTokenRequiredOf,
+  fleetSessionLimitOf,
+  fleetSessionNotFoundOf,
+  platformBusyOf,
   LEGAL_ACCEPTANCE_REQUIRED_CODE,
   AGE_REQUIRED_CODE,
   AGE_REQUIREMENT_NOT_MET_CODE,
@@ -399,6 +448,7 @@ export {
   type OrgSigningKeyRegistration,
   type ManagedPlayerAssertionClaims,
 } from './domains/managedPlayers.js';
+export { FleetSessionsAPI, type FleetSessionAnswer } from './domains/fleetSessions.js';
 export { AppAccessAPI } from './domains/appAccess.js';
 export { BillingAPI } from './domains/billing.js';
 export { PaymentsAPI } from './domains/payments.js';
@@ -677,6 +727,17 @@ export type {
   SignInWithMinecraftInput,
   AcceptedDocumentInput,
   MintManagedPlayerTokenInput,
+} from './generated/graphql.js';
+
+// -----------------------------------------------------------------------------
+// Fleet sessions (Application API v2.89.0): the inputs an organization's game
+// server sends with its org token.
+// -----------------------------------------------------------------------------
+export type {
+  OpenFleetSessionInput,
+  RefreshFleetSessionInput,
+  CloseFleetSessionInput,
+  CurrentServerInput,
 } from './generated/graphql.js';
 
 export {

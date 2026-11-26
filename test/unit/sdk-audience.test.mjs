@@ -96,6 +96,11 @@ const PLATFORM_ONLY = [
   'childSafetyReports',
   'eraseAccount',
   'recordParentalConsentWithdrawal',
+  // Application API v2.87 and v2.88: an operator records the decision on an organization's
+  // project profile and sets an organization's compute ceiling. orgComputeCeiling is an org
+  // read (view_compute_diagnostics) and is not on this list.
+  'setOrgProjectProfileReview',
+  'setOrgComputeCeiling',
 ];
 
 /** How the schema's descriptions say a field is for super-admins or operators only. */
