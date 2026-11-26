@@ -148,7 +148,12 @@ fleet token never go into a browser page or a game client.
   the players a notification is for, `refreshDue`, `refreshInput`, `applyRefresh`, `stats`, and
   `close`. Importing the entry point where `node:dgram` does not exist throws. The
   `genericError` handler receives `(notification, verified)`: a refusal that arrived alone
-  carries no signature, so `verified` is false for it.
+  carries no signature, so `verified` is false for it, and the session changes nothing on a
+  refusal. After a player's token is refreshed,
+  `carry({ token, gameTokenId, replaces })` keeps the player carried: sends name the new id
+  from the moment the new `FLEET_CARRY` is sent, and a late message about the old id is
+  ignored (`stats().replacedIdFrames`). A carry answered "no live token" is sent once more,
+  250 ms later, before it settles (`stats().noLiveTokenRetries`).
 - **`client.exec.connectAsServer(appId)`** and `serverEndpoint(appId)` wrap
   `execConnectAsServer`: one hub connection for a game server. `ExecConnection.callAs(player,
   nodeType, key, method, args)` and `callAsRaw` make a call for one of the organization's players

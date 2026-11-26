@@ -71,8 +71,10 @@ servers v0.50.0). Four parts:
   session); control frames 22 / 28 and their bound forms 44 / 45 / 46 (HMAC over the leading
   bytes, no token appended). An error frame (`[3][seq][code]`) has no room for an HMAC: it is
   the one thing delivered unverified, `genericError(notification, verified)` says which, both are
-  counted (`unverifiedErrorsReceived`), and an unverified one changes no state (an unverified
-  `TOKEN_EXPIRED` orders no move). The golden vectors' inputs are in
+  counted (`unverifiedErrorsReceived`), and **no refusal changes the session's state, verified or
+  not**: the realtime servers send every error frame alone and unsigned, and `TOKEN_EXPIRED` is
+  about a carried player's token. The signed word that the fleet token expired is
+  `COMMAND_SESSION_RELEASED` (45, or 28) with reason 2. The golden vectors' inputs are in
   `test/unit/fleet-frames.mjs`; 49, 50 and the carried actor update are CrowdyCPP's
   (`tests/wire_test.cpp`), and 51, 52 and 53 in both forms are pinned in `fleet-wire.test.mjs` for
   CrowdyCPP and CrowdyPy to take.
@@ -90,13 +92,25 @@ servers v0.50.0). Four parts:
   (26 under the player's id, 2 s after an actor's last message), and never calls the API:
   `refreshDue()`, `refreshInput()` (no `currentServer` after a move order), `applyRefresh(answer)`
   (same server: capabilities only; another server, or the same one after
-  `COMMAND_SESSION_RELEASED`, 45 s of silence or a signed `TOKEN_EXPIRED`: a new socket and nonce,
-  capabilities, then a carry for every row). A new connection's capabilities are its first
+  `COMMAND_SESSION_RELEASED` (any reason) or 45 s of silence: a new socket and nonce,
+  capabilities, then a carry for every row). The same-server path sends the capabilities at once:
+  after a refresh the server sends the session nothing until it hears from it. A new connection's capabilities are its first
   datagram: `binding` holds every other send and the tick until they are out.
   The capabilities go again every 15 s (`capabilitiesIntervalMs`, held to a third of
   `silenceTimeoutMs`, 45 s), and their acknowledgement (46) is the verified frame an idle session
   hears. The table holds `maxPlayers` + 32 rows (`FLEET_TABLE_MARGIN`); a `carry` for a new player
   past that ends `'tableFull'` with nothing sent.
+  **A carried player's refreshed token:** `carry({ token, gameTokenId, replaces })` re-keys the
+  row to the new id at once and keeps it carried (`previous` holds the old id, `aliases` maps it
+  to the row). Sends name the old id until the new `FLEET_CARRY` is transmitted (the hook of
+  `sendOwn` switches `row.ctx` in the same turn as the transmit) and the new id after; `sendFor`
+  signs again when the context changed while it awaited, so nothing leaves under the old id
+  after the carry. The old id's late 51 and 52 are ignored and counted (`replacedIdFrames`,
+  ids kept in `replaced` for 60 s), a refused replacement goes back to the old id, and one that
+  times out lets both go. Without `replaces` the answer's user id merges the rows, as before.
+  **A carry answered status 1 is sent once more** 250 ms later (`noLiveTokenRetries`) before it
+  settles. **Nothing waits for a `FLEET_RELEASED`:** it is sent once and can be lost or come 6 s
+  late.
   Handlers get `players`: a list from a `FLEET_DELIVERY`, `null` for plain state. `toJSON` and
   Node's inspect show no token. Tests use an in-memory socket (`socket` in the config) and a clock
   the test moves (`now`, `tickIntervalMs: 0`, `tick()`); one runs over real UDP on loopback.
@@ -109,6 +123,12 @@ org-token sign-in itself (`mintManagedPlayerToken`, stable `externalId`s
 the players' tokens and the hub connect token, and no assertion takes a token as an operand: keep
 both when you add a step. What the first runs taught, all of it now in the suite or the SDK:
 
+- **A session closed through the Application API is sent nothing** (step 3b / 9c): a third
+  session, with `silenceTimeoutMs` 15 s, is closed by `closeFleetSession` while its `FleetSession`
+  stays open; `refreshDue()` turns true on the silence alone and its refresh answers `NOT_FOUND`.
+- **A carried player's refreshed token** (step 9b): `refreshAppToken` with the player's own token
+  as the bearer, then `carry` with `replaces` while the player sends an update every 5 ms; no
+  send is refused, no `released` fires, and the updates reach the other server.
 - **A session whose players have no actor is sent no state.** Give every player an actor before
   expecting anything to arrive (the suite's step 5 sends one update for each first).
 - **A just-carried player's first actor updates can go undelivered for seconds, with no refusal**

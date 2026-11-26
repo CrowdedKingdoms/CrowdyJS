@@ -6,7 +6,8 @@
  * token, signs four managed players in (the SDK has no wrapper for that on purpose, so the
  * test makes the GraphQL request itself, as an organization's server does), carries them,
  * sends and receives for them, moves one player from one server to the other, refreshes a
- * session, and ends everything it opened.
+ * session, refreshes a carried player's token, closes a third session through the API to see
+ * the session notice, and ends everything it opened.
  *
  * It runs only when all three of these are set, so it never runs by accident:
  *
@@ -125,10 +126,11 @@ test(
     }
 
     // ---- a game server: one fleet session, and everything it was told ----
-    function gameServer(name, opened) {
+    function gameServer(name, opened, config = {}) {
       const seen = { actors: [], texts: [], errors: [], released: [], carryResults: [], statuses: [], moves: 0, sessionReleased: [], failures: [], sockets: [], datagrams: [], kinds: {}, foreign: [] };
       const open = nodeFleetSocket();
       const fleet = new FleetSession({
+        ...config,
         session: opened,
         // The default socket, kept within reach so step 8 can send a datagram the session
         // itself refuses to build.
@@ -271,7 +273,8 @@ test(
     const failedSteps = new Set();
     let hub = null;
     let pulses = 0;
-    const closed = { X: false, Y: false };
+    const closed = { X: false, Y: false, Z: false };
+    let zClosedAt = 0;
 
     const spatial = (i) => ({ chunk: CHUNK, uuid: players[i].uuid, distance: 8, decayRate: 0 });
     const update = (server, i, marker) =>
@@ -358,6 +361,23 @@ test(
           assert.equal(stats.malformed, 0);
           note(`${server.name}: connected in ${Date.now() - started} ms, ${stats.sentByType[29]} capabilities sent, ${stats.boundControlAcks} acknowledged`);
         }
+      });
+
+      await step('3b', 'a third session is closed through the Application API while its FleetSession stays open', [3], async () => {
+        // A session closed through the API is sent nothing at all: no release frame, and no
+        // answer to anything. What tells its game server is the silence. This session
+        // tolerates 15 seconds of it (capabilities every 5), so the suite stays short.
+        const opened = await api.fleetSessions.open(appId);
+        secrets.add(opened.token);
+        const z = gameServer('Z', opened, { silenceTimeoutMs: 15_000 });
+        servers.Z = z;
+        await z.fleet.connect();
+        await until('Z to be connected', () => z.fleet.status === 'connected', 15_000);
+        assert.equal(z.fleet.refreshDue(), false);
+        assert.equal(await api.fleetSessions.close({ appId, gameTokenId: opened.gameTokenId }), true);
+        closed.Z = true;
+        zClosedAt = Date.now();
+        z.seen.atClose = z.seen.datagrams.length;
       });
 
       await step(4, 'X carries players 0 and 1, Y carries 2 and 3', [2, 3], async () => {
@@ -563,6 +583,97 @@ test(
         assert.equal(x.seen.moves, 0);
       });
 
+      await step('9b', 'a carried player\u2019s token is refreshed and carried again with no gap', [5], async () => {
+        // The player's token is refreshed as the player's own client would: with the app
+        // token as the bearer. The old token is revoked by it.
+        const x = servers.X;
+        const p = players[1];
+        const old = { token: p.token, gameTokenId: p.gameTokenId };
+        const res = await counted(endpoint, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${old.token}` },
+          body: JSON.stringify({ query: 'mutation { refreshAppToken { token gameTokenId appId expiresAt } }' }),
+        });
+        const body = await res.json();
+        if (body.errors?.length) throw new Error(`refreshAppToken: ${body.errors[0].extensions?.code}: ${body.errors[0].message}`);
+        const fresh = body.data.refreshAppToken;
+        secrets.add(fresh.token);
+        assert.equal(fresh.token.length, 64);
+        assert.ok(fresh.token !== old.token, 'a new token');
+        assert.notEqual(fresh.gameTokenId, old.gameTokenId, 'with a new id');
+
+        // Carry again with the new token while the player keeps sending, by the id the game
+        // server knew them by a moment ago. Every send must be accepted: none refused.
+        const errorsBefore = x.seen.errors.length;
+        const releasedBefore = x.seen.released.length;
+        const seqs = [];
+        let sending = true;
+        const stream = (async () => {
+          for (let n = 0; sending; n += 1) {
+            seqs.push(await update(x, 1, `during-recarry-${n}`).catch((e) => `${e?.name}`));
+            await sleep(5);
+          }
+        })();
+        const started = Date.now();
+        const result = await x.fleet.carry({ token: fresh.token, gameTokenId: fresh.gameTokenId, replaces: old.gameTokenId });
+        const took = Date.now() - started;
+        // As a game server does on the carry's answer: from here it knows the player by the new id.
+        if (result.carried) {
+          p.token = fresh.token;
+          p.gameTokenId = fresh.gameTokenId;
+        }
+        await sleep(300); // sends that were on their way, and any late word about the old id
+        sending = false;
+        await stream;
+        assert.equal(result.status, 'carried', `the refreshed carry: ${result.status} (wire status ${result.wireStatus})`);
+        assert.equal(result.playerGameTokenId, fresh.gameTokenId);
+        assert.equal(result.userId, p.userId, 'the same user');
+        assert.ok(seqs.length > 5 && seqs.every((v) => typeof v === 'number'), `every send was taken locally (${seqs.filter((v) => typeof v !== 'number').length} of ${seqs.length} were not)`);
+        assert.equal(x.fleet.carries(fresh.gameTokenId), true);
+        assert.equal(x.fleet.carries(old.gameTokenId), false, 'the old id names nothing now');
+        assert.equal(x.seen.released.length, releasedBefore, 'no released event: the player was carried throughout');
+        const refusals = x.seen.errors.slice(errorsBefore);
+        note(
+          `the refreshed carry answered in ${took} ms; ${seqs.length} updates were sent across it; ` +
+            `${refusals.length} were refused${refusals.length ? ` (${refusals.map((e) => e.code).join(', ')})` : ''}; ` +
+            `late frames about the old id ignored: ${x.fleet.stats().replacedIdFrames}`,
+        );
+        assert.equal(refusals.length, 0, 'no send was refused across the refreshed carry');
+        // The player continues under the new id: its state reaches Y, and the last update sent
+        // across the carry did too.
+        const marker = `recarried-${randomBytes(6).toString('hex')}`;
+        await update(x, 1, marker);
+        await until('the recarried player\u2019s update on Y', () => servers.Y.seen.actors.some((a) => a.state === b64(marker)), 5_000);
+        const arrived = seqs.filter((_, n) => servers.Y.seen.actors.some((a) => a.state === b64(`during-recarry-${n}`))).length;
+        note(`${arrived} of the ${seqs.length} updates sent across the carry reached Y`);
+        assert.ok(arrived >= seqs.length - 2, 'the updates sent across the carry reached Y');
+        await assert.rejects(x.fleet.sendActorUpdate(old.gameTokenId, { ...spatial(1), state: b64('old-id') }), (e) => e instanceof FleetNotCarriedError);
+      });
+
+      await step('9c', 'the session closed through the API notices the silence, and its refresh answers NOT_FOUND', ['3b'], async () => {
+        const z = servers.Z;
+        await until('Z to see that a refresh is due', () => z.fleet.refreshDue(), 60_000 - Math.min(59_000, Date.now() - zClosedAt));
+        const after = Math.round((Date.now() - zClosedAt) / 100) / 10;
+        note(`Z: refreshDue() turned true ${after} s after closeFleetSession (it tolerates 15 s of silence)`);
+        assert.ok(Date.now() - zClosedAt <= 60_000, 'within 60 seconds of the close');
+        assert.equal(z.fleet.moveOrdered, true);
+        assert.equal(z.seen.moves, 1, 'the moveOrdered handler fired');
+        // It was sent nothing: no release frame and no answer to its capabilities.
+        const since = z.seen.datagrams.slice(z.seen.atClose);
+        note(`Z was sent ${since.length} datagram(s) after the close${since.length ? `: ${since.map((d) => d.shape).slice(0, 5).join(', ')}` : ''}`);
+        assert.deepEqual(z.seen.sessionReleased, [], 'no COMMAND_SESSION_RELEASED');
+        assert.equal(z.fleet.status, 'connected', 'nothing told it otherwise');
+        assert.deepEqual(z.fleet.refreshInput(), { appId, gameTokenId: z.opened.gameTokenId }, 'the refresh names no server');
+        const refusal = await api.fleetSessions.refresh(z.fleet.refreshInput()).then(
+          () => null,
+          (e) => e,
+        );
+        assert.ok(refusal instanceof sdk.CrowdyGraphQLError, 'the refresh of a closed session is refused');
+        assert.equal(refusal.code, 'NOT_FOUND');
+        assert.equal(sdk.fleetSessionNotFoundOf(refusal), true);
+        z.fleet.close();
+      });
+
       await step(10, 'the game server connects to hubs as itself and calls for a player', [4], async (st) => {
         const hubApp = process.env.CROWDY_FLEET_HUB_APP_ID;
         if (!hubApp) {
@@ -689,7 +800,7 @@ test(
         // Checked last and on its own, because it judges the realtime servers and not the
         // steps above: a session is in one app, and everything it is sent is signed.
         const problems = [];
-        for (const server of [servers.X, servers.Y]) {
+        for (const server of [servers.X, servers.Y, servers.Z].filter(Boolean)) {
           const stats = server.fleet.stats();
           const by = (key) => {
             const counts = {};
@@ -724,7 +835,7 @@ test(
       } catch {
         /* already closed */
       }
-      for (const name of ['X', 'Y']) {
+      for (const name of ['X', 'Y', 'Z']) {
         const server = servers[name];
         if (!server) continue;
         try {

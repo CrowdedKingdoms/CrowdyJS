@@ -1298,7 +1298,7 @@ The promise resolves with how the carry ended:
 | `status` | Meaning |
 | --- | --- |
 | `carried` | The session carries the player. `userId` is the player's user id. |
-| `noLiveToken` | The realtime servers know no live token by that id: it expired, the sign-in ended, or it belongs to another app. |
+| `noLiveToken` | The realtime servers know no live token by that id: it expired, the sign-in ended, or it belongs to another app. The session asked twice before it settled on this answer. |
 | `otherOrganization` | The token belongs to another organization's player. |
 | `proofFailed` | The proof or its time failed. A clock more than 30 seconds from the server's fails too. |
 | `sessionFull` | The session carries as many players as it may (`maxPlayers`). |
@@ -1309,22 +1309,69 @@ The promise resolves with how the carry ended:
 
 - **An unanswered carry is sent again** every 250 ms, each time with a new time and a new
   proof (`carryRetryMs`, `carryTimeoutMs`).
+- **A carry answered "no live token" is sent once more**, 250 ms later, with a new time and
+  a new proof. The promise settles on the answer to that second send.
 - **Carries are paced.** The session sends at most 60 `FLEET_CARRY` messages a second, first
   sends and retries together (`maxCarriesPerSecond`). The realtime servers drop a session's
   carries past 64 a second without an answer.
-- **A crossing is a carry on the next server.** Give that server the player's token over
-  your own link. Its session carries the player, and this session's `released` handler
-  fires with reason 1.
-- **After you refresh a player's token**, call `carry` with the new token. Once that carry
-  is confirmed it replaces the row the same user had, and the player continues without a
-  gap.
+- **A crossing is a carry on the next server.** Stop sending for the player on this server,
+  then give the next server the player's token over your own link. Its session carries the
+  player, and this session's `released` handler fires with reason 1.
+- **After you refresh a player's token**, call
+  `carry({ token, gameTokenId, replaces })` with the new token, the new `gameTokenId`, and
+  the `gameTokenId` the player was carried under as `replaces`. The next section covers
+  what happens to the player's sends meanwhile.
 - **`fleet.release(gameTokenId)`** sends `FLEET_RELEASE` when the player leaves the game.
   The message has no answer. If it is lost, the carry stays on the platform until another
   session carries the player, their sign-in ends, or they idle out.
 
 The `released` handler reports a carry the platform ended, with its reason: 1 another
-session carries the player, 2 the player's sign-in ended, 5 the player sent no gameplay
-input for the app's idle timeout (15 minutes unless the app sets its own).
+session carries the player, 2 the player's sign-in ended or their token expired, 5 the
+player sent no gameplay input for the app's idle timeout (15 minutes unless the app sets its
+own).
+
+The platform sends `FLEET_RELEASED` once. The message can be lost, and it can arrive up to
+about 6 seconds after the carry ended, so `released` may fire late or never. `UNAUTHORIZED`
+on the next send for a player is the sign that another session carries them. For a few
+milliseconds after a crossing, and rarely for up to about 5 seconds, the previous session's
+sends for the player are still accepted, which is why your server stops sending before it
+hands the player off.
+
+### A refreshed token replaces the old one with no gap
+
+A player's token expires, and the player's side refreshes it with `refreshAppToken`, which
+answers a new token and a new `gameTokenId`. Carry the player again with both, and name the
+id the player is carried under now:
+
+```ts
+const result = await fleet.carry({
+  token: refreshed.token,
+  gameTokenId: refreshed.gameTokenId,
+  replaces: previousGameTokenId,
+});
+```
+
+- **The player stays carried throughout.** The carry made with the old token stands until
+  the new one takes effect, and the player keeps their actors and their idle clock. No
+  `released` event fires.
+- **Every send names the new id from the moment the new `FLEET_CARRY` is sent.** The session
+  does this for you: a send you make with either id goes out under the old id before that
+  moment and under the new id after it. The platform applies a send that names the new id
+  after the carry it follows.
+- **Use the new id once the promise resolves `carried`.** From then on the old id names
+  nobody: a send with it rejects with `FleetNotCarriedError`, and `fleet.carries` answers
+  false for it.
+- **A late message about the old id changes nothing.** The session ignores a
+  `FLEET_RELEASED` or a carry's answer that names an id it replaced, and counts it
+  (`replacedIdFrames` in `fleet.stats()`).
+- **A refused replacement leaves the player carried under the old id** until the platform
+  ends that carry, which the `released` handler reports. A replacement with no answer in 5
+  seconds ends the carry under both ids, and the promise resolves `timedOut`.
+
+A `carry` with a new token and no `replaces` also ends with the player carried under the
+new id, with a gap on the way. The session learns that the two tokens are one player only
+from the carry's answer. Until that answer arrives its sends name the old id, and the
+platform refuses the ones that arrive after the new carry took effect. Pass `replaces`.
 
 ### Each send names the player it is for
 
@@ -1368,8 +1415,13 @@ Each handler receives the notification and the players it is for.
 - **A client's event or an app-defined spatial message** arrives with a list when only some
   of your players in range may receive it, and plain when all of them may.
 - **Your own players' state is not sent back to you.** `fleetOwnState: true` (or
-  `fleet.setFleetOwnState(true)`) asks for it when another of your players is in range. A
-  voxel edit always reaches the session that sent it.
+  `fleet.setFleetOwnState(true)`) asks for it when another of your players is in range.
+  Two things reach the session that caused them either way: a voxel edit it sent, and the
+  departure of its own player's actor.
+- **State about a player you carry is stale.** Your server is the authority on its own
+  players. Just after a crossing, the session can receive a few updates for the player it
+  now carries that the previous server sent a moment before. Drop state whose actor belongs
+  to a player the session carries.
 
 `FleetSession` verifies everything it receives with the fleet token before a handler runs,
 and no option turns that off. A frame that fails is dropped and counted in `fleet.stats()`
@@ -1377,22 +1429,43 @@ and no option turns that off. A frame that fails is dropped and counted in `flee
 too (`wrongApp`), since a session is in one app. The one exception is a refusal of a send,
 which the next section covers. The largest datagram a fleet session is sent is 1,242 bytes.
 
-### A refused send says whether the refusal was verified
+### A refused send arrives unsigned, so treat it as a hint
 
-The `genericError` handler receives a refused send and a second argument, `verified`.
-`UNAUTHORIZED` is how your server learns that the platform refuses a carried player's sends:
-the session does not carry the player, or the player's access to the app was suspended or
-ended. Stop serving that player. Match the refusal's sequence number against the numbers
-your sends resolved with, because a refusal names no player.
+The `genericError` handler receives a refused send and a second argument, `verified`. A
+refusal is 3 bytes: the message type, the sequence number of the send, and a code. It names
+no player, so match its sequence number against the numbers your sends resolved with.
 
-- **`verified` is true** when the refusal arrived inside a bundle signed with the fleet
-  token.
-- **`verified` is false** when it arrived alone. A refusal is 3 bytes with no room for a
-  signature, so anyone who can reach the session's socket could have sent it. Treat it as a
-  hint: stop sending for that player, then carry the player again or check their access
-  through the Application API, and act on that answer. A carry's answer is always verified.
-- **The session changes nothing on an unverified refusal.** An unverified `TOKEN_EXPIRED`
-  does not make a refresh due.
+- **`verified` is false for a refusal that arrived alone.** The realtime servers send every
+  refusal alone, and 3 bytes leave no room for a signature, so anyone who can reach the
+  session's socket could have sent it. `verified` is true only for a refusal inside a bundle
+  signed with the fleet token.
+- **The session changes nothing on a refusal**, whatever its code. Treat it as a hint: stop
+  sending for that player, then carry the player again or check their access through the
+  Application API, and act on that answer. A carry's answer is always verified.
+- **`TOKEN_EXPIRED` is about a carried player's token.** A send that lands just before the
+  player's token expires is answered `TOKEN_EXPIRED`, and `released` follows with reason 2.
+  The fleet token's own expiry reaches the `sessionReleased` handler with reason 2, in a
+  signed message.
+
+`UNAUTHORIZED` has nine causes, and the refusal does not say which one applies:
+
+| Why the send was refused | What to do |
+| --- | --- |
+| It names the player's previous `gameTokenId` after a carry with a refreshed token took effect | `FleetSession` names the new id for you. With the codecs alone, name the new id. |
+| The session no longer carries the player: you released them, they idled out, their sign-in ended, or another session carries them | Carry the player again if your server should still serve them. |
+| The player lacks a permission the message needs: access to the app, voice, video, text, direct messages, or voxel writes | Grant the permission, or stop sending that kind of message for the player. |
+| The platform could not read the permissions for that part of the world within 2 seconds, or too many sends were waiting for them | Send again. |
+| The actor belongs to another player | Send for an actor only under the player who owns it. |
+| The platform could not confirm whose actor it is within 2 seconds | Send again. |
+| A communication rule refuses the message: a minor's direct message, or a kind of communication that is switched off | Nothing. The message is not delivered. |
+| The player's access to the app was suspended or ended | Stop serving the player. |
+| The message went under the session's own `gameTokenId` and is not one of its four kinds | Send it under a carried player's id. `FleetSession` never sends one. |
+
+Three other outcomes of a send are not `UNAUTHORIZED`:
+
+- **A player over their message budget** gets no answer. The message is dropped.
+- **A player whose token expired** gets `TOKEN_EXPIRED`, then `released` with reason 2.
+- **A paused app** gets `APP_PAUSED`.
 
 ### The session refreshes before it expires, and follows a move
 
@@ -1402,16 +1475,28 @@ or says nothing for 45 seconds (the `moveOrdered` and `sessionReleased` handlers
 `refreshFleetSession` then, with `fleet.refreshInput()`, and give the answer to
 `fleet.applyRefresh`.
 
+The realtime server signs both messages, and the session acts on them only after it has
+verified them. `sessionReleased` carries a reason: 2 means the fleet token expired, and 1,
+3, and 4 mean the server stopped serving the session (it heard nothing from the session, it
+shed load, or it moved the session). Every reason makes a refresh due.
+
 - **`refreshInput()` names the server the session is on**, so the session stays there
   while that server still serves the app. After a move order it names no server, and the
   answer's `server` is the next one.
-- **The same server:** the carries stand. The session sends its capabilities again.
+- **The same server:** the carries stand. The session sends its capabilities at once,
+  because after a refresh the server sends the session nothing until it hears from it.
 - **Another server**, or the same one after it released the session or went quiet: the
   session connects, sends its capabilities, and carries every player again with a new time
   and proof, paced as above. Until a player's answer arrives, sends for that player reject
   with `FleetNotCarriedError`. Each answer reaches the `carryResult` handler.
 - **A refresh refused `NOT_FOUND`** means the session ended. Open a new one and carry your
   players again.
+- **A session closed through the Application API is sent nothing.** If `closeFleetSession`
+  ends a session while its `FleetSession` is still open, the realtime server stops
+  answering, with no message to say so. The session sends its capabilities every 15 seconds
+  and expects a signed acknowledgement of each. About 45 seconds after the close,
+  `refreshDue()` turns true and `moveOrdered` fires, and `refreshFleetSession` then answers
+  `NOT_FOUND`. Open a new session and carry your players again.
 
 ### The server connects to hubs as itself
 
@@ -1841,7 +1926,10 @@ realtime servers. It runs only with `CROWDY_FLEET_API_URL` (the GraphQL endpoint
 `CROWDY_FLEET_APP_ID`, and `CROWDY_FLEET_ORG_TOKEN` (scopes `players:mint` and `fleet:session`)
 all set. It opens two fleet sessions, signs in four managed players
 (`crowdyjs-fleet-e2e-0` to `-3`), carries them, sends and receives state and text, moves one
-player from one server to the other, refreshes a session, and closes everything.
+player from one server to the other, refreshes a session, refreshes one player's token and
+carries the player again while they send, and closes everything. It also opens a third
+session, closes it through the Application API, and waits for that session to see that a
+refresh is due.
 `CROWDY_FLEET_HUB_APP_ID` adds the hub server connection, and `CROWDY_FLEET_IDLE_SECONDS` (the
 app's idle timeout) adds a wait for one player's idle release. The suite leaves the four
 players, which every run reuses, and their sign-ins, which last 10 minutes. It prints no token.
