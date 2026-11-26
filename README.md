@@ -1371,16 +1371,18 @@ A frame that fails is dropped and counted in `fleet.stats()` (`hmacFailures`, `u
 ### The session refreshes before it expires, and follows a move
 
 `fleet.refreshDue()` is true once 12 of the session's 24 hours have passed. It is also true
-as soon as the realtime server tells the session to connect to another server, or releases
-it (the `moveOrdered` and `sessionReleased` handlers). Call `refreshFleetSession` then, with
-`fleet.refreshInput()`, and give the answer to `fleet.applyRefresh`.
+as soon as the realtime server tells the session to connect to another server, releases it,
+or says nothing for 45 seconds (the `moveOrdered` and `sessionReleased` handlers). Call
+`refreshFleetSession` then, with `fleet.refreshInput()`, and give the answer to
+`fleet.applyRefresh`.
 
 - **`refreshInput()` names the server the session is on**, so the session stays there
   while that server still serves the app. After a move order it names no server, and the
   answer's `server` is the next one.
 - **The same server:** the carries stand. The session sends its capabilities again.
-- **Another server:** the session connects there, sends its capabilities, and carries every
-  player again with a new time and proof, paced as above. Until a player's answer arrives,
+- **Another server**, or the same one after it released the session or went quiet: the
+  session connects, sends its capabilities, and carries every player again with a new time
+  and proof, paced as above. Until a player's answer arrives,
   sends for that player reject with `FleetNotCarriedError`. Each answer reaches the
   `carryResult` handler.
 - **A refresh refused `NOT_FOUND`** means the session ended. Open a new one and carry your

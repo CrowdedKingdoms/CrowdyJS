@@ -82,7 +82,9 @@ servers v0.50.0). Four parts:
   (26 under the player's id, 2 s after an actor's last message), and never calls the API:
   `refreshDue()`, `refreshInput()` (no `currentServer` after a move order), `applyRefresh(answer)`
   (same server: capabilities only; another server, or the same one after
-  `COMMAND_SESSION_RELEASED`: a new socket and nonce, capabilities, then a carry for every row).
+  `COMMAND_SESSION_RELEASED`, 45 s of silence or a signed `TOKEN_EXPIRED`: a new socket and nonce,
+  capabilities, then a carry for every row). A new connection's capabilities are its first
+  datagram: `binding` holds every other send and the tick until they are out.
   Handlers get `players`: a list from a `FLEET_DELIVERY`, `null` for plain state. `toJSON` and
   Node's inspect show no token. Tests use an in-memory socket (`socket` in the config) and a clock
   the test moves (`now`, `tickIntervalMs: 0`, `tick()`); one runs over real UDP on loopback.
@@ -999,7 +1001,7 @@ not a running service and is not a schema source; gameplay data lives in
 - `src/kit/` — the Game Kit: the kit protocol, runtime, mirrors, topology and the starter
   hubs' modules (`modules/`, 18.11.0), `social`, the wire codecs (`kit/wire.ts`) and
   `runOptimisticAction`. The model-backed kit went in 18.0.0.
-- `src/fleet-wire.ts` and `src/fleet/` — the fleet session: its wire codecs (pure, in the root
+- `src/fleet-wire.ts` and `src/fleet/`: the fleet session, as its wire codecs (pure, in the root
   entry) and `FleetSession` over `node:dgram` (`@crowdedkingdoms/crowdyjs/fleet`, the only entry
   that opens a UDP socket; the core client never imports it).
 - `schema.gql` + `src/generated/graphql.ts` + `src/generated/graphql-schema.ts` — committed artifacts. Refresh from

@@ -101,6 +101,9 @@ function harness(config = {}) {
   const fleet = new FleetSession({
     session: grant(config.grant),
     tickIntervalMs: 0,
+    // This server answers only what a test makes it answer, so the silence watchdog is off
+    // except where a test is about it.
+    silenceTimeoutMs: 0,
     now: () => now,
     socket: (server, on) => {
       const socket = { server, on, sent: [], closed: false };
@@ -999,6 +1002,93 @@ test('an unbound control frame is taken until the server acknowledges the bound 
   // One signed with another key is a failure, not a stale frame.
   await late.receive(Buffer.concat([Buffer.from([22]), rawHmac(PLAYER_TOKEN, Buffer.from([22]))]));
   assert.equal(late.fleet.stats().hmacFailures, 1);
+});
+
+test('a server that goes quiet, or says the token expired, makes a refresh due; the refresh carries everyone again', async () => {
+  const h = harness({ session: { silenceTimeoutMs: 45_000 } });
+  await h.connect();
+  await h.carry(ME, USER_ID);
+  // A live server acknowledges the capabilities every 15 seconds: nothing is ordered.
+  for (let i = 0; i < 4; i += 1) {
+    await h.advance(15_000);
+    await h.acknowledge();
+  }
+  assert.equal(h.fleet.moveOrdered, false);
+  assert.equal(h.events.moves, 0);
+  // Then it says nothing that verifies. Three capabilities go unanswered.
+  await h.receive(Buffer.from([3, 1, 7])); // an unsigned error frame is not the server speaking
+  await h.advance(44_999);
+  assert.equal(h.fleet.moveOrdered, false);
+  await h.advance(1);
+  assert.equal(h.fleet.moveOrdered, true);
+  assert.equal(h.fleet.refreshDue(), true);
+  assert.equal(h.events.moves, 1);
+  assert.deepEqual(h.fleet.refreshInput(), { appId: '7', gameTokenId: '9001' });
+  await h.advance(60_000);
+  assert.equal(h.events.moves, 1, 'said once');
+  // The refresh names the same server. It may have started again and hold no carry, so the
+  // session connects anew and carries its player again.
+  await h.fleet.applyRefresh(grant());
+  assert.equal(h.sockets.length, 2);
+  assert.equal(read(h.socket.sent[0]).type, 29);
+  await h.advance();
+  assert.deepEqual(h.sentOfType(49).map((d) => readCarry(d, PLAYER_TOKEN).player), [PLAYER_ID]);
+  await h.receive(signedBundle([carryResult(PLAYER_ID, USER_ID, 0)]));
+  assert.equal(h.fleet.carries(PLAYER_ID), true);
+  assert.equal(h.fleet.moveOrdered, false);
+
+  // A session the server never answered at all (its token never reached that server).
+  const unheard = harness({ session: { silenceTimeoutMs: 45_000 } });
+  await unheard.fleet.connect();
+  await unheard.advance(45_000);
+  assert.equal(unheard.fleet.status, 'connecting');
+  assert.equal(unheard.fleet.refreshDue(), true);
+
+  // TOKEN_EXPIRED inside a signed bundle is the server's word; alone it carries no HMAC.
+  const expired = harness();
+  await expired.connect();
+  await expired.receive(Buffer.from([3, 9, 32]));
+  assert.equal(expired.fleet.moveOrdered, false);
+  await expired.receive(signedBundle([Buffer.from([3, 9, 32])]));
+  assert.equal(expired.fleet.moveOrdered, true);
+  assert.equal(expired.events.notifications.filter((e) => e.name === 'genericError').length, 2);
+});
+
+test('nothing leaves a new connection before its capabilities, even when a tick runs meanwhile', async (t) => {
+  const h = harness();
+  const pending = h.fleet.carry(ME);
+  await Promise.all([h.fleet.connect(), h.fleet.tick(), h.fleet.tick()]);
+  await h.advance();
+  assert.deepEqual(h.socket.sent.slice(0, 2).map((d) => d[0]), [29, 49]);
+  await h.receive(signedBundle([carryResult(PLAYER_ID, USER_ID, 0)]));
+  await pending;
+
+  // A move, with the new connection's capabilities slow to sign: the next HMAC takes 30 ms.
+  // A tick that runs meanwhile has carries due and must not send them ahead.
+  const subtle = globalThis.crypto.subtle;
+  const sign = subtle.sign.bind(subtle);
+  let slow = true;
+  subtle.sign = async (...args) => {
+    if (slow) {
+      slow = false;
+      await new Promise((r) => setTimeout(r, 30));
+    }
+    return sign(...args);
+  };
+  t.after(() => {
+    delete subtle.sign;
+  });
+  const moving = h.fleet.applyRefresh(grant({ server: OTHER_SERVER }));
+  // Let the session take the new socket and start signing its capabilities.
+  for (let i = 0; i < 3; i += 1) await new Promise((r) => setImmediate(r));
+  assert.equal(h.sockets.length, 2, 'the new socket is open');
+  assert.equal(h.socket.sent.length, 0, 'and its capabilities are still being signed');
+  await h.fleet.tick();
+  assert.equal(h.socket.sent.length, 0, 'the tick sent nothing ahead of them');
+  await moving;
+  assert.deepEqual(h.socket.sent.map((d) => d[0]), [29]);
+  await h.advance();
+  assert.deepEqual(h.socket.sent.map((d) => d[0]), [29, 49]);
 });
 
 test('a player carried again with a refreshed token replaces the row the same user had', async () => {

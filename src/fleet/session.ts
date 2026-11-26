@@ -186,9 +186,10 @@ export interface FleetHandlers {
   /** The server ended a carry. The session no longer carries the player when this fires. */
   released?(released: FleetReleased): void;
   /**
-   * The realtime server told the session to connect to another one. `refreshDue()` is true:
-   * call `refreshFleetSession` without a `currentServer` (`refreshInput()` leaves it out) and
-   * give the answer to `applyRefresh`. The server keeps answering for about 5 seconds.
+   * The session needs another realtime server: the one it is on told it to connect elsewhere
+   * (and keeps answering for about 5 seconds), said the session's token expired, or said
+   * nothing for `silenceTimeoutMs`. `refreshDue()` is true: call `refreshFleetSession` without
+   * a `currentServer` (`refreshInput()` leaves it out) and give the answer to `applyRefresh`.
    */
   moveOrdered?(): void;
   /**
@@ -204,7 +205,7 @@ export interface FleetHandlers {
 }
 
 /**
- * - `idle`: made, not connected.
+ * - `idle`: made, and not yet connected.
  * - `connecting`: the socket is open and the capabilities are sent; nothing has verified yet.
  * - `connected`: the realtime server answered with something that verified.
  * - `released`: the realtime server released the session; refresh it.
@@ -253,6 +254,12 @@ export interface FleetSessionConfig {
   capabilitiesIntervalMs?: number;
   /** How often the capabilities are sent again until the server answers. Default 500. */
   bindRetryMs?: number;
+  /**
+   * How long the realtime server may say nothing that verifies before the session takes it
+   * for gone: `refreshDue()` turns true, and the refresh that follows carries every player
+   * again. Default 45,000, three unanswered capabilities; 0 never does.
+   */
+  silenceTimeoutMs?: number;
   /**
    * How often the session does its timed work (carry sends and retries, keepalives), in
    * milliseconds. Default 20. 0 starts no timer: call {@link FleetSession.tick} yourself.
@@ -440,6 +447,7 @@ export class FleetSession {
   private readonly actorHeartbeatMs: number;
   private readonly capabilitiesIntervalMs: number;
   private readonly bindRetryMs: number;
+  private readonly silenceTimeoutMs: number;
   private readonly tickIntervalMs: number;
 
   private ctx: RelaySignContext | null = null;
@@ -452,6 +460,10 @@ export class FleetSession {
   private boundAcked = false;
   /** Something from the server verified on this connection. */
   private answered = false;
+  /** When the server last said something that verified, or when this connection was opened. */
+  private lastHeardAt = 0;
+  /** The connection is being opened: nothing goes out before its capabilities. */
+  private binding = false;
   private currentStatus: FleetSessionStatus = 'idle';
   private capabilityFlags: number;
   private moveWasOrdered = false;
@@ -513,6 +525,7 @@ export class FleetSession {
     this.actorHeartbeatMs = Math.max(0, config.actorHeartbeatMs ?? 2_000);
     this.capabilitiesIntervalMs = Math.max(1_000, config.capabilitiesIntervalMs ?? 15_000);
     this.bindRetryMs = Math.max(50, config.bindRetryMs ?? 500);
+    this.silenceTimeoutMs = Math.max(0, config.silenceTimeoutMs ?? 45_000);
     this.tickIntervalMs = Math.max(0, config.tickIntervalMs ?? 20);
     this.capabilityFlags =
       ClientCapability.BUNDLE_SIGNED |
@@ -616,17 +629,24 @@ export class FleetSession {
       socket.close();
       return;
     }
-    this.socket = socket;
-    this.server = { ...server };
-    this.controlNonce = nonce;
-    this.boundAcked = false;
-    this.answered = false;
-    this.carrySends = [];
-    this.setStatus('connecting');
     const now = this.now();
-    await this.sendCapabilities();
-    this.nextCapabilitiesAt = now + this.bindRetryMs;
-    this.lastKeepAliveAt = now;
+    this.binding = true;
+    try {
+      this.socket = socket;
+      this.server = { ...server };
+      this.controlNonce = nonce;
+      this.boundAcked = false;
+      this.answered = false;
+      this.carrySends = [];
+      this.lastHeardAt = now;
+      this.setStatus('connecting');
+      // The capabilities are the connection's first datagram: they bind the session.
+      await this.sendCapabilities();
+      this.nextCapabilitiesAt = now + this.bindRetryMs;
+      this.lastKeepAliveAt = now;
+    } finally {
+      this.binding = false;
+    }
     if (this.tickIntervalMs > 0 && !this.timer) {
       this.timer = setInterval(() => void this.tick(), this.tickIntervalMs);
       (this.timer as { unref?: () => void }).unref?.();
@@ -654,16 +674,19 @@ export class FleetSession {
 
   // ----- Refreshing ----------------------------------------------------------------
 
-  /** True after the realtime server told the session to move or released it, until a refresh is applied. */
+  /**
+   * True after the realtime server told the session to move, released it, said its token
+   * expired or went quiet for `silenceTimeoutMs`, until a refresh is applied.
+   */
   get moveOrdered(): boolean {
     return this.moveWasOrdered;
   }
 
   /**
-   * True when it is time to call `refreshFleetSession`: the realtime server told the session
-   * to move or released it, or less than half of the session's lifetime is left (12 hours
-   * into a 24-hour session, counted from when this object was given the grant). The session
-   * makes no call itself: ask this from your own loop.
+   * True when it is time to call `refreshFleetSession`: a move was ordered
+   * ({@link moveOrdered}), or less than half of the session's lifetime is left (12 hours into
+   * a 24-hour session, counted from when this object was given the grant). The session makes
+   * no call itself: ask this from your own loop.
    */
   refreshDue(): boolean {
     if (this.currentStatus === 'closed') return false;
@@ -689,8 +712,8 @@ export class FleetSession {
    *
    * - **The same server:** the carries stand. The session sends its capabilities again and no
    *   `FLEET_CARRY`.
-   * - **Another server**, or the same one after it released the session: the server holds no
-   *   carry. The session connects there, sends its capabilities, then a new `FLEET_CARRY` (a
+   * - **Another server**, or the same one after it released the session or went quiet: the
+   *   server holds no carry. The session connects there, sends its capabilities, then a new `FLEET_CARRY` (a
    *   new time and proof) for every player, paced under 64 a second. Until each is answered,
    *   sends for that player are refused locally; each answer reaches `handlers.carryResult`.
    *
@@ -799,7 +822,7 @@ export class FleetSession {
       throw new RangeError(`the player's token must be ${FLEET_TOKEN_CHARS} characters`);
     }
     if (id === this.gameTokenId) {
-      throw new RangeError('that is the fleet session\u2019s own gameTokenId, not a player\u2019s');
+      throw new RangeError('a carry names a player\u2019s gameTokenId; that one is the fleet session\u2019s own gameTokenId');
     }
     if (this.currentStatus === 'closed') {
       return { playerGameTokenId: id, userId: null, status: 'closed', wireStatus: null, carried: false };
@@ -1096,6 +1119,8 @@ export class FleetSession {
     }
     const ctx = this.ctx;
     if (!ctx || !this.socket) return false;
+    // A connection's first datagram is its capabilities: nothing else goes out before them.
+    if (this.binding && type !== WireMessageType.CLIENT_CAPABILITIES) return false;
     const generation = this.generation;
     const datagram = await build(ctx, this.sequence());
     if (datagram[0] !== type) {
@@ -1125,10 +1150,16 @@ export class FleetSession {
    * every `tickIntervalMs`; call it yourself with `tickIntervalMs: 0`.
    */
   async tick(): Promise<void> {
-    if (this.ticking || !this.socket || this.currentStatus === 'closed' || this.currentStatus === 'released') return;
+    if (this.ticking || this.binding || !this.socket) return;
+    if (this.currentStatus === 'closed' || this.currentStatus === 'released') return;
     this.ticking = true;
     try {
       const now = this.now();
+      if (this.silenceTimeoutMs > 0 && now - this.lastHeardAt >= this.silenceTimeoutMs) {
+        // Three capabilities went unanswered: the server is gone, or never took the session.
+        // It may hold no carry by the time it is heard again.
+        this.orderMove(true);
+      }
       if (now >= this.nextCapabilitiesAt) {
         await this.sendCapabilities();
         this.nextCapabilitiesAt = now + (this.answered ? this.capabilitiesIntervalMs : this.bindRetryMs);
@@ -1262,10 +1293,13 @@ export class FleetSession {
     this.counters.staleControl += parsed.staleControl;
     for (const message of parsed.messages) {
       if (generation !== this.generation) return;
-      if (!this.answered && !(message.kind === 'notification' && !message.verified)) {
-        this.answered = true;
-        this.nextCapabilitiesAt = this.now() + this.capabilitiesIntervalMs;
-        this.setStatus('connected');
+      if (!(message.kind === 'notification' && !message.verified)) {
+        this.lastHeardAt = this.now();
+        if (!this.answered) {
+          this.answered = true;
+          this.nextCapabilitiesAt = this.lastHeardAt + this.capabilitiesIntervalMs;
+          this.setStatus('connected');
+        }
       }
       await this.handle(message);
     }
@@ -1282,10 +1316,7 @@ export class FleetSession {
           this.counters.staleControl += 1;
           return;
         }
-        if (!this.moveWasOrdered) {
-          this.moveWasOrdered = true;
-          this.call(() => this.handlers.moveOrdered?.());
-        }
+        this.orderMove(false);
         return;
       case 'sessionReleased':
         if (!message.bound && this.boundAcked) {
@@ -1304,9 +1335,29 @@ export class FleetSession {
         this.dispatch(message.notification, message.players);
         return;
       case 'notification':
+        // The server says the session's token expired. Only a signed one counts: an error
+        // frame alone carries no HMAC.
+        if (
+          message.verified &&
+          message.notification.__typename === 'GenericErrorResponse' &&
+          (message.notification.errorCode as string) === 'TOKEN_EXPIRED'
+        ) {
+          this.orderMove(true);
+        }
         this.dispatch(message.notification, null);
         return;
     }
+  }
+
+  /**
+   * The session needs a refresh before anything else: the server asked it to move, or went
+   * quiet, or said its token expired. `carriesLost` when the server may hold no carry.
+   */
+  private orderMove(carriesLost: boolean): void {
+    if (carriesLost) this.carriesLost = true;
+    if (this.moveWasOrdered) return;
+    this.moveWasOrdered = true;
+    this.call(() => this.handlers.moveOrdered?.());
   }
 
   private onSessionReleased(reason: number): void {
