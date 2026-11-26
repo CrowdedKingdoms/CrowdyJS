@@ -3,6 +3,7 @@ import {
   CrowdyNetworkError,
   CrowdyTimeoutError,
   playerFaultOf,
+  retryAfterMsOf,
   type CrowdyGraphQLErrorPayload,
 } from './errors.js';
 
@@ -28,11 +29,7 @@ export function isDroppedRead(error: unknown): boolean {
 }
 
 /** The wait the API asked for before the next read (`extensions.retryAfterMs`), or 0. */
-export function retryAfterMsOf(error: unknown): number {
-  const extensions = (error as { extensions?: Record<string, unknown> } | null)?.extensions;
-  const value = extensions?.retryAfterMs;
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
-}
+export { retryAfterMsOf };
 
 function isBusy(value: unknown): boolean {
   const fault = playerFaultOf(value);

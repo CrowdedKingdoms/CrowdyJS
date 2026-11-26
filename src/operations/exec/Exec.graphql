@@ -22,6 +22,15 @@ mutation ExecConnectAsDeveloper($appId: BigInt!, $nodeType: String, $key: String
   }
 }
 
+mutation ExecConnectAsServer($appId: BigInt!, $nodeType: String, $key: String) {
+  execConnectAsServer(appId: $appId, nodeType: $nodeType, key: $key) {
+    gatewayUrl
+    token
+    host
+    expiresAt
+  }
+}
+
 query ExecLogs(
   $appId: BigInt!
   $nodeType: String

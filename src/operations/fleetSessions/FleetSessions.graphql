@@ -1,0 +1,31 @@
+fragment FleetSessionFields on FleetSession {
+  token
+  gameTokenId
+  appId
+  expiresAt
+  maxPlayers
+  server {
+    serverId
+    ip4
+    ip6
+    clientPort
+    status
+    clients
+  }
+}
+
+mutation OpenFleetSession($input: OpenFleetSessionInput!) {
+  openFleetSession(input: $input) {
+    ...FleetSessionFields
+  }
+}
+
+mutation RefreshFleetSession($input: RefreshFleetSessionInput!) {
+  refreshFleetSession(input: $input) {
+    ...FleetSessionFields
+  }
+}
+
+mutation CloseFleetSession($input: CloseFleetSessionInput!) {
+  closeFleetSession(input: $input)
+}
