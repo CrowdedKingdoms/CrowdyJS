@@ -37,7 +37,8 @@ export type FleetSessionAnswer = FleetSessionFieldsFragment;
  * a client for the server and give it the org token (`cko_…`, scope `fleet:session`) with
  * `client.setToken(orgToken)`, without a `tokenStore`. An org token and a fleet token never go
  * into a browser page or a game client: the API refuses a request that carries an `Origin`
- * header, and these methods refuse to run in a page before any request is made.
+ * header, and these methods refuse before any request is made unless the runtime is a
+ * server's (Node, Bun, Deno, or a server-side worker; a page and a page's worker are refused).
  *
  * **The org token that opened a session is the one that keeps it and ends it.** Another org
  * token of the same organization gets `NOT_FOUND` from {@link refresh} and `false` from
