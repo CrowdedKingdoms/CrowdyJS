@@ -204,6 +204,14 @@ export {
   managedPlayerNotAllowedOf,
   assertionRejectedOf,
   orgLegalAcceptanceRequiredOf,
+  ORG_TOKEN_REQUIRED_CODE,
+  FLEET_SESSION_LIMIT_CODE,
+  NOT_FOUND_CODE,
+  PLATFORM_BUSY_CODE,
+  orgTokenRequiredOf,
+  fleetSessionLimitOf,
+  fleetSessionNotFoundOf,
+  platformBusyOf,
   LEGAL_ACCEPTANCE_REQUIRED_CODE,
   AGE_REQUIRED_CODE,
   AGE_REQUIREMENT_NOT_MET_CODE,
@@ -399,6 +407,7 @@ export {
   type OrgSigningKeyRegistration,
   type ManagedPlayerAssertionClaims,
 } from './domains/managedPlayers.js';
+export { FleetSessionsAPI, type FleetSessionAnswer } from './domains/fleetSessions.js';
 export { AppAccessAPI } from './domains/appAccess.js';
 export { BillingAPI } from './domains/billing.js';
 export { PaymentsAPI } from './domains/payments.js';
@@ -677,6 +686,17 @@ export type {
   SignInWithMinecraftInput,
   AcceptedDocumentInput,
   MintManagedPlayerTokenInput,
+} from './generated/graphql.js';
+
+// -----------------------------------------------------------------------------
+// Fleet sessions (Application API v2.89.0): the inputs an organization's game
+// server sends with its org token.
+// -----------------------------------------------------------------------------
+export type {
+  OpenFleetSessionInput,
+  RefreshFleetSessionInput,
+  CloseFleetSessionInput,
+  CurrentServerInput,
 } from './generated/graphql.js';
 
 export {

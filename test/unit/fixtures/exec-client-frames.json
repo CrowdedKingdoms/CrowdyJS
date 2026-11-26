@@ -1,5 +1,5 @@
 {
-  "about": "ck-exec client protocol frames (crates/ckx-proto/src/client.rs), one WebSocket binary message each, as hex. crates/ckx-proto/tests/client_golden.rs checks them against the encoder and decoder; client SDKs (CrowdyJS, CrowdyCPP) test their codecs against a copy of this file.",
+  "about": "ck-exec client protocol frames (crates/ckx-proto/src/client.rs), one WebSocket binary message each, as hex. crates/ckx-proto/tests/client_golden.rs checks them against the encoder and decoder; client SDKs (CrowdyJS, CrowdyCPP, CrowdyPy) test their codecs against a copy of this file. A callAs frame's player is a 64-bit id, written here as a decimal string because it can exceed JavaScript's safe integers; only a server connection may send the frame.",
   "client": [
     {
       "name": "call",
@@ -66,6 +66,45 @@
         "nonce": 305419896
       },
       "hex": "0478563412"
+    },
+    {
+      "name": "call-as: a server's call for a player",
+      "frame": {
+        "kind": "callAs",
+        "rid": 5,
+        "player": "42",
+        "nodeType": "player",
+        "key": "42",
+        "method": "grant",
+        "payloadHex": "81a4676f6c640a"
+      },
+      "hex": "05050000002a0000000000000006706c6179657202003432056772616e7481a4676f6c640a"
+    },
+    {
+      "name": "call-as with a player id past 2^53 and no payload",
+      "frame": {
+        "kind": "callAs",
+        "rid": 4294967295,
+        "player": "18446744073709551614",
+        "nodeType": "arena",
+        "key": "m1",
+        "method": "state",
+        "payloadHex": ""
+      },
+      "hex": "05fffffffffeffffffffffffff056172656e6102006d31057374617465"
+    },
+    {
+      "name": "call-as for player 0: the server's own call",
+      "frame": {
+        "kind": "callAs",
+        "rid": 6,
+        "player": "0",
+        "nodeType": "lobby",
+        "key": "",
+        "method": "report",
+        "payloadHex": "c0"
+      },
+      "hex": "05060000000000000000000000056c6f6262790000067265706f7274c0"
     }
   ],
   "server": [

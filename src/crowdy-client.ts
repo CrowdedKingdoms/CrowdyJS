@@ -50,6 +50,7 @@ import {
 import { PlatformAPI } from './domains/platform.js';
 import { OrganizationsAPI } from './domains/organizations.js';
 import { ManagedPlayersAPI } from './domains/managedPlayers.js';
+import { FleetSessionsAPI } from './domains/fleetSessions.js';
 import { AppAccessAPI } from './domains/appAccess.js';
 import { BillingAPI } from './domains/billing.js';
 import { PaymentsAPI } from './domains/payments.js';
@@ -285,6 +286,12 @@ export class CrowdyClient {
   readonly organizations: OrganizationsAPI;
   /** An organization's own players, signed in by the organization (studio admin). */
   readonly managedPlayers: ManagedPlayersAPI;
+  /**
+   * Fleet sessions for the organization's own game servers: open, refresh and close, with
+   * the organization's org token as this client's bearer. For a server the organization
+   * runs: an org token and a fleet token never go into a browser page or a game client.
+   */
+  readonly fleetSessions: FleetSessionsAPI;
   /** App access tiers + per-user access grants (studio admin). */
   readonly appAccess: AppAccessAPI;
   /** Org wallet + per-app spend budgets (studio admin). */
@@ -513,6 +520,7 @@ export class CrowdyClient {
     this.platform = new PlatformAPI(this.graphql);
     this.organizations = new OrganizationsAPI(this.graphql);
     this.managedPlayers = new ManagedPlayersAPI(this.graphql);
+    this.fleetSessions = new FleetSessionsAPI(this.graphql);
     this.appAccess = new AppAccessAPI(this.graphql);
     this.billing = new BillingAPI(this.graphql);
     this.payments = new PaymentsAPI(this.graphql);
@@ -550,6 +558,7 @@ export class CrowdyClient {
     this.admin = new AdminAPI({
       organizations: this.organizations,
       managedPlayers: this.managedPlayers,
+      fleetSessions: this.fleetSessions,
       apps: this.apps,
       appAccess: this.appAccess,
       billing: this.billing,

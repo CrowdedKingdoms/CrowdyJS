@@ -15,6 +15,8 @@ import {
   ExecBuildStatusDocument,
   ExecConnectAsDeveloperDocument,
   type ExecConnectAsDeveloperMutation,
+  ExecConnectAsServerDocument,
+  type ExecConnectAsServerMutation,
   ExecConnectDocument,
   type ExecConnectMutation,
   ExecConsentClientModDocument,
@@ -63,6 +65,7 @@ import {
   ExecVersionsDocument,
   type ExecVersionsQuery,
 } from '../generated/graphql.js';
+import { assertOrganizationServer } from '../server-only.js';
 
 export { ExecModScope };
 
@@ -170,7 +173,22 @@ export type ExecClientFrame =
       key: string;
       topic: string;
     }
-  | { kind: 'ping'; nonce: number };
+  | { kind: 'ping'; nonce: number }
+  /**
+   * A call an organization's game server makes for one of its players (client frame `0x05`,
+   * ck-exec 0.25.0): `rid:u32 player:u64 type:str8 key:str16 method:str8 payload:rest`. A
+   * gateway takes it only on a server connection. `player` is the player's user id, a 64-bit
+   * number: pass a `bigint` or a decimal string for one above 2^53.
+   */
+  | {
+      kind: 'callAs';
+      rid: number;
+      player: bigint | number | string;
+      nodeType: string;
+      key: string;
+      method: string;
+      payload: Uint8Array;
+    };
 
 /** A message from a gateway to a client. */
 export type ExecServerFrame =
@@ -201,6 +219,11 @@ class FrameWriter {
 
   u32(v: number): this {
     return this.u8(v).u8(v >>> 8).u8(v >>> 16).u8(v >>> 24);
+  }
+
+  u64(v: bigint): this {
+    for (let i = 0n; i < 8n; i += 1n) this.parts.push(Number((v >> (8n * i)) & 0xffn));
+    return this;
   }
 
   str8(s: string, what: string): this {
@@ -250,7 +273,34 @@ export function encodeExecFrame(f: ExecClientFrame): Uint8Array {
         .finish();
     case 'ping':
       return w.u8(0x04).u32(f.nonce).finish();
+    case 'callAs':
+      return w
+        .u8(0x05)
+        .u32(f.rid)
+        .u64(execPlayerId(f.player))
+        .str8(f.nodeType, 'node type')
+        .str16(f.key, 'key')
+        .str8(f.method, 'method')
+        .finish(f.payload);
   }
+}
+
+const U64_MAX = (1n << 64n) - 1n;
+
+/** A player's user id as the 64-bit number a call-as frame carries. */
+function execPlayerId(player: bigint | number | string): bigint {
+  let id: bigint;
+  try {
+    if (typeof player === 'number' && !Number.isSafeInteger(player)) throw new RangeError();
+    if (typeof player === 'string' && !/^\d+$/.test(player)) throw new RangeError();
+    id = BigInt(player);
+  } catch {
+    throw new RangeError(`player must be a whole number from 0 to 2^64 - 1: ${String(player)}`);
+  }
+  if (id < 0n || id > U64_MAX) {
+    throw new RangeError(`player must be a whole number from 0 to 2^64 - 1: ${String(player)}`);
+  }
+  return id;
 }
 
 /** Decodes a gateway frame, as `ckx_proto::client::ServerMsg::decode` does. */
@@ -497,8 +547,9 @@ function onUpgradeRefused(ws: WebSocket, refused: (status: number, reason: strin
 }
 
 /**
- * One player's connection to a ck-exec host. Calls go to any node of the app;
- * the host routes them. Subscriptions survive reconnects.
+ * One connection to a ck-exec host: a player's, a developer's, or an organization's game
+ * server's ({@link ExecAPI.connectAsServer}). Calls go to any node of the app; the host
+ * routes them. Subscriptions survive reconnects.
  */
 export class ExecConnection {
   private ws: WebSocket | null = null;
@@ -518,6 +569,7 @@ export class ExecConnection {
   constructor(
     private readonly dial: () => Promise<ExecEndpoint>,
     private readonly options: ExecConnectOptions = {},
+    private readonly server = false,
   ) {
     const ctor = options.WebSocket ?? (globalThis as { WebSocket?: ExecWebSocketCtor }).WebSocket;
     if (!ctor) {
@@ -546,6 +598,37 @@ export class ExecConnection {
     });
     await c.connect();
     return c;
+  }
+
+  /**
+   * Opens a server connection (ck-exec 0.25.0) to a known gateway with a server connect
+   * token you already have, the one `execConnectAsServer` answered. Like {@link open} it does
+   * not reconnect (a connect token lasts about a minute and opens one socket) and it dials
+   * the URL it is given. A game server uses {@link ExecAPI.connectAsServer}, which reconnects.
+   *
+   * For a server the organization runs. The connect token comes from the organization's org
+   * token, which never goes into a browser page or a game client.
+   */
+  static async openAsServer(
+    gatewayUrl: string,
+    token: string,
+    options: Omit<ExecConnectOptions, 'reconnect'> = {},
+  ): Promise<ExecConnection> {
+    const c = new ExecConnection(
+      async () => ({ gatewayUrl, token, host: '' }),
+      { ...options, reconnect: false },
+      true,
+    );
+    await c.connect();
+    return c;
+  }
+
+  /**
+   * True for an organization's game server's connection ({@link ExecAPI.connectAsServer},
+   * {@link openAsServer}): the only kind that may call {@link callAs}.
+   */
+  get isServer(): boolean {
+    return this.server;
   }
 
   /** The execution host this connection is on. */
@@ -791,7 +874,11 @@ export class ExecConnection {
     payload: Uint8Array = new Uint8Array(),
     options: { timeoutMs?: number } = {},
   ): Promise<Uint8Array> {
-    const frame: ExecClientFrame = { kind: 'call', rid: 0, nodeType, key, method, payload };
+    return this.callFrame({ kind: 'call', rid: 0, nodeType, key, method, payload }, options);
+  }
+
+  /** Sends a call or call-as frame with the one retry {@link callRaw} describes. */
+  private async callFrame(frame: ExecClientFrame, options: { timeoutMs?: number }): Promise<Uint8Array> {
     const recovers = this.options.reconnect !== false;
     let reply: Reply;
     try {
@@ -824,6 +911,55 @@ export class ExecConnection {
   ): Promise<T> {
     const payload = encode(execWireIntegers(args ?? null), { useBigInt64: true });
     const reply = await this.callRaw(nodeType, key, method, payload, options);
+    return decode(reply, this.options.decode) as T;
+  }
+
+  /**
+   * Calls a node's endpoint for one of the organization's players, with raw bytes, on a
+   * server connection (client frame `0x05`). The hub sees `Caller::Org { player }`. Crowded
+   * Kingdoms checks that the connection is the app's organization's; the player a call names
+   * is the organization's word, and a hub should treat it as that. `player` is the player's
+   * user id (`FleetCarryResult.userId`), as a `bigint`, a decimal string or a safe integer;
+   * 0 makes the call the server's own, as {@link callRaw} does. Replies, timeouts and the one
+   * retry after a lost connection or a `Moved` reply are those of {@link callRaw}.
+   * @throws {CrowdyExecError} `Denied`, with nothing sent, on a connection that is not a
+   *   server's: a gateway closes such a connection when it is sent this frame.
+   */
+  async callAsRaw(
+    player: bigint | number | string,
+    nodeType: string,
+    key: string,
+    method: string,
+    payload: Uint8Array = new Uint8Array(),
+    options: { timeoutMs?: number } = {},
+  ): Promise<Uint8Array> {
+    if (!this.server) {
+      throw new CrowdyExecError(
+        'Denied',
+        "callAs is for an organization's game server: connect with exec.connectAsServer",
+      );
+    }
+    return this.callFrame(
+      { kind: 'callAs', rid: 0, player: execPlayerId(player), nodeType, key, method, payload },
+      options,
+    );
+  }
+
+  /**
+   * {@link callAsRaw} with `args` as MessagePack and the reply decoded, as {@link call} does.
+   * @throws {CrowdyExecError} `Denied`, with nothing sent, on a connection that is not a
+   *   server's; any status but `Ok` otherwise.
+   */
+  async callAs<T = unknown>(
+    player: bigint | number | string,
+    nodeType: string,
+    key: string,
+    method: string,
+    args?: unknown,
+    options: { timeoutMs?: number } = {},
+  ): Promise<T> {
+    const payload = encode(execWireIntegers(args ?? null), { useBigInt64: true });
+    const reply = await this.callAsRaw(player, nodeType, key, method, payload, options);
     return decode(reply, this.options.decode) as T;
   }
 
@@ -1273,6 +1409,55 @@ export class ExecAPI {
     const c = new ExecConnection(
       this.checked(() => this.developerEndpoint(appId, { nodeType: options.nodeType, key: options.key })),
       options,
+    );
+    await c.connect();
+    return c;
+  }
+
+  /**
+   * A host and a server connect token for `appId` (`execConnectAsServer`, Application API
+   * v2.89.0), valid for about a minute and for opening one socket: what
+   * {@link ExecConnection.openAsServer} takes. With `nodeType` (and `key`) the connection
+   * lands on the host that runs that instance, placing it if needed.
+   *
+   * Takes the organization's org token (`cko_…`, scope `fleet:session`) as this client's
+   * bearer, on a server the organization runs; an org token never goes into a browser page or
+   * a game client. The checks of `fleetSessions.open` apply, and so do its refusals
+   * (`ORG_TOKEN_REQUIRED`, `FORBIDDEN`, `ORG_LEGAL_ACCEPTANCE_REQUIRED`, `PLATFORM_BUSY` with
+   * `retryAfterMs`).
+   */
+  async serverEndpoint(
+    appId: string,
+    options: { nodeType?: string; key?: string } = {},
+  ): Promise<ExecEndpoint & { expiresAt: string }> {
+    assertOrganizationServer('exec.serverEndpoint');
+    const data: ExecConnectAsServerMutation = await this.graphql.request(ExecConnectAsServerDocument, {
+      appId,
+      nodeType: options.nodeType,
+      key: options.key,
+    });
+    return data.execConnectAsServer;
+  }
+
+  /**
+   * Connects the organization's game server to the app's hubs as itself (ck-exec 0.25.0):
+   * one connection for each game server. Its plain calls are the server's own
+   * (`Caller::Org { player: None }` in a hub) and {@link ExecConnection.callAs} makes a call
+   * for one of the organization's players. It may call and subscribe to any node type of the
+   * app, has its own budget of 2,000 calls a second, and a hub it places counts toward no
+   * player's limit. The same connection as {@link connect}: it dials only a gateway
+   * {@link execGatewayRefusal} passes, and reconnects with a fresh server connect token.
+   *
+   * Takes the organization's org token as this client's bearer, on a server the organization
+   * runs (see {@link serverEndpoint}). The host closes the connection for good when the org
+   * token is revoked or fleet sessions are switched off ({@link ExecConnection.onAccessEnded}).
+   */
+  async connectAsServer(appId: string, options: ExecConnectOptions = {}): Promise<ExecConnection> {
+    assertOrganizationServer('exec.connectAsServer');
+    const c = new ExecConnection(
+      this.checked(() => this.serverEndpoint(appId, { nodeType: options.nodeType, key: options.key })),
+      options,
+      true,
     );
     await c.connect();
     return c;
