@@ -547,15 +547,17 @@ test('plain state is taken signed: in a signed bundle, or with its own HMAC', as
     ...clean,
     hmacFailures: 1,
   });
-  // With no HMAC and no signed bundle it did not come from the realtime servers: dropped,
-  // unless the caller asks for it, and then it is marked.
+  // With no HMAC and no signed bundle it did not come from the realtime servers: dropped
+  // and counted. No option takes it: `acceptUnsigned`, which once did, is gone.
   assert.deepEqual(await parse(plain), { messages: [], ...clean, unsigned: 1 });
   assert.deepEqual(await parse(bundle(2, [plain])), { messages: [], ...clean, unsigned: 1 });
-  assert.deepEqual(await parse(plain, { acceptUnsigned: true }), {
-    messages: [{ kind: 'notification', notification: expected, verified: false }],
-    ...clean,
-  });
-  // An error frame has no room for an HMAC: it is delivered, marked by where it came from.
+  assert.deepEqual(await parse(plain, { acceptUnsigned: true }), { messages: [], ...clean, unsigned: 1 });
+  // The same for a channel notification outside a FLEET_DELIVERY, which has no HMAC field.
+  const channel = channelNotification({ channelId: 55, uuid: UUID, payload: [1], epochMs: 1n, seq: 1 });
+  assert.deepEqual(await parse(channel, { acceptUnsigned: true }), { messages: [], ...clean, unsigned: 1 });
+  assert.equal((await parse(signedBundle([channel]))).messages[0].verified, true);
+  // An error frame has no room for an HMAC: it is returned, marked by where it came from, and
+  // it is the only thing ever returned with verified false.
   const refusal = { __typename: 'GenericErrorResponse', sequenceNumber: 4, errorCode: 'UNAUTHORIZED' };
   assert.deepEqual(await parse(Buffer.from([3, 4, 7])), {
     messages: [{ kind: 'notification', notification: refusal, verified: false }],

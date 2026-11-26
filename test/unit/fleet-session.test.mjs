@@ -125,7 +125,7 @@ function harness(config = {}) {
       audio: record('audio'),
       video: record('video'),
       channelMessage: record('channelMessage'),
-      genericError: (n) => events.notifications.push({ name: 'genericError', n }),
+      genericError: (n, verified) => events.notifications.push({ name: 'genericError', n, verified }),
       carryResult: (r) => events.carryResults.push(r),
       released: (r) => events.released.push(r),
       moveOrdered: () => {
@@ -644,6 +644,196 @@ test('a frame whose HMAC fails is dropped and counted, and changes nothing', asy
   assert.deepEqual(h.events.notifications, []);
   assert.equal(h.fleet.stats().unsigned, 1);
   assert.deepEqual(h.events.errors, []);
+});
+
+test('no option makes a session dispatch a notification the realtime server did not sign', async () => {
+  // `acceptUnsigned` was an option once. Passing it now changes nothing.
+  const h = harness({ session: { acceptUnsigned: true } });
+  await h.connect();
+  await h.carry(ME, USER_ID);
+  const fields = { chunk: [1, -2, 3], distance: 8, uuid: UUID };
+  const actor = plainNotification({ ...fields, type: 130, payload: Buffer.from([1]) }, { epochMs: 1n, seq: 1 });
+  const text = plainNotification({ ...fields, type: 137, payload: Buffer.from('forged') }, { epochMs: 1n, seq: 2 });
+  const channel = channelNotification({ channelId: 55, uuid: UUID, payload: [1], epochMs: 1n, seq: 3 });
+  const voxel = plainNotification({ ...fields, type: 133, payload: Buffer.alloc(10) }, { epochMs: 1n, seq: 4 });
+  // Alone, and as members of an unsigned bundle.
+  for (const datagram of [actor, text, channel, voxel, Buffer.concat([Buffer.from([2]), ...[actor, text].flatMap((m) => [Buffer.from([m.length, 0]), m])])]) {
+    await h.receive(datagram);
+  }
+  assert.deepEqual(h.events.notifications, [], 'no handler ran');
+  assert.equal(h.fleet.stats().unsigned, 6);
+  // The same bytes inside a bundle the server signed do reach the handlers.
+  await h.receive(signedBundle([actor, voxel]));
+  assert.deepEqual(h.events.notifications.map((e) => e.name), ['actorUpdate', 'voxelUpdate']);
+  // An unsigned frame is not the server speaking: it does not make a session connected.
+  const quiet = harness({ session: { acceptUnsigned: true } });
+  await quiet.fleet.connect();
+  await quiet.receive(actor);
+  assert.equal(quiet.fleet.status, 'connecting');
+  // And the option is in no declaration the package ships.
+  const { readFileSync } = await import('node:fs');
+  for (const file of ['fleet/session.d.ts', 'fleet/index.d.ts', 'fleet-wire.d.ts', 'index.d.ts']) {
+    const declarations = readFileSync(new URL(`../../dist/${file}`, import.meta.url), 'utf8');
+    assert.doesNotMatch(declarations, /acceptUnsigned/, file);
+  }
+});
+
+test('a refusal reaches genericError with whether it was verified, and an unverified one changes no state', async () => {
+  const h = harness();
+  await h.connect();
+  await h.carry(ME, USER_ID);
+  const seq = await h.fleet.sendTextPacket(PLAYER_ID, { chunk: CHUNK, uuid: UUID, text: 'hi' });
+
+  // [3][seq][7 UNAUTHORIZED] alone in its datagram: no HMAC, so anyone who can reach the
+  // socket could have sent it. It still reaches the game server, marked.
+  await h.receive(Buffer.from([3, seq, 7]));
+  // The same refusal inside a bundle signed with the fleet token.
+  await h.receive(signedBundle([Buffer.from([3, seq, 7])]));
+  // And as a member of an unsigned bundle (2): unverified too.
+  await h.receive(Buffer.concat([Buffer.from([2, 3, 0]), Buffer.from([3, seq, 7])]));
+  const refusal = { __typename: 'GenericErrorResponse', sequenceNumber: seq, errorCode: 'UNAUTHORIZED' };
+  assert.deepEqual(h.events.notifications, [
+    { name: 'genericError', n: refusal, verified: false },
+    { name: 'genericError', n: refusal, verified: true },
+    { name: 'genericError', n: refusal, verified: false },
+  ]);
+  // Both kinds are counted, and the unverified ones are counted apart.
+  const stats = h.fleet.stats();
+  assert.equal(stats.errorsReceived, 3);
+  assert.equal(stats.unauthorizedReceived, 3);
+  assert.equal(stats.unverifiedErrorsReceived, 2);
+  // The session itself acts on neither: the player is still carried until the game server
+  // decides, and sends still go.
+  assert.equal(h.fleet.carries(PLAYER_ID), true);
+  await h.fleet.sendTextPacket(PLAYER_ID, { chunk: CHUNK, uuid: UUID, text: 'still here' });
+
+  // TOKEN_EXPIRED (32) and every other code, unverified: handed over, and nothing changes.
+  for (const code of [32, 5, 15, 33, 1]) await h.receive(Buffer.from([3, 9, code]));
+  assert.equal(h.fleet.moveOrdered, false);
+  assert.equal(h.fleet.refreshDue(), false);
+  assert.equal(h.fleet.status, 'connected');
+  assert.equal(h.events.moves, 0);
+  assert.equal(h.fleet.carriedCount, 1);
+  assert.equal(h.events.notifications.filter((e) => e.verified === false).length, 7);
+  assert.equal(h.fleet.stats().unverifiedErrorsReceived, 7);
+  // Verified, TOKEN_EXPIRED makes a refresh due, and the handler is told it was verified.
+  await h.receive(signedBundle([Buffer.from([3, 9, 32])]));
+  assert.equal(h.fleet.moveOrdered, true);
+  assert.deepEqual(h.events.notifications.at(-1), {
+    name: 'genericError',
+    n: { __typename: 'GenericErrorResponse', sequenceNumber: 9, errorCode: 'TOKEN_EXPIRED' },
+    verified: true,
+  });
+  // A session that heard nothing but unverified refusals is not connected by them.
+  const unheard = harness();
+  await unheard.fleet.connect();
+  await unheard.receive(Buffer.from([3, 0, 7]));
+  assert.equal(unheard.fleet.status, 'connecting');
+  assert.equal(unheard.events.notifications.length, 1);
+  assert.deepEqual(h.events.errors, []);
+});
+
+test('the table holds maxPlayers and 32 more; a carry past that is refused here with nothing sent', async () => {
+  const { FLEET_TABLE_MARGIN } = await import('../../dist/fleet/index.js');
+  assert.equal(FLEET_TABLE_MARGIN, 32);
+  const h = harness({ grant: { maxPlayers: 4 } });
+  await h.connect();
+  assert.equal(h.fleet.tableLimit, 36);
+  // 4 carried, then 32 more waiting: carried players and carries waiting count together.
+  for (let i = 0; i < 4; i += 1) await h.carry(playerToken(i), 500 + i);
+  const waiting = Array.from({ length: 32 }, (_, i) => h.fleet.carry(playerToken(100 + i)));
+  await h.advance();
+  assert.equal(h.fleet.players().length, 36);
+  const sent = h.sentOfType(49).length;
+
+  const refused = await h.fleet.carry(playerToken(999));
+  assert.deepEqual(refused, { playerGameTokenId: '10999', userId: null, status: 'tableFull', wireStatus: null, carried: false });
+  await h.advance(300);
+  assert.equal(h.fleet.players().length, 36, 'no row was made');
+  assert.ok(!h.sentOfType(49).some((d) => readCarry(d, '').player === 10_999n), 'and nothing was sent for it');
+  assert.equal(h.fleet.stats().carriesRefusedTableFull, 1);
+  assert.equal(h.events.carryResults.filter((r) => r.status === 'tableFull').length, 0);
+  assert.ok(h.sentOfType(49).length >= sent);
+  // A player already in the table is not a new row: carrying them again is taken.
+  const again = h.fleet.carry(playerToken(0));
+  await h.advance(300);
+  await h.receive(signedBundle([carryResult(playerToken(0).gameTokenId, 500, 0)]));
+  assert.equal((await again).carried, true);
+  // A release makes room at once.
+  await h.fleet.release(playerToken(100).gameTokenId);
+  assert.equal((await waiting[0]).status, 'released');
+  const room = h.fleet.carry(playerToken(999));
+  await h.advance(300);
+  await h.receive(signedBundle([carryResult(10_999, 777, 0)]));
+  assert.equal((await room).carried, true);
+  // A game server that never releases anyone cannot grow the table past the limit.
+  const leaky = harness({ grant: { maxPlayers: 256 } });
+  await leaky.connect();
+  const results = await Promise.all(
+    Array.from({ length: 1_000 }, (_, i) => {
+      const pending = leaky.fleet.carry(playerToken(i));
+      return i < 288 ? null : pending;
+    }).filter(Boolean),
+  );
+  assert.equal(leaky.fleet.players().length, 288);
+  assert.ok(results.every((r) => r.status === 'tableFull'));
+  assert.equal(leaky.fleet.stats().carriesRefusedTableFull, 712);
+  // A grant that names no maxPlayers is held to the most any session may carry.
+  assert.equal(harness({ grant: { maxPlayers: null } }).fleet.tableLimit, 1_024 + 32);
+  assert.equal(harness({ grant: { maxPlayers: 5_000 } }).fleet.tableLimit, 1_024 + 32);
+  leaky.fleet.close();
+});
+
+test('an idle session hears a verified frame every 15 seconds, well inside the 45 it tolerates', async () => {
+  // Defaults: capabilities every 15,000 ms once the server answered; silence 45,000 ms.
+  const h = harness({ session: { silenceTimeoutMs: undefined } });
+  await h.connect();
+  // Ten idle minutes: nothing is sent for a player and nothing arrives but the
+  // acknowledgements (46) of the session's own capabilities.
+  let acknowledged = h.sentOfType(29).length;
+  const gaps = [];
+  let lastHeard = h.now;
+  for (let ms = 0; ms < 600_000; ms += 1_000) {
+    await h.advance(1_000);
+    const caps = h.sentOfType(29).length;
+    if (caps > acknowledged) {
+      acknowledged = caps;
+      await h.acknowledge();
+      gaps.push(h.now - lastHeard);
+      lastHeard = h.now;
+    }
+  }
+  assert.equal(gaps.length, 40);
+  assert.ok(gaps.every((g) => g === 15_000), 'a verified frame every 15 seconds');
+  assert.equal(h.fleet.moveOrdered, false);
+  assert.equal(h.events.moves, 0);
+  assert.equal(h.fleet.status, 'connected');
+  // Two acknowledgements in a row may be lost: the third capabilities' answer is in time.
+  await h.advance(15_000);
+  await h.advance(15_000);
+  await h.advance(14_000);
+  assert.equal(h.fleet.moveOrdered, false);
+  await h.acknowledge();
+  await h.advance(44_000);
+  assert.equal(h.fleet.moveOrdered, false);
+
+  // The capabilities interval is held to a third of the silence, whatever is asked for.
+  for (const [config, every] of [
+    [{ capabilitiesIntervalMs: 60_000, silenceTimeoutMs: 45_000 }, 15_000],
+    [{ capabilitiesIntervalMs: 15_000, silenceTimeoutMs: 9_000 }, 3_000],
+    [{ capabilitiesIntervalMs: 5_000, silenceTimeoutMs: 45_000 }, 5_000],
+    [{ capabilitiesIntervalMs: 60_000, silenceTimeoutMs: 0 }, 60_000],
+    [{ capabilitiesIntervalMs: 60_000, silenceTimeoutMs: 100 }, 1_000],
+  ]) {
+    const c = harness({ session: config });
+    await c.connect();
+    const before = c.sentOfType(29).length;
+    await c.advance(every - 1);
+    assert.equal(c.sentOfType(29).length, before, JSON.stringify(config));
+    await c.advance(1);
+    assert.equal(c.sentOfType(29).length, before + 1, JSON.stringify(config));
+    assert.equal(c.fleet.moveOrdered, false, JSON.stringify(config));
+  }
 });
 
 test('a 1,242-byte FLEET_DELIVERY is read, and a larger datagram is not', async () => {

@@ -386,9 +386,9 @@ export type FleetInbound =
   | ({ kind: 'delivery' } & FleetDeliveryFrame)
   /**
    * A plain notification: state, sent once for the session when at least one carried player
-   * may receive it, or a `GenericErrorResponse`. `verified` is false only for what carries no
-   * HMAC and came outside a signed bundle: an error frame, or a notification taken with
-   * {@link FleetParseOptions.acceptUnsigned}.
+   * may receive it, or a `GenericErrorResponse`. State is returned only verified. `verified`
+   * is false for one thing alone: an error frame (`[3][seq][code]`) that came outside a signed
+   * bundle. It has no room for an HMAC, so nothing shows the realtime server sent it.
    */
   | { kind: 'notification'; notification: UdpNotification; verified: boolean }
   /** `COMMAND_RECONNECT` (22) or its bound form (44): connect to another realtime server. */
@@ -408,7 +408,8 @@ export interface FleetDatagram {
   malformed: number;
   /**
    * Notifications dropped because they carried no HMAC and were not inside a signed bundle
-   * or a `FLEET_DELIVERY` ({@link FleetParseOptions.acceptUnsigned} takes them instead).
+   * or a `FLEET_DELIVERY`. The realtime servers sign every notification they send a session,
+   * so one without a signature did not come from them. No option takes them.
    */
   unsigned: number;
   /** Bound control frames dropped because their nonce is not this connection's. */
@@ -421,12 +422,6 @@ export interface FleetParseOptions {
    * frame (44, 45, 46) verifies only with this nonce; without one every bound frame is stale.
    */
   controlNonce?: Uint8Array | null;
-  /**
-   * Take a notification that carries no HMAC and is not inside a signed bundle, marked
-   * `verified: false`. Default false: the realtime servers sign every notification they send
-   * a session, so one without a signature did not come from them.
-   */
-  acceptUnsigned?: boolean;
 }
 
 function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
@@ -448,7 +443,10 @@ function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
  *   token)`. A session that advertised `BUNDLE_SIGNED` is still sent a `FLEET_DELIVERY` above
  *   1,197 bytes this way, alone, so every session reads both forms.
  * - **A plain long-spatial notification** outside a signed bundle carries its own HMAC
- *   (`containsAuth` 1) and is checked with it.
+ *   (`containsAuth` 1) and is checked with it. One with no signature is dropped and counted
+ *   (`unsigned`).
+ * - **An error frame** (`[3][seq][code]`) has no room for an HMAC. It is returned either way,
+ *   marked `verified` only when it was a member of a signed bundle.
  * - **Control frames** (22, 28, 44, 45, 46) are always their own datagram, signed over their
  *   leading bytes.
  *
@@ -489,19 +487,19 @@ export async function parseFleetDatagram(
       return out;
     }
     for (const member of bundleMembers(datagram, end, out)) {
-      await readMember(fleet, member, true, options, out);
+      await readMember(fleet, member, true, out);
     }
     return out;
   }
 
   if (type === WireMessageType.MESSAGE_BUNDLE) {
     for (const member of bundleMembers(datagram, datagram.length, out)) {
-      await readMember(fleet, member, false, options, out);
+      await readMember(fleet, member, false, out);
     }
     return out;
   }
 
-  await readMember(fleet, datagram, false, options, out);
+  await readMember(fleet, datagram, false, out);
   return out;
 }
 
@@ -568,7 +566,6 @@ async function readMember(
   fleet: RelaySignContext,
   message: Uint8Array,
   inSignedBundle: boolean,
-  options: FleetParseOptions,
   out: FleetDatagram,
 ): Promise<void> {
   const type = message[0];
@@ -610,7 +607,8 @@ async function readMember(
   }
 
   if (type === WireMessageType.GENERIC_ERROR_MESSAGE) {
-    // [3][seq][code] has no room for an HMAC: it is as good as the bundle it came in.
+    // [3][seq][code] has no room for an HMAC: it is as good as the bundle it came in, and a
+    // caller is told which (`verified`).
     const error = parseNotification(message);
     if (error) out.messages.push({ kind: 'notification', notification: error, verified: inSignedBundle });
     else out.malformed += 1;
@@ -643,7 +641,7 @@ async function readMember(
       verified = true;
     }
   }
-  if (!verified && !options.acceptUnsigned) {
+  if (!verified) {
     out.unsigned += 1;
     return;
   }

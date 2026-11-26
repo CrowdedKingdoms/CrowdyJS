@@ -97,6 +97,12 @@ export type FleetCarryOutcome =
   | 'refused'
   /** No answer came within `carryTimeoutMs` of the first send. */
   | 'timedOut'
+  /**
+   * The session's table is full, so nothing was sent: it holds `maxPlayers` rows and
+   * {@link FLEET_TABLE_MARGIN} more, carried players and carries waiting together. Release
+   * players who left, or open another session.
+   */
+  | 'tableFull'
   /** `release` was called for the player before the answer came. */
   | 'released'
   /** The session was closed before the answer came. */
@@ -177,11 +183,26 @@ export interface FleetHandlers {
   any?(notification: UdpNotification, players: FleetPlayers): void;
   /**
    * The server refused one send, by its sequence number. `UNAUTHORIZED` answers a message for
-   * a player the server does not count as carried by this session. The sequence number is one
-   * byte shared by everything the session sends, so a refusal names no player.
+   * a player the server does not count as carried by this session, or a player whose access
+   * to the app was suspended or ended: stop serving that player. The sequence number is one
+   * byte shared by everything the session sends, so match it against the sequence numbers
+   * your sends resolved with, soon after: a refusal names no player.
+   *
+   * `verified` is true when the refusal arrived inside a signed bundle the session verified
+   * with the fleet token. An error frame alone (`[3][seq][code]`) has no room for an HMAC, so
+   * `verified` is false for one: anyone who can reach the session's socket could have forged
+   * it. **Treat an unverified `UNAUTHORIZED` as a hint.** Stop sending for the player it
+   * points at, then carry the player again (the answer to a carry is always verified) or
+   * check the player's access through the Application API, and act on that answer. The
+   * session itself changes no state on an unverified refusal: an unverified `TOKEN_EXPIRED`
+   * does not make a refresh due.
    */
-  genericError?(notification: Notified<'genericError'>): void;
-  /** Every carry that ends, including the carries made again after the session moved. */
+  genericError?(notification: Notified<'genericError'>, verified: boolean): void;
+  /**
+   * Every carry the server answered or that timed out, including the carries made again
+   * after the session moved. A carry ended here before it was sent (`'tableFull'`,
+   * `'released'`, `'closed'`) reaches only the promise `carry` returned.
+   */
   carryResult?(result: FleetCarryResult): void;
   /** The server ended a carry. The session no longer carries the player when this fires. */
   released?(released: FleetReleased): void;
@@ -228,11 +249,6 @@ export interface FleetSessionConfig {
    * (`ClientCapability.OWN_MEDIA_ECHO`). Default false.
    */
   ownMediaEcho?: boolean;
-  /**
-   * Take notifications that carry no signature (see `FleetParseOptions.acceptUnsigned`).
-   * Default false.
-   */
-  acceptUnsigned?: boolean;
   /** An unanswered `FLEET_CARRY` is sent again this often, with a new time and proof. Default 250. */
   carryRetryMs?: number;
   /** A carry with no answer this long after its first send ends `'timedOut'`. Default 5,000. */
@@ -250,14 +266,20 @@ export interface FleetSessionConfig {
    * under the player's id. Default 2,000; 0 leaves heartbeats to you (`sendHeartbeat`).
    */
   actorHeartbeatMs?: number;
-  /** How often the capabilities are sent again once the server answered. Default 15,000. */
+  /**
+   * How often the capabilities are sent again once the server answered. Default 15,000, and
+   * never more than a third of `silenceTimeoutMs`. The server acknowledges each one with a
+   * signed frame, which is what an otherwise idle session hears: one every 15 seconds, so the
+   * acknowledgements of two in a row can be lost before 45 seconds of silence have passed.
+   */
   capabilitiesIntervalMs?: number;
   /** How often the capabilities are sent again until the server answers. Default 500. */
   bindRetryMs?: number;
   /**
    * How long the realtime server may say nothing that verifies before the session takes it
    * for gone: `refreshDue()` turns true, and the refresh that follows carries every player
-   * again. Default 45,000, three unanswered capabilities; 0 never does.
+   * again. Default 45,000, three times `capabilitiesIntervalMs`; at least 3,000; 0 never
+   * does.
    */
   silenceTimeoutMs?: number;
   /**
@@ -292,10 +314,14 @@ export interface FleetSessionStats {
   staleControl: number;
   /** `FLEET_CARRY_RESULT`s that matched no carry waiting for one. */
   unmatchedCarryResults: number;
-  /** `GenericErrorResponse`s received. */
+  /** `GenericErrorResponse`s received, verified or not. */
   errorsReceived: number;
   /** Of those, `UNAUTHORIZED`. */
   unauthorizedReceived: number;
+  /** Of `errorsReceived`, those that arrived outside a signed bundle, so nothing verifies them. */
+  unverifiedErrorsReceived: number;
+  /** Carries refused here because the table was full (`'tableFull'`). */
+  carriesRefusedTableFull: number;
 }
 
 /**
@@ -352,6 +378,16 @@ interface Player {
   voice: readonly string[] | null | undefined;
   video: readonly string[] | null | undefined;
 }
+
+/**
+ * How many rows a session's table may hold past its `maxPlayers`: room for carries that wait
+ * for an answer while the table is full, such as a player's carry with a refreshed token
+ * before it replaces the row the same user had. The realtime servers allow a session the
+ * same 32 carries past `maxPlayers` at once.
+ */
+export const FLEET_TABLE_MARGIN = 32;
+/** The most players any session may carry, used when a grant names no `maxPlayers`. */
+const FLEET_MAX_PLAYERS_CEILING = 1_024;
 
 const OWN_TYPES: ReadonlySet<number> = new Set([
   WireMessageType.CLIENT_CAPABILITIES,
@@ -427,8 +463,10 @@ function speakerChange(list: readonly string[] | null | undefined): SpeakerListC
  * to 1,000) and idle timeout.
  *
  * What it receives: state once for the session, and communications inside `FLEET_DELIVERY`
- * with the carried players who may receive them ({@link FleetPlayers}). Everything is
- * verified with the fleet token before a handler sees it.
+ * with the carried players who may receive them ({@link FleetPlayers}). Every notification
+ * is verified with the fleet token before a handler sees it, and no option turns that off.
+ * A refusal of a send has no room for a signature when it arrives alone, so `genericError`
+ * is told whether it was verified.
  *
  * The session makes no Application API call. {@link refreshDue} says when to call
  * `refreshFleetSession`, and {@link applyRefresh} takes the answer.
@@ -439,7 +477,6 @@ export class FleetSession {
   private readonly logger: CrowdyLogger | undefined;
   private readonly socketFactory: FleetSocketFactory;
   private readonly now: () => number;
-  private readonly acceptUnsigned: boolean;
   private readonly carryRetryMs: number;
   private readonly carryTimeoutMs: number;
   private readonly maxCarriesPerSecond: number;
@@ -498,6 +535,8 @@ export class FleetSession {
     unmatchedCarryResults: 0,
     errorsReceived: 0,
     unauthorizedReceived: 0,
+    unverifiedErrorsReceived: 0,
+    carriesRefusedTableFull: 0,
   };
 
   constructor(config: FleetSessionConfig) {
@@ -517,15 +556,19 @@ export class FleetSession {
     this.logger = config.logger;
     this.socketFactory = config.socket ?? nodeFleetSocket();
     this.now = config.now ?? Date.now;
-    this.acceptUnsigned = config.acceptUnsigned ?? false;
     this.carryRetryMs = Math.max(1, config.carryRetryMs ?? 250);
     this.carryTimeoutMs = Math.max(1, config.carryTimeoutMs ?? 5_000);
     this.maxCarriesPerSecond = Math.max(1, Math.min(63, Math.floor(config.maxCarriesPerSecond ?? 60)));
     this.keepAliveIntervalMs = Math.max(100, config.keepAliveIntervalMs ?? 2_000);
     this.actorHeartbeatMs = Math.max(0, config.actorHeartbeatMs ?? 2_000);
-    this.capabilitiesIntervalMs = Math.max(1_000, config.capabilitiesIntervalMs ?? 15_000);
+    const silence = config.silenceTimeoutMs ?? 45_000;
+    this.silenceTimeoutMs = silence > 0 ? Math.max(3_000, silence) : 0;
+    // An idle session hears only the acknowledgements of its capabilities, so the silence it
+    // tolerates is at least three of their intervals.
+    const capabilities = Math.max(1_000, config.capabilitiesIntervalMs ?? 15_000);
+    this.capabilitiesIntervalMs =
+      this.silenceTimeoutMs > 0 ? Math.min(capabilities, Math.floor(this.silenceTimeoutMs / 3)) : capabilities;
     this.bindRetryMs = Math.max(50, config.bindRetryMs ?? 500);
-    this.silenceTimeoutMs = Math.max(0, config.silenceTimeoutMs ?? 45_000);
     this.tickIntervalMs = Math.max(0, config.tickIntervalMs ?? 20);
     this.capabilityFlags =
       ClientCapability.BUNDLE_SIGNED |
@@ -700,6 +743,10 @@ export class FleetSession {
    * names the realtime server the session is on, so the session stays there while that
    * server still serves the app. After a move was ordered it names none, and the answer's
    * server is the next one.
+   *
+   * `currentServer` is an IPv4 address and a port, which is all the Application API takes.
+   * Every realtime server has an IPv4 address. A session that was given none (it connected
+   * over `ip6`) sends no `currentServer`, so each refresh may answer another server.
    */
   refreshInput(): { appId: string; gameTokenId: string; currentServer?: { ip4: string; clientPort: number } } {
     const input = { appId: this.appId, gameTokenId: this.gameTokenId };
@@ -813,6 +860,9 @@ export class FleetSession {
    * game token id; the session sends `FLEET_RELEASE` for one that timed out, since the server
    * may hold a carry whose answers were lost.
    *
+   * A carry for a new player when the table is full ends `'tableFull'` with nothing sent
+   * ({@link tableLimit}).
+   *
    * @throws {RangeError} (as a rejection) for a token that is not 64 characters, or a game
    *   token id that is not a number or is the session's own.
    */
@@ -829,6 +879,11 @@ export class FleetSession {
     }
     this.ctx ??= await createFleetSignContext(this.grant.gameTokenId, this.grant.token);
     let row = this.table.get(id);
+    if (!row && this.table.size >= this.tableLimit) {
+      // A game server that never releases anyone must not grow the table without bound.
+      this.counters.carriesRefusedTableFull += 1;
+      return { playerGameTokenId: id, userId: null, status: 'tableFull', wireStatus: null, carried: false };
+    }
     if (!row) {
       row = {
         gameTokenId: id,
@@ -887,6 +942,17 @@ export class FleetSession {
       carried: p.carried,
       pending: p.attempt !== null,
     }));
+  }
+
+  /**
+   * The most rows the table holds, carried players and carries waiting together: `maxPlayers`
+   * (1,024 when the grant named none) and {@link FLEET_TABLE_MARGIN} more. A `carry` for a
+   * new player past it ends `'tableFull'`.
+   */
+  get tableLimit(): number {
+    const max = this.grant.maxPlayers;
+    const players = typeof max === 'number' && max > 0 ? Math.min(max, FLEET_MAX_PLAYERS_CEILING) : FLEET_MAX_PLAYERS_CEILING;
+    return players + FLEET_TABLE_MARGIN;
   }
 
   /** How many players the server confirmed and nothing ended. */
@@ -1156,8 +1222,8 @@ export class FleetSession {
     try {
       const now = this.now();
       if (this.silenceTimeoutMs > 0 && now - this.lastHeardAt >= this.silenceTimeoutMs) {
-        // Three capabilities went unanswered: the server is gone, or never took the session.
-        // It may hold no carry by the time it is heard again.
+        // Nothing verified for three capabilities intervals: the server is gone, or never took
+        // the session. It may hold no carry by the time it is heard again.
         this.orderMove(true);
       }
       if (now >= this.nextCapabilitiesAt) {
@@ -1282,10 +1348,7 @@ export class FleetSession {
   private async read(generation: number, datagram: Uint8Array): Promise<void> {
     const ctx = this.ctx;
     if (!ctx || generation !== this.generation) return;
-    const parsed = await parseFleetDatagram(ctx, datagram, {
-      controlNonce: this.controlNonce,
-      acceptUnsigned: this.acceptUnsigned,
-    });
+    const parsed = await parseFleetDatagram(ctx, datagram, { controlNonce: this.controlNonce });
     if (generation !== this.generation) return;
     this.counters.hmacFailures += parsed.hmacFailures;
     this.counters.malformed += parsed.malformed;
@@ -1335,14 +1398,20 @@ export class FleetSession {
         this.dispatch(message.notification, message.players);
         return;
       case 'notification':
-        // The server says the session's token expired. Only a signed one counts: an error
-        // frame alone carries no HMAC.
-        if (
-          message.verified &&
-          message.notification.__typename === 'GenericErrorResponse' &&
-          (message.notification.errorCode as string) === 'TOKEN_EXPIRED'
-        ) {
-          this.orderMove(true);
+        if (message.notification.__typename === 'GenericErrorResponse') {
+          // The server says the session's token expired. Only a signed one counts: an error
+          // frame alone carries no HMAC, and one that is not verified changes no state.
+          if (message.verified && (message.notification.errorCode as string) === 'TOKEN_EXPIRED') {
+            this.orderMove(true);
+          }
+          this.dispatchError(message.notification, message.verified);
+          return;
+        }
+        if (!message.verified) {
+          // The codec returns state only verified. Should that ever change, a session still
+          // gives no handler a notification the realtime server did not sign.
+          this.counters.unsigned += 1;
+          return;
         }
         this.dispatch(message.notification, null);
         return;
@@ -1444,14 +1513,20 @@ export class FleetSession {
     if (announce) this.call(() => this.handlers.carryResult?.(result));
   }
 
+  /** A refusal of one send. It reaches the handler either way, with whether it was verified. */
+  private dispatchError(notification: Notified<'genericError'>, verified: boolean): void {
+    this.counters.errorsReceived += 1;
+    if ((notification.errorCode as string) === 'UNAUTHORIZED') this.counters.unauthorizedReceived += 1;
+    if (!verified) this.counters.unverifiedErrorsReceived += 1;
+    this.call(() => this.handlers.genericError?.(notification, verified));
+  }
+
+  /** A verified notification, and the players it is for. */
   private dispatch(notification: UdpNotification, players: FleetPlayers): void {
     const h = this.handlers;
-    if (notification.__typename === 'GenericErrorResponse') {
-      this.counters.errorsReceived += 1;
-      if ((notification.errorCode as string) === 'UNAUTHORIZED') this.counters.unauthorizedReceived += 1;
-      this.call(() => h.genericError?.(notification));
-      return;
-    }
+    // A refusal inside a FLEET_DELIVERY is not a thing the servers send, and the codec
+    // refuses one; it has no handler here.
+    if (notification.__typename === 'GenericErrorResponse') return;
     this.call(() => h.any?.(notification, players));
     this.call(() => {
       switch (notification.__typename) {

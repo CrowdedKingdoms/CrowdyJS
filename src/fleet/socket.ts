@@ -2,7 +2,10 @@ import { CrowdyError } from '../errors.js';
 
 /** The realtime server a fleet session connects to: `openFleetSession`'s `server`. */
 export interface FleetServer {
-  /** IPv4 address; used when it is not empty. */
+  /**
+   * IPv4 address; used when it is not empty. Every realtime server has one, and it is the
+   * address `refreshFleetSession`'s `currentServer` names.
+   */
   ip4?: string | null;
   /** IPv6 address; used when there is no IPv4 address. */
   ip6?: string | null;

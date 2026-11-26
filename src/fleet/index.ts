@@ -21,6 +21,7 @@ assertFleetRuntime();
 export {
   FleetSession,
   FleetNotCarriedError,
+  FLEET_TABLE_MARGIN,
   type FleetSessionConfig,
   type FleetSessionGrant,
   type FleetSessionStatus,
