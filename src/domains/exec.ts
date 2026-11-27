@@ -533,6 +533,23 @@ function closedError(ev: { code: number; reason?: string }): CrowdyExecError {
   );
 }
 
+/**
+ * What a socket's error event says, as a cause an error may keep: its message as an `Error`,
+ * with the connect token and anything from `?token=` on taken out, cut at 200 characters. Never
+ * the event: its target is the socket, and the socket's URL holds the token. `undefined` when
+ * the event says nothing.
+ */
+function socketFailureText(ev: unknown, token: string): Error | undefined {
+  const said = (ev as { message?: unknown; error?: { message?: unknown } } | null) ?? {};
+  const raw = typeof said.message === 'string' && said.message ? said.message : said.error?.message;
+  if (typeof raw !== 'string' || !raw) return undefined;
+  let text = raw;
+  if (token) text = text.split(token).join('<token>');
+  if (token) text = text.split(encodeURIComponent(token)).join('<token>');
+  text = text.replace(/([?&]token=)[^\s'"&#]*/gi, '$1<token>');
+  return new Error(text.replace(/\s+/g, ' ').trim().slice(0, 200));
+}
+
 const REFUSAL_REASON_MAX_CHARS = 500;
 const REFUSAL_BODY_WAIT_MS = 1_000;
 
@@ -734,7 +751,15 @@ export class ExecConnection {
       };
       ws.onerror = (ev: Event) => {
         clearTimeout(timer);
-        reject(new CrowdyExecError('Unavailable', `connecting to ${gatewayName(endpoint.gatewayUrl)} failed`, ev));
+        // The event's target is the socket, whose URL ends in the connect token: the cause is
+        // the event's own text and nothing that holds the socket.
+        reject(
+          new CrowdyExecError(
+            'Unavailable',
+            `connecting to ${gatewayName(endpoint.gatewayUrl)} failed`,
+            socketFailureText(ev, endpoint.token),
+          ),
+        );
       };
       ws.onclose = (ev: CloseEvent) => {
         clearTimeout(timer);
