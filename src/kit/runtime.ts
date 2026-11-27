@@ -5,6 +5,7 @@ import {
   type ExecConnection,
   type ExecPushHandler,
 } from '../domains/exec.js';
+import { retryWaitMs } from '../errors.js';
 import { KIT_CODES, KitError, newActionId, withActionId } from './protocol.js';
 
 /** Subscriptions one connection holds at most (the gateway refuses the next). */
@@ -191,7 +192,8 @@ export class KitRuntime {
         }
         if (attempt < this.retries && err instanceof CrowdyExecError && !(err instanceof KitError)) {
           if (err.status === 'Busy' && err.rateLimited) {
-            this.budget.hold(err.retryAfterMs ?? 1_000);
+            // The gateway's "retry in N ms", held to what the SDK waits on a server's hint.
+            this.budget.hold(retryWaitMs(err.retryAfterMs ?? 1_000));
             continue;
           }
           const didNotRun = err.status === 'Busy' || err.status === 'RateLimited';

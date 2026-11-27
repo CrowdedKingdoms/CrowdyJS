@@ -831,14 +831,22 @@ export class FleetSession {
    * server still serves the app. After a move was ordered it names none, and the answer's
    * server is the next one.
    *
-   * `currentServer` is an IPv4 address and a port, which is all the Application API takes.
-   * Every realtime server has an IPv4 address. A session that was given none (it connected
-   * over `ip6`) sends no `currentServer`, so each refresh may answer another server.
+   * `currentServer` is the address the session connected to and the port: the server's `ip4`
+   * when it has one, its `ip6` otherwise (18.41.0; naming an `ip6` needs Application API
+   * v2.90.0, and until 18.41.0 a session that connected over `ip6` named no server).
    */
-  refreshInput(): { appId: string; gameTokenId: string; currentServer?: { ip4: string; clientPort: number } } {
+  refreshInput(): {
+    appId: string;
+    gameTokenId: string;
+    currentServer?: { ip4: string; clientPort: number } | { ip6: string; clientPort: number };
+  } {
     const input = { appId: this.appId, gameTokenId: this.gameTokenId };
-    if (this.moveWasOrdered || !this.server.ip4) return input;
-    return { ...input, currentServer: { ip4: this.server.ip4, clientPort: this.server.clientPort } };
+    if (this.moveWasOrdered) return input;
+    const { host, family, port } = fleetServerAddress(this.server);
+    return {
+      ...input,
+      currentServer: family === 4 ? { ip4: host, clientPort: port } : { ip6: host, clientPort: port },
+    };
   }
 
   /**

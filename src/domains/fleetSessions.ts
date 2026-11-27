@@ -60,6 +60,27 @@ export type FleetSessionAnswer = FleetSessionFieldsFragment;
  * | `SCOPE_MISSING` | The app is not in the org token's app list | `error.code` |
  * | `FEATURE_DISABLED` | The tier does not serve org-managed players | `error.code` |
  */
+/** `refreshFleetSession`'s `currentServer`: one address and the port. */
+export type FleetCurrentServer = { ip4: string; clientPort: number } | { ip6: string; clientPort: number };
+
+/**
+ * The `currentServer` that names a realtime server: its `ip4` when it has one, its `ip6`
+ * otherwise, and its `clientPort`. A fleet session connects to a server the same way, so this
+ * names the address the session connected to. Give it a session answer's `server` as it is:
+ * the Application API takes exactly one address (v2.90.0; an earlier one takes `ip4` only),
+ * and refuses the server's other fields.
+ * @throws {RangeError} for a server with no `ip4` and no `ip6`.
+ */
+export function fleetCurrentServer(server: {
+  ip4?: string | null;
+  ip6?: string | null;
+  clientPort: number;
+}): FleetCurrentServer {
+  if (server.ip4) return { ip4: server.ip4, clientPort: server.clientPort };
+  if (server.ip6) return { ip6: server.ip6, clientPort: server.clientPort };
+  throw new RangeError('currentServer names no ip4 and no ip6 address');
+}
+
 export class FleetSessionsAPI {
   constructor(private readonly graphql: GraphQLClient) {}
 
@@ -81,17 +102,23 @@ export class FleetSessionsAPI {
    * session, before `expiresAt`. `FleetSession.refreshDue()` says when, and
    * `FleetSession.refreshInput()` builds this input.
    *
-   * Name the realtime server the session is connected to (`currentServer`, the `ip4` and
-   * `clientPort` it was given) and the session stays there while that server still serves the
-   * app. Leave it out, or name one that no longer serves, and the answer's `server` is another
-   * one to connect to: do that after a realtime server told the session to move.
+   * Name the realtime server the session is connected to (`currentServer`: the `ip4` or the
+   * `ip6` it connected to, and the `clientPort`) and the session stays there while that server
+   * still serves the app. Leave it out, or name one that no longer serves, and the answer's
+   * `server` is another one to connect to: do that after a realtime server told the session to
+   * move. A `currentServer` with both addresses (a session answer's `server` as it is) is sent
+   * with one of them, `ip4` when there is one ({@link fleetCurrentServer}). Naming an `ip6`
+   * needs Application API v2.90.0.
    *
    * @throws {CrowdyGraphQLError} `NOT_FOUND` for a session that expired, was closed, or was
    *   opened with another org token (`fleetSessionNotFoundOf`): open a new one.
    */
   async refresh(input: RefreshFleetSessionInput): Promise<FleetSessionAnswer> {
     assertOrganizationServer('fleetSessions.refresh');
-    const data = await this.graphql.request(RefreshFleetSessionDocument, { input });
+    const { currentServer, ...rest } = input;
+    const data = await this.graphql.request(RefreshFleetSessionDocument, {
+      input: currentServer ? { ...rest, currentServer: fleetCurrentServer(currentServer) } : rest,
+    });
     return data.refreshFleetSession;
   }
 

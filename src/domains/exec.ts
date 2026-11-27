@@ -4,8 +4,8 @@ import type { DecoderOptions } from '@msgpack/msgpack';
 import { isSameEstate } from '../binary-relay.js';
 import type { GraphQLClient } from '../client.js';
 import { CROWDY_DEFAULT_HTTP_ORIGIN } from '../default-origin.js';
-import { isDroppedRead, retryAfterMsOf } from '../dropped-read.js';
-import { CrowdyError, CrowdyProtocolError } from '../errors.js';
+import { droppedReadWaitMs, isDroppedRead } from '../dropped-read.js';
+import { CrowdyError, CrowdyProtocolError, retryWaitMs } from '../errors.js';
 import {
   ExecActivateVersionDocument,
   ExecAppStatusDocument,
@@ -142,7 +142,10 @@ export class CrowdyExecError extends CrowdyError {
   readonly retryable: boolean;
   /** The caller's call limit refused it (`Busy` "rate limited …", or `RateLimited`). */
   readonly rateLimited: boolean;
-  /** How long to wait before calling again, when the refusal says (`retry in N ms`). */
+  /**
+   * How long to wait before calling again, when the refusal says (`retry in N ms`): never
+   * below 0 or above `MAX_RETRY_AFTER_WAIT_MS` (30 s), whatever the gateway's text said.
+   */
   readonly retryAfterMs: number | undefined;
 
   constructor(status: ExecStatus, message: string, cause?: unknown) {
@@ -152,7 +155,7 @@ export class CrowdyExecError extends CrowdyError {
     this.rateLimited =
       status === 'RateLimited' || (status === 'Busy' && message.startsWith('rate limited'));
     const retryIn = this.rateLimited ? RETRY_IN.exec(message) : null;
-    this.retryAfterMs = retryIn ? Number(retryIn[1]) : undefined;
+    this.retryAfterMs = retryIn ? retryWaitMs(Number(retryIn[1])) : undefined;
   }
 }
 
@@ -1708,7 +1711,7 @@ export class ExecAPI {
         b = await this.modBuildStatus(appId, buildId);
       } catch (error) {
         if (!isDroppedRead(error) || Date.now() > until) throw error;
-        await new Promise((r) => setTimeout(r, Math.max(intervalMs, retryAfterMsOf(error))));
+        await new Promise((r) => setTimeout(r, droppedReadWaitMs(error, intervalMs)));
         continue;
       }
       if (b.status === 'succeeded' || b.status === 'failed') return b;
