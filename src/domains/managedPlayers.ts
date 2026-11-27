@@ -6,6 +6,7 @@ import {
   UpdateManagedPlayerDocument,
   EndManagedPlayerSessionsDocument,
   DeleteManagedPlayerDocument,
+  DeleteManagedPlayersDocument,
   OrgManagedPlayerSettingsDocument,
   OrgSigningKeysDocument,
   RegisterOrgSigningKeyDocument,
@@ -16,6 +17,7 @@ import {
   type ManagedPlayerQuery,
   type ProvisionManagedPlayersMutation,
   type UpdateManagedPlayerMutation,
+  type DeleteManagedPlayersMutation,
   type OrgManagedPlayerSettingsQuery,
   type OrgSigningKeysQuery,
   type RegisterOrgSigningKeyMutation,
@@ -23,6 +25,16 @@ import {
   type UpdateManagedPlayerInput,
   type RegisterOrgSigningKeyInput,
 } from '../generated/graphql.js';
+
+/** The most players one {@link ManagedPlayersAPI.deleteMany} call names. */
+export const MANAGED_PLAYERS_DELETE_MAX = 100;
+
+/**
+ * What {@link ManagedPlayersAPI.deleteMany} did: a count of each outcome, and every external
+ * id sent, once, in the order it first appeared, with its outcome (`DELETED`, `NOT_FOUND` or
+ * `LEGAL_HOLD`).
+ */
+export type ManagedPlayersDeletion = Omit<DeleteManagedPlayersMutation['deleteManagedPlayers'], '__typename'>;
 
 /** The JWK members that only a private key has (RFC 7518: EC and OKP `d`, RSA's CRT values, `oct`'s `k`). */
 const PRIVATE_JWK_MEMBERS = ['d', 'p', 'q', 'dp', 'dq', 'qi', 'oth', 'k'] as const;
@@ -211,8 +223,37 @@ export class ManagedPlayersAPI {
   }
 
   /**
+   * Delete up to 100 players in one call (18.41.0, Application API v2.90.0). Each is deleted as
+   * {@link delete} deletes one, with the same authorization. The answer names every external
+   * id with its outcome: `DELETED`, `NOT_FOUND` (the organization has no such player; nothing
+   * changed) or `LEGAL_HOLD` (a legal hold covers the player or the organization, or an open
+   * or escalated safety report about the player set one; the player is kept as it was).
+   * **A held player does not fail the call:** the others are still deleted, so read `held`
+   * and the outcomes. An id sent twice is deleted once.
+   *
+   * @throws {RangeError} before any request for no ids or more than
+   *   {@link MANAGED_PLAYERS_DELETE_MAX}; the message says how many, and names none.
+   */
+  async deleteMany(orgId: string, externalIds: readonly string[]): Promise<ManagedPlayersDeletion> {
+    const count = Array.isArray(externalIds) ? externalIds.length : 0;
+    if (count < 1 || count > MANAGED_PLAYERS_DELETE_MAX) {
+      throw new RangeError(
+        `managedPlayers.deleteMany takes 1 to ${MANAGED_PLAYERS_DELETE_MAX} external ids, and was given ${count}`,
+      );
+    }
+    const data = await this.api.request(DeleteManagedPlayersDocument, {
+      input: { orgId, externalIds: [...externalIds] },
+    });
+    const { deleted, notFound, held, players } = data.deleteManagedPlayers;
+    return { deleted, notFound, held, players: players.map(({ externalId, outcome }) => ({ externalId, outcome })) };
+  }
+
+  /**
    * Whether an operator has turned managed players on for the organization, and its limits:
-   * the player cap, sign-ins per minute and the session lengths. Also where the organization
+   * the player cap, sign-ins per minute and the session lengths. Its fleet limits too (18.41.0,
+   * Application API v2.89.0): `fleetSessionsEnabled` (whether its game servers may open fleet
+   * sessions), `maxFleetSessions` (sessions held at once, over all its apps) and
+   * `maxFleetPlayers` (players one session may carry). Also where the organization
    * stands on the Org-Managed Players Addendum: the current `termsVersion` and `termsUrl`,
    * `termsAccepted`, the latest acceptance, and `viewerMayAcceptTerms` (whether the signed-in
    * user is an admin of the organization who may accept it, in Studio). Read-only here.

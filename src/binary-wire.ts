@@ -1192,6 +1192,10 @@ export function parseNotification(bytes: Uint8Array): UdpNotification | null {
  * Parse one relay BINARY frame (one Buddy datagram, possibly a
  * MESSAGE_BUNDLE) into notification objects. Unparseable inner messages are
  * skipped, mirroring the server-side bundle behavior.
+ *
+ * **This does not verify.** It reads the bytes and checks no HMAC, so it is for tools and
+ * tests that only need the layout. {@link parsePlayerDatagram} verifies, and it is what the
+ * binary relay transport reads a player's datagrams with.
  */
 export function parseRelayFrame(bytes: Uint8Array): UdpNotification[] {
   if (bytes.length < 1) return [];
@@ -1202,9 +1206,9 @@ export function parseRelayFrame(bytes: Uint8Array): UdpNotification[] {
 
   // MESSAGE_BUNDLE_SIGNED (Buddy v0.30.0): the same framing, then 32 trailing
   // HMAC bytes over everything before them, keyed like a per-message client HMAC.
-  // Members carry containsAuth = 0 and parseOne reads them as such. This SDK does
-  // not verify downlink HMACs (it never did for per-member ones either); it strips
-  // the tail and walks. Only a session that advertised BUNDLE_SIGNED receives these.
+  // Members carry containsAuth = 0 and parseOne reads them as such. This function
+  // strips the tail and walks without checking it (parsePlayerDatagram checks it).
+  // Only a session that advertised BUNDLE_SIGNED receives these.
   if (bytes[0] === WireMessageType.MESSAGE_BUNDLE_SIGNED) {
     if (bytes.length <= 1 + HMAC_SIZE) return [];
     return walkBundleMembers(bytes, bytes.length - HMAC_SIZE);
@@ -1237,4 +1241,179 @@ function walkBundleMembers(bytes: Uint8Array, end: number): UdpNotification[] {
     off += len;
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// A player's own session: a whole datagram, verified
+// ---------------------------------------------------------------------------
+
+/** One message out of a datagram a player's own session was sent. */
+export interface PlayerInbound {
+  /** The notification, as the `udpNotifications` subscription delivers it. */
+  notification: UdpNotification;
+  /**
+   * Whether an HMAC keyed with the player's token covered the message: its own, or the one
+   * of the `MESSAGE_BUNDLE_SIGNED` it came in. State (every long-spatial notification) is
+   * returned only verified. False for the two kinds of message that have no room for an
+   * HMAC of their own and arrived outside a signed bundle: an error frame (`[3][seq][code]`)
+   * and a channel notification (18, 36).
+   */
+  verified: boolean;
+}
+
+/** What {@link parsePlayerDatagram} read, and what it dropped. */
+export interface PlayerDatagram {
+  /** The messages to deliver, in the datagram's order. */
+  messages: PlayerInbound[];
+  /** Frames dropped because their HMAC did not verify (a signed bundle counts once). */
+  hmacFailures: number;
+  /** Frames dropped because they could not be read. */
+  malformed: number;
+  /**
+   * Long-spatial notifications dropped because they carried no HMAC (`containsAuth` 0) and
+   * were not inside a signed bundle. The realtime servers sign every long-spatial
+   * notification they send a session, so one without a signature did not come from them.
+   */
+  unsigned: number;
+}
+
+function sliceView(bytes: Uint8Array): DataView {
+  return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+}
+
+/**
+ * Read one datagram a player's own session was sent, verifying with the player's token
+ * what can be verified before returning it. `ctx` is the session's own context
+ * ({@link createSignContext}: its `gameTokenId` and its app token). A frame that fails is
+ * dropped and counted, never returned.
+ *
+ * - **`MESSAGE_BUNDLE_SIGNED` (30)**, sent to a session that advertised `BUNDLE_SIGNED`: one
+ *   HMAC over the datagram, `HMAC-SHA256(key = the token, message = every byte before the
+ *   HMAC || the token)`, checked once. A bundle that fails is dropped whole.
+ * - **A long-spatial notification anywhere else** (alone, or a member of a
+ *   `MESSAGE_BUNDLE`, 2) carries its own HMAC (`containsAuth` 1) before its 9-byte tail and
+ *   is checked with it. One with no signature is dropped and counted (`unsigned`).
+ * - **An error frame** (`[3][seq][code]`) and **a channel notification** (18, 36) have no
+ *   room for an HMAC of their own. Each is returned either way, marked `verified` only when
+ *   it was a member of a signed bundle: the realtime servers send a player's session every
+ *   error frame alone, and a session that has not advertised `BUNDLE_SIGNED` its channel
+ *   notifications plain.
+ * - **Anything else** (a control frame, a fleet session's frames, an unknown type) is not a
+ *   notification for a player and is skipped.
+ *
+ * This checks no app: the caller knows which app its session is in.
+ */
+export async function parsePlayerDatagram(
+  ctx: RelaySignContext,
+  datagram: Uint8Array,
+): Promise<PlayerDatagram> {
+  const out: PlayerDatagram = { messages: [], hmacFailures: 0, malformed: 0, unsigned: 0 };
+  if (datagram.length === 0) {
+    out.malformed += 1;
+    return out;
+  }
+  const type = datagram[0];
+
+  if (type === WireMessageType.MESSAGE_BUNDLE_SIGNED) {
+    if (datagram.length <= 1 + HMAC_SIZE) {
+      out.malformed += 1;
+      return out;
+    }
+    const end = datagram.length - HMAC_SIZE;
+    if (!(await verifyWithToken(ctx, datagram.subarray(0, end), datagram.subarray(end)))) {
+      out.hmacFailures += 1;
+      return out;
+    }
+    for (const member of playerBundleMembers(datagram, end, out)) {
+      await readPlayerMember(ctx, member, true, out);
+    }
+    return out;
+  }
+
+  if (type === WireMessageType.MESSAGE_BUNDLE) {
+    for (const member of playerBundleMembers(datagram, datagram.length, out)) {
+      await readPlayerMember(ctx, member, false, out);
+    }
+    return out;
+  }
+
+  await readPlayerMember(ctx, datagram, false, out);
+  return out;
+}
+
+/** The members of `[1B type]{[2B u16 length][member]}…` up to `end`. A truncated one ends the walk. */
+function playerBundleMembers(bytes: Uint8Array, end: number, out: PlayerDatagram): Uint8Array[] {
+  const view = sliceView(bytes);
+  const members: Uint8Array[] = [];
+  let off = BUNDLE_HEADER_BYTES;
+  while (off < end) {
+    if (off + BUNDLE_LENGTH_PREFIX_BYTES > end) {
+      out.malformed += 1;
+      break;
+    }
+    const len = view.getUint16(off, true);
+    off += BUNDLE_LENGTH_PREFIX_BYTES;
+    if (len === 0 || off + len > end) {
+      out.malformed += 1;
+      break;
+    }
+    members.push(bytes.subarray(off, off + len));
+    off += len;
+  }
+  return members;
+}
+
+/**
+ * One complete message: a member of a bundle, or a datagram that is not a bundle.
+ * `inSignedBundle` says the bundle's own HMAC already vouched for it.
+ */
+async function readPlayerMember(
+  ctx: RelaySignContext,
+  message: Uint8Array,
+  inSignedBundle: boolean,
+  out: PlayerDatagram,
+): Promise<void> {
+  const type = message[0];
+
+  if (
+    type === WireMessageType.GENERIC_ERROR_MESSAGE ||
+    type === WireMessageType.CHANNEL_MESSAGE_NOTIFICATION ||
+    type === WireMessageType.CHANNEL_AUDIO_NOTIFICATION
+  ) {
+    // No room for an HMAC of its own: as good as the bundle it came in, and the caller is
+    // told which (`verified`).
+    const notification = parseNotification(message);
+    if (notification) out.messages.push({ notification, verified: inSignedBundle });
+    else out.malformed += 1;
+    return;
+  }
+
+  if ((type & 0x80) === 0) return; // not a notification: nothing a player's client reads
+
+  if (message.length < SPATIAL_HEADER_SIZE + TAIL_NO_AUTH_BYTES) {
+    out.malformed += 1;
+    return;
+  }
+  let verified = inSignedBundle;
+  if (message[SPATIAL_CONTAINS_AUTH_OFFSET] !== 0) {
+    // Its own HMAC sits before the 9-byte tail, over the header and the payload.
+    if (message.length < SPATIAL_HEADER_SIZE + TAIL_AUTH_BYTES) {
+      out.malformed += 1;
+      return;
+    }
+    const prefix = message.length - TAIL_AUTH_BYTES;
+    const tag = message.subarray(prefix, prefix + HMAC_SIZE);
+    if (!(await verifyWithToken(ctx, message.subarray(0, prefix), tag))) {
+      out.hmacFailures += 1;
+      return;
+    }
+    verified = true;
+  }
+  if (!verified) {
+    out.unsigned += 1;
+    return;
+  }
+  const notification = parseNotification(message);
+  if (notification) out.messages.push({ notification, verified });
+  // An unknown spatial type is skipped: the protocol grows by adding types.
 }
