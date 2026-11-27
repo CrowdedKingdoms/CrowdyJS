@@ -184,8 +184,20 @@ export interface UdpNotificationHandlers {
    * originating send via `sequenceNumber` and read `errorCode`
    * ({@link UdpErrorCode}) for the reason. The matching `...AndWait` promise
    * rejects on this; the handler still fires for observability.
+   *
+   * `verified` is true only when the refusal arrived over the binary relay inside a bundle
+   * this client verified with the player's token. The realtime servers send a player's
+   * session every refusal alone, as 3 bytes with no room for a signature, so today it is
+   * false, as it is for every refusal on the GraphQL transport, where the Application API
+   * is what the client trusts. A refusal settles the send whose sequence number it names
+   * and changes nothing else in this client: not the connection, not the status, not the
+   * token. Treat an unverified `TOKEN_EXPIRED` the same way: ask the Application API
+   * (refresh the app token) and act on its answer.
    */
-  genericError?: (notification: Extract<UdpNotification, { __typename?: 'GenericErrorResponse' }>) => void;
+  genericError?: (
+    notification: Extract<UdpNotification, { __typename?: 'GenericErrorResponse' }>,
+    verified: boolean,
+  ) => void;
   /**
    * A connection-lifecycle event from the game-api (handshake / auth /
    * routing), carrying `status`, `code`, `message`, and `retryable`. A
@@ -342,6 +354,38 @@ export interface RealtimeConfig {
   ownMediaEcho?: boolean;
 }
 
+/**
+ * What a player's realtime client received and did not deliver, and the refusals it
+ * received ({@link RealtimeClient.receiveStats}). The names are `FleetSession`'s.
+ */
+export interface RealtimeReceiveStats {
+  /**
+   * Binary relay only: frames dropped because their HMAC did not verify with the player's
+   * token (a signed bundle counts once).
+   */
+  hmacFailures: number;
+  /** Binary relay only: frames dropped because they could not be read. */
+  malformed: number;
+  /**
+   * Binary relay only: long-spatial notifications dropped because they carried no
+   * signature and were not inside a signed bundle.
+   */
+  unsigned: number;
+  /**
+   * Notifications dropped because they named another app than the one this client is
+   * subscribed for, on either transport. A realtime client is in one app, so state or a
+   * communication of another app is not its own, however it was signed. Anything but 0 is
+   * worth reporting to Crowded Kingdoms.
+   */
+  wrongApp: number;
+  /** `GenericErrorResponse`s received, verified or not. */
+  errorsReceived: number;
+  /** Of those, `UNAUTHORIZED`. */
+  unauthorizedReceived: number;
+  /** Of `errorsReceived`, those that nothing verified (see `genericError`'s `verified`). */
+  unverifiedErrorsReceived: number;
+}
+
 interface PendingWait {
   resolve(notification: SpatialNotification): void;
   reject(error: CrowdyRealtimeError): void;
@@ -426,6 +470,15 @@ export class RealtimeClient {
   // The game-api rejects subscriptions that arrive without it.
   private subscribedAppId: string | null = null;
   private opening: Promise<void> | null = null;
+  private readonly received: RealtimeReceiveStats = {
+    hmacFailures: 0,
+    malformed: 0,
+    unsigned: 0,
+    wrongApp: 0,
+    errorsReceived: 0,
+    unauthorizedReceived: 0,
+    unverifiedErrorsReceived: 0,
+  };
 
   /**
    * @param config - Reconnect/timeout/endpoint tuning; see
@@ -814,6 +867,27 @@ export class RealtimeClient {
   }
 
   /**
+   * What this client received and did not deliver, and the refusals it received, since it
+   * was created. On the binary relay every datagram is checked with the player's token
+   * before a handler runs, and no option turns that off: a frame that fails is dropped and
+   * counted here (`hmacFailures`, `unsigned`, `malformed`). On both transports a
+   * notification that names another app than the subscribed one is dropped and counted
+   * (`wrongApp`). A local diagnostic: a count above 0 in `wrongApp`, `unsigned` or
+   * `hmacFailures` is worth reporting to Crowded Kingdoms.
+   */
+  receiveStats(): RealtimeReceiveStats {
+    return { ...this.received };
+  }
+
+  /**
+   * Resolves once every datagram the binary relay has received so far has been verified
+   * and its notifications delivered. For tests and tools: a game has no need to wait.
+   */
+  async settled(): Promise<void> {
+    await this.binaryRelay?.settled();
+  }
+
+  /**
    * Start or stop asking for this player's own spatial voice and video, which
    * from Buddy v0.48.0 a speaker is not sent otherwise. Binary relay only; the
    * relay advertises the change at once, and a relay opened later starts with
@@ -1112,7 +1186,12 @@ export class RealtimeClient {
         },
         {
           getToken: () => this.session.getToken(),
-          onNotification: (notification) => this.dispatch(notification),
+          onNotification: (notification, verified) => this.dispatch(notification, verified),
+          onDropped: (dropped) => {
+            this.countDropped('hmacFailures', dropped.hmacFailures);
+            this.countDropped('malformed', dropped.malformed);
+            this.countDropped('unsigned', dropped.unsigned);
+          },
           onError: (error) => this.dispatchError(error),
           onStatus: (status) => {
             if (status === 'inactive') this.desired = false;
@@ -1369,11 +1448,65 @@ export class RealtimeClient {
     }
   }
 
-  private dispatch(notification: UdpNotification): void {
+  /**
+   * Count frames that were dropped, and say so in the log at the first one and at every
+   * doubling of the count. The log names the counter and the count, and nothing a frame
+   * carried.
+   */
+  private countDropped(counter: 'hmacFailures' | 'malformed' | 'unsigned' | 'wrongApp', by: number): void {
+    if (by <= 0) return;
+    const before = this.received[counter];
+    const after = before + by;
+    this.received[counter] = after;
+    if (counter === 'malformed') return;
+    // The first, and each time the count passes a power of two.
+    if (before === 0 || Math.floor(Math.log2(after)) > Math.floor(Math.log2(before))) {
+      this.logger.warn?.(
+        `Realtime dropped what it was sent (${counter} is now ${after}); a count above 0 is worth reporting to Crowded Kingdoms`,
+      );
+    }
+  }
+
+  /**
+   * Whether a notification names another app than the one this client is subscribed for.
+   * The Application API applies the same rule to the GraphQL subscription: a notification
+   * with no app (a refusal, a channel message, a connection event) is for the session.
+   */
+  private namesAnotherApp(notification: UdpNotification): boolean {
+    const subscribed = this.subscribedAppId;
+    if (subscribed == null) return false;
+    const named = (notification as { appId?: unknown }).appId;
+    if (named === null || named === undefined) return false;
+    try {
+      return BigInt(named as string | number | bigint) !== BigInt(subscribed);
+    } catch {
+      return false; // an app id that is not a number says nothing either way
+    }
+  }
+
+  /**
+   * `verified` is what the binary relay transport found (see `PlayerInbound.verified`). The
+   * GraphQL transport verifies nothing itself, so it is false there.
+   */
+  private dispatch(notification: UdpNotification, verified = false): void {
+    // Another app's state or communication is not this client's, however it was signed: it
+    // settles no awaited send and reaches no handler.
+    if (this.namesAnotherApp(notification)) {
+      this.countDropped('wrongApp', 1);
+      return;
+    }
+    if (notification.__typename === 'GenericErrorResponse') {
+      this.received.errorsReceived += 1;
+      if ((notification.errorCode as string) === 'UNAUTHORIZED') this.received.unauthorizedReceived += 1;
+      if (!verified) this.received.unverifiedErrorsReceived += 1;
+    }
     this.metrics?.recordReceived(
       notificationKind(notification.__typename),
       payloadBytesOf(notification as Record<string, unknown>),
     );
+    // A refusal settles the awaited send whose sequence number it names, verified or not:
+    // the realtime servers send a player's session every refusal alone and unsigned. It
+    // changes nothing else here, whatever its code.
     this.resolvePending(notification);
 
     // The instance is going away on purpose. Move now rather than waiting to
@@ -1459,7 +1592,7 @@ export class RealtimeClient {
             handlers.channelAudio?.(notification);
             break;
           case 'GenericErrorResponse':
-            handlers.genericError?.(notification);
+            handlers.genericError?.(notification, verified);
             break;
           case 'RealtimeConnectionEvent':
             handlers.connectionEvent?.(notification);

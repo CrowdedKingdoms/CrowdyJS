@@ -212,7 +212,10 @@ export class ManagedPlayersAPI {
 
   /**
    * Whether an operator has turned managed players on for the organization, and its limits:
-   * the player cap, sign-ins per minute and the session lengths. Also where the organization
+   * the player cap, sign-ins per minute and the session lengths. Its fleet limits too (18.41.0,
+   * Application API v2.89.0): `fleetSessionsEnabled` (whether its game servers may open fleet
+   * sessions), `maxFleetSessions` (sessions held at once, over all its apps) and
+   * `maxFleetPlayers` (players one session may carry). Also where the organization
    * stands on the Org-Managed Players Addendum: the current `termsVersion` and `termsUrl`,
    * `termsAccepted`, the latest acceptance, and `viewerMayAcceptTerms` (whether the signed-in
    * user is an admin of the organization who may accept it, in Studio). Read-only here.

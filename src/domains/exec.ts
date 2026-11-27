@@ -23,6 +23,8 @@ import {
   ExecDeployDocument,
   ExecEndpointStatsDocument,
   type ExecEndpointStatsQuery,
+  OrgComputeCeilingDocument,
+  type OrgComputeCeilingQuery,
   ExecGridClientModsDocument,
   type ExecGridClientModFieldsFragment,
   ExecInstancesDocument,
@@ -287,6 +289,18 @@ export function encodeExecFrame(f: ExecClientFrame): Uint8Array {
 
 const U64_MAX = (1n << 64n) - 1n;
 
+/**
+ * What was given where a player's user id belongs, described and never shown: a token passed
+ * by mistake would otherwise be in the error's message, and messages are logged. (A private
+ * copy of the one in fleet-wire.ts: an export would be a parity difference.)
+ */
+function notAPlayerId(player: unknown): string {
+  if (typeof player === 'string') return `a string of ${player.length} characters`;
+  if (typeof player === 'number') return Number.isFinite(player) ? 'a number that is not a safe integer' : 'a number that is not finite';
+  if (typeof player === 'bigint') return 'an integer outside that range';
+  return player === null ? 'null' : `a value of type ${typeof player}`;
+}
+
 /** A player's user id as the 64-bit number a call-as frame carries. */
 function execPlayerId(player: bigint | number | string): bigint {
   let id: bigint;
@@ -295,12 +309,29 @@ function execPlayerId(player: bigint | number | string): bigint {
     if (typeof player === 'string' && !/^\d+$/.test(player)) throw new RangeError();
     id = BigInt(player);
   } catch {
-    throw new RangeError(`player must be a whole number from 0 to 2^64 - 1: ${String(player)}`);
+    throw new RangeError(`player must be a whole number from 0 to 2^64 - 1, and was ${notAPlayerId(player)}`);
   }
   if (id < 0n || id > U64_MAX) {
-    throw new RangeError(`player must be a whole number from 0 to 2^64 - 1: ${String(player)}`);
+    throw new RangeError('player must be a whole number from 0 to 2^64 - 1, and was an integer outside that range');
   }
   return id;
+}
+
+/**
+ * A gateway URL as an error message may show it: its origin (scheme, host and port) and
+ * nothing after it. `ExecConnection.open` and `openAsServer` take the URL from the caller
+ * beside a connect token, so a URL that already carries `?token=`, or the token passed in
+ * the URL's place, must not reach a message. What is not a URL is described, never shown.
+ */
+function gatewayName(gatewayUrl: unknown): string {
+  if (typeof gatewayUrl !== 'string') return `a gateway URL of type ${typeof gatewayUrl}`;
+  try {
+    const url = new URL(gatewayUrl);
+    if (url.host) return `${url.protocol}//${url.host}`;
+  } catch {
+    /* described below */
+  }
+  return `a gateway URL that does not parse (a string of ${gatewayUrl.length} characters)`;
 }
 
 /** Decodes a gateway frame, as `ckx_proto::client::ServerMsg::decode` does. */
@@ -667,11 +698,18 @@ export class ExecConnection {
   private async dialOnce(): Promise<void> {
     const endpoint = await this.dial();
     const url = `${endpoint.gatewayUrl.replace(/\/+$/, '')}/v1/connect?token=${encodeURIComponent(endpoint.token)}`;
-    const ws = new this.WS(url);
+    let ws: WebSocket;
+    try {
+      ws = new this.WS(url);
+    } catch {
+      // A WebSocket constructor names the whole URL it refuses, and this one ends in the
+      // connect token: say which gateway, and leave the constructor's error out.
+      throw new CrowdyExecError('Unavailable', `no socket could be opened to ${gatewayName(endpoint.gatewayUrl)}`);
+    }
     ws.binaryType = 'arraybuffer';
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
-        reject(new CrowdyExecError('Unavailable', `could not reach ${endpoint.gatewayUrl} in ${OPEN_TIMEOUT_MS} ms`));
+        reject(new CrowdyExecError('Unavailable', `could not reach ${gatewayName(endpoint.gatewayUrl)} in ${OPEN_TIMEOUT_MS} ms`));
         try {
           ws.close();
         } catch {
@@ -693,7 +731,7 @@ export class ExecConnection {
       };
       ws.onerror = (ev: Event) => {
         clearTimeout(timer);
-        reject(new CrowdyExecError('Unavailable', `connecting to ${endpoint.gatewayUrl} failed`, ev));
+        reject(new CrowdyExecError('Unavailable', `connecting to ${gatewayName(endpoint.gatewayUrl)} failed`, ev));
       };
       ws.onclose = (ev: CloseEvent) => {
         clearTimeout(timer);
@@ -1210,6 +1248,17 @@ export type ExecVersion = Omit<ExecVersionsQuery['execVersions'][number], '__typ
 export type ExecEndpointStat = Omit<ExecEndpointStatsQuery['execEndpointStats'][number], '__typename'>;
 /** An app's active version, kill switches and budget pause. */
 export type ExecAppStatus = Omit<ExecAppStatusFieldsFragment, '__typename'>;
+/**
+ * What each of an organization's apps may run of compute modules in one datacenter once the
+ * organization is funded: `maxInstances` placed at once and `maxReservedMb` of memory they
+ * reserve (each instance reserves its type's memory limit times its copies).
+ * `operatorSet` is true when a Crowded Kingdoms operator set them for this organization, with
+ * `reason` and `updatedAt`; otherwise they are the platform's defaults
+ * (`defaultMaxInstances`, `defaultMaxReservedMb`). While `funded` is false the organization's
+ * apps keep the free tier limits whatever this says: {@link ExecAPI.status} reports what an
+ * app has now.
+ */
+export type OrgComputeCeiling = Omit<OrgComputeCeilingQuery['orgComputeCeiling'], '__typename'>;
 /** What {@link ExecAPI.restartType} did: the node type and how many running instances it stopped. */
 export interface ExecRestartResult {
   nodeType: string;
@@ -1377,7 +1426,7 @@ export class ExecAPI {
     return async () => {
       const endpoint = await fetch();
       const why = execGatewayRefusal(this.graphql.endpoint ?? CROWDY_DEFAULT_HTTP_ORIGIN, endpoint.gatewayUrl);
-      if (why) throw new CrowdyExecError('Unavailable', `refusing the gateway ${endpoint.gatewayUrl}: ${why}`);
+      if (why) throw new CrowdyExecError('Unavailable', `refusing the gateway ${gatewayName(endpoint.gatewayUrl)}: ${why}`);
       return endpoint;
     };
   }
@@ -1498,6 +1547,17 @@ export class ExecAPI {
   async status(appId: string): Promise<ExecAppStatus> {
     const data = await this.graphql.request(ExecAppStatusDocument, { appId });
     return strip(data.execAppStatus);
+  }
+
+  /**
+   * The organization's compute ceiling: what each of its apps may run in one datacenter once
+   * it is funded, and whether an operator set it for this organization (Application API
+   * v2.88.0). Read-only: an operator changes it. Requires `view_compute_diagnostics` on the
+   * organization.
+   */
+  async orgComputeCeiling(orgId: string): Promise<OrgComputeCeiling> {
+    const data = await this.graphql.request(OrgComputeCeilingDocument, { orgId });
+    return strip(data.orgComputeCeiling);
   }
 
   /**
