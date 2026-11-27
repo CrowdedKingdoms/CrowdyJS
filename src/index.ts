@@ -516,6 +516,7 @@ export {
   type ExecManifest,
   type ExecManifestType,
   type ExecAppStatus,
+  type OrgComputeCeiling,
   type ExecRestartResult,
   type ExecEndpointStat,
   type ExecEndpointStatsOptions,

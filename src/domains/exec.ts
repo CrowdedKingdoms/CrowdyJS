@@ -23,6 +23,8 @@ import {
   ExecDeployDocument,
   ExecEndpointStatsDocument,
   type ExecEndpointStatsQuery,
+  OrgComputeCeilingDocument,
+  type OrgComputeCeilingQuery,
   ExecGridClientModsDocument,
   type ExecGridClientModFieldsFragment,
   ExecInstancesDocument,
@@ -1210,6 +1212,17 @@ export type ExecVersion = Omit<ExecVersionsQuery['execVersions'][number], '__typ
 export type ExecEndpointStat = Omit<ExecEndpointStatsQuery['execEndpointStats'][number], '__typename'>;
 /** An app's active version, kill switches and budget pause. */
 export type ExecAppStatus = Omit<ExecAppStatusFieldsFragment, '__typename'>;
+/**
+ * What each of an organization's apps may run of compute modules in one datacenter once the
+ * organization is funded: `maxInstances` placed at once and `maxReservedMb` of memory they
+ * reserve (each instance reserves its type's memory limit times its copies).
+ * `operatorSet` is true when a Crowded Kingdoms operator set them for this organization, with
+ * `reason` and `updatedAt`; otherwise they are the platform's defaults
+ * (`defaultMaxInstances`, `defaultMaxReservedMb`). While `funded` is false the organization's
+ * apps keep the free tier limits whatever this says: {@link ExecAPI.status} reports what an
+ * app has now.
+ */
+export type OrgComputeCeiling = Omit<OrgComputeCeilingQuery['orgComputeCeiling'], '__typename'>;
 /** What {@link ExecAPI.restartType} did: the node type and how many running instances it stopped. */
 export interface ExecRestartResult {
   nodeType: string;
@@ -1498,6 +1511,17 @@ export class ExecAPI {
   async status(appId: string): Promise<ExecAppStatus> {
     const data = await this.graphql.request(ExecAppStatusDocument, { appId });
     return strip(data.execAppStatus);
+  }
+
+  /**
+   * The organization's compute ceiling: what each of its apps may run in one datacenter once
+   * it is funded, and whether an operator set it for this organization (Application API
+   * v2.88.0). Read-only: an operator changes it. Requires `view_compute_diagnostics` on the
+   * organization.
+   */
+  async orgComputeCeiling(orgId: string): Promise<OrgComputeCeiling> {
+    const data = await this.graphql.request(OrgComputeCeilingDocument, { orgId });
+    return strip(data.orgComputeCeiling);
   }
 
   /**

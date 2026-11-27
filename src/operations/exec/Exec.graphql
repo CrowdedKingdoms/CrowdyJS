@@ -127,6 +127,20 @@ query ExecAppStatus($appId: BigInt!) {
   }
 }
 
+query OrgComputeCeiling($orgId: BigInt!) {
+  orgComputeCeiling(orgId: $orgId) {
+    orgId
+    maxInstances
+    maxReservedMb
+    operatorSet
+    funded
+    defaultMaxInstances
+    defaultMaxReservedMb
+    reason
+    updatedAt
+  }
+}
+
 mutation ExecActivateVersion($appId: BigInt!, $version: Int!) {
   execActivateVersion(appId: $appId, version: $version) {
     ...ExecAppStatusFields
