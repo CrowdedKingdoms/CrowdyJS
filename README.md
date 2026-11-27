@@ -36,7 +36,7 @@ so it needs that Application API or newer; promote the Application API before th
 
 | CrowdyJS | Needs the Application API (ck-api) |
 | --- | --- |
-| unreleased (18.41.0) | as 18.40.0, except two calls: `managedPlayers.settings` needs v2.89.0 or later (it selects the organization's fleet limits; through 18.40.1 it needed v2.85.0), and the new `exec.orgComputeCeiling` needs v2.88.0 or later |
+| 18.41.0 | v2.90.0 or later: every call that answers an app token selects `userId` (`portal.mintAppToken`, `exchangeCode`, `refresh`, `exchangeManagedPlayerAssertion`, `signInWithMinecraft`), and `managedPlayers.deleteMany` is new. Through 18.40.1 those token calls needed v2.85.0. `managedPlayers.settings` selects the fleet limits of v2.89.0, and `exec.orgComputeCeiling` reads v2.88.0's. A fleet session's not-present reports need realtime servers v0.51.0 |
 | 18.40.1 | as 18.40.0 |
 | 18.40.0 | as 18.39.0; `client.fleetSessions` and `exec.connectAsServer` need v2.89.0 or later (see [Game servers: fleet sessions](#game-servers-fleet-sessions)) |
 | 18.39.1 | as 18.39.0 |
@@ -232,6 +232,10 @@ Notes:
 - `portal.mintAppToken(appId)` returns the token plus `applicationApiUrl` /
   `applicationApiWsUrl` / `expiresAt`; it does **not** store the token on the identity
   client — set it on the per-game client.
+- Every app-token answer carries `userId` (18.41.0, Application API v2.90.0): the user the
+  token signs in, the id `users.me()` returns. `portal.mintAppToken`, `exchangeCode`,
+  `refresh`, `exchangeManagedPlayerAssertion`, and `signInWithMinecraft` all return it, so
+  no `me` call is needed to learn it.
 - Each client's `AuthState` is observed by both its HTTP client and its
   realtime socket, so HTTP and WebSocket auth never drift within a client.
 - `client.session.restore()` reads from the configured `tokenStore`.
@@ -259,9 +263,8 @@ sign-in, refresh and `provision` answers `ORG_LEGAL_ACCEPTANCE_REQUIRED`
 (`orgLegalAcceptanceRequiredOf(err)`), which neither the player nor your server can fix.
 `managedPlayers.settings(orgId)` reports `termsAccepted`, the current `termsVersion` and its
 `termsUrl`. The SDK does not wrap the acceptance: it binds the organization, so a person makes
-it in Studio. From 18.41.0 (unreleased) the same call reports the organization's fleet limits,
-and needs Application API v2.89.0: `fleetSessionsEnabled`, `maxFleetSessions`, and
-`maxFleetPlayers`.
+it in Studio. From 18.41.0 the same call reports the organization's fleet limits, and needs
+Application API v2.89.0: `fleetSessionsEnabled`, `maxFleetSessions`, and `maxFleetPlayers`.
 
 **From the organization's server, with an org token.** Create the token in Studio (or
 `organizations.createToken({ orgId, scopes: ['players:mint'], appIds: [appId] })`) and keep it
@@ -275,7 +278,7 @@ const res = await fetch('https://ck.dev.crowdedkingdoms.com/graphql', {
   headers: { 'content-type': 'application/json', authorization: `Bearer ${process.env.CK_ORG_TOKEN}` },
   body: JSON.stringify({
     query: `mutation($i: MintManagedPlayerTokenInput!) { mintManagedPlayerToken(input: $i) {
-      token gameTokenId appId expiresAt applicationApiUrl applicationApiWsUrl discoveryUrl launchUrl } }`,
+      token gameTokenId userId appId expiresAt applicationApiUrl applicationApiWsUrl discoveryUrl launchUrl } }`,
     variables: {
       i: {
         appId,
@@ -338,7 +341,11 @@ Each assertion works once; a refusal reads with `assertionRejectedOf(err)?.reaso
 launch) / `update` (rename, disable, enable) / `endSessions` / `delete`, `settings` (the
 operator-set limits and the addendum), `signingKeys` / `registerSigningKey` / `revokeSigningKey`, and
 `appModsEnabled` / `setAppMods` (`manage_billing`). From your server, an org token with
-`players:manage` also works for the six player operations. `organizations.revokeToken(id, { endSessions: true })`
+`players:manage` also works for the player operations.
+`deleteMany(orgId, externalIds)` (18.41.0, Application API v2.90.0) deletes 1 to 100 players
+in one call, with the authorization `delete` takes. Its answer counts `deleted`, `notFound`,
+and `held`, and lists each external id with its outcome: `DELETED`, `NOT_FOUND`, or
+`LEGAL_HOLD`. A held player is kept and does not fail the call, so read the outcomes. `organizations.revokeToken(id, { endSessions: true })`
 also ends the sessions a token signed in.
 
 ### Token refresh during gameplay
@@ -655,7 +662,7 @@ throws `RangeError`.
 
 ### The client checks what it receives before a handler runs
 
-From 18.41.0 (unreleased) a player's realtime client makes the checks a
+From 18.41.0 a player's realtime client makes the checks a
 [fleet session](#game-servers-fleet-sessions) makes. What it can check depends on the
 transport.
 
@@ -1188,7 +1195,7 @@ exec.onReconnect((host) => console.log('moved to', host));
   `endpointStats(appId, { nodeType, sinceMinutes })`, calls per endpoint by outcome (`calls`,
   `appErrors`, `busy`, `denied`, `deadlineExceeded`, `otherErrors`) with latency over
   `timedCalls` (default the last 60 minutes, at most 7 days).
-- The organization's compute ceiling (18.41.0, unreleased; Application API v2.88.0):
+- The organization's compute ceiling (18.41.0, Application API v2.88.0):
   `orgComputeCeiling(orgId)` reads what each of the organization's apps may run in one
   datacenter once the organization is funded. It needs `view_compute_diagnostics` on the
   organization.
@@ -1363,7 +1370,7 @@ Workers runtime and Vercel's Edge Runtime).
   after it was opened or last refreshed.
 - **Limits.** An organization holds at most 512 fleet sessions at once, and a session
   carries at most 256 players, unless an operator set other numbers for the organization.
-  `managedPlayers.settings(orgId)` reports the organization's numbers (18.41.0, unreleased), and the
+  `managedPlayers.settings(orgId)` reports the organization's numbers (18.41.0), and the
   answer's `maxPlayers` is the session's own number. Open one session for each game server.
 - **The fleet token is a signing key.** The Application API does not accept it as a bearer.
 
@@ -1481,6 +1488,49 @@ until you call `fleet.forgetActor(player, uuid)` or the carry ends. A heartbeat 
 gameplay input, and neither is voice or video. A carried player who sends no gameplay input
 for the app's idle timeout is released with reason 5, and the session stays.
 
+### A refused keepalive is reported once
+
+Realtime servers from v0.51.0 accept a keepalive only where the player's actor update would
+be accepted. v0.51.0 has been on the dev tier since November 27, 2026; test and production
+follow.
+Where a carried player has no access, the server answers every keepalive for the player's
+actor `UNAUTHORIZED`, inside the session's signed bundle. The actor is not present there,
+other players are not told of it, and the session is sent nothing of the place. The session
+stays connected and still carries the player.
+
+From 18.41.0 the session makes one report for the player, the actor, and the place, an
+`ActorNotPresent` (`uuid`, `chunk`, `sequence`, `verified`, `playerGameTokenId`):
+
+| | When | What you get |
+| --- | --- | --- |
+| `notPresent(report)` | Once, at the first refused keepalive | The report. `fleet.notPresent(player, uuid)` returns it while it stands |
+| `notPresentEnded(report, 'accepted')` | A keepalive there had no refusal for 3 seconds | The actor is present |
+| `notPresentEnded(report, 'moved')` | The actor's next keepalive or update named another chunk | Nothing is known of the new place yet |
+| `notPresentEnded(report, 'stopped')` | No keepalive left for the actor there for 30 seconds, you called `forgetActor`, or the session no longer holds the player | The report is over |
+
+- **`genericError` still receives every refusal.** Its third argument, `keepalive`, is true
+  for one that answers a keepalive, so a handler that reads every refusal can tell the
+  repeats. `fleet.stats()` counts them in `keepalivesRefused` and the reports in
+  `notPresentReports`.
+- **The session keeps the keepalives at the same rate:** one every 2 seconds for each actor,
+  never faster, and it does not stop. Once access is granted, the next keepalive is accepted
+  within about 6 seconds, with no new sign-in.
+- **Nothing else changes.** The session's status, its server, and the carry stay as they
+  were, and the session carries nobody again because of a refused keepalive.
+- **A report needs a verified refusal** whose sequence number only that keepalive used in
+  the last 3 seconds. The sequence number is one byte shared by everything the session
+  sends, so a session that sends more than about 85 messages a second makes no report, and
+  `keepalivesRefused` still counts.
+- **Access that is removed** takes effect at the player's next token refresh, at most 30
+  minutes later, as it does for updates.
+- **Unchanged:** apps where every region is open, paused apps, an idle player's first
+  keepalive after a move or a reconnect, and the session's own keepalive. The server does
+  not count a refused keepalive as gameplay input or as data in.
+
+A player's own client (`client.udp`, World Stores, the Game Kit) sends no keepalive message.
+It keeps an actor present with actor updates, which the realtime servers judge as before,
+so v0.51.0 changes nothing for it.
+
 ### State arrives once, and a delivery names its players
 
 Each handler receives the notification and the players it is for.
@@ -1513,9 +1563,11 @@ which the next section covers. The largest datagram a fleet session is sent is 1
 
 ### A refused send is signed, and the handler says so
 
-The `genericError` handler receives a refused send and a second argument, `verified`. A
-refusal is 3 bytes: the message type, the sequence number of the send, and a code. It names
-no player, so match its sequence number against the numbers your sends resolved with.
+The `genericError` handler receives a refused send and two more arguments: `verified`, and
+`keepalive` (true when the refusal answers a keepalive; see
+[A refused keepalive is reported once](#a-refused-keepalive-is-reported-once)). A refusal is
+3 bytes: the message type, the sequence number of the send, and a code. It names no player,
+so match its sequence number against the numbers your sends resolved with.
 
 - **`verified` is true for a refusal that arrived inside a bundle the session verified with
   the fleet token.** Realtime servers from v0.50.3 send a fleet session every refusal that
@@ -1568,7 +1620,10 @@ makes a refresh due.
 
 - **`refreshInput()` names the server the session is on**, so the session stays there
   while that server still serves the app. After a move order it names no server, and the
-  answer's `server` is the next one.
+  answer's `server` is the next one. `currentServer` holds one address and the port: the
+  server's `ip4`, or its `ip6` when it has no `ip4` (18.41.0; naming an `ip6` needs
+  Application API v2.90.0). `fleetSessions.refresh` sends one address when you pass a
+  session answer's whole `server`.
 - **The same server:** the carries stand. The session sends its capabilities at once,
   because after a refresh the server sends the session nothing until it hears from it.
 - **Another server**, or the same one after it released the session or went quiet: the
@@ -1895,6 +1950,9 @@ before entering the world. For org-managed players: `assertionRejectedOf(err)`
 For an organization's game servers: `orgTokenRequiredOf(err)` (`ORG_TOKEN_REQUIRED`),
 `fleetSessionLimitOf(err)` (`FLEET_SESSION_LIMIT`), `fleetSessionNotFoundOf(err)` (`NOT_FOUND`
 on a fleet session's refresh), and `platformBusyOf(err)` (`PLATFORM_BUSY`, with `retryAfterMs`).
+The platform's `retryAfterMs` runs from 200 ms to 10 seconds. `retryWaitMs(retryAfterMs)`
+(18.41.0) is the wait to make on it: 0 for a hint of 0 or below, and 30 seconds
+(`MAX_RETRY_AFTER_WAIT_MS`) at most. The SDK's own waits on a server's hint go through it.
 
 The player gate and player safety (18.24.0): `legalAcceptanceRequiredOf(err)`
 (`LEGAL_ACCEPTANCE_REQUIRED`, with the `missingDocuments`), `ageRequiredOf(err)` (`AGE_REQUIRED`),

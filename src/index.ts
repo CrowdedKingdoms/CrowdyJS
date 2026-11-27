@@ -47,7 +47,7 @@
  */
 
 /** The published package version. Mirrors `package.json`. */
-export const VERSION = '18.40.1';
+export const VERSION = '18.41.0';
 
 export { LbCookieStore } from './lb-cookie-store.js';
 export {
@@ -258,6 +258,8 @@ export {
   fleetSessionLimitOf,
   fleetSessionNotFoundOf,
   platformBusyOf,
+  MAX_RETRY_AFTER_WAIT_MS,
+  retryWaitMs,
   LEGAL_ACCEPTANCE_REQUIRED_CODE,
   AGE_REQUIRED_CODE,
   AGE_REQUIREMENT_NOT_MET_CODE,
@@ -450,10 +452,17 @@ export {
 export { OrganizationsAPI } from './domains/organizations.js';
 export {
   ManagedPlayersAPI,
+  MANAGED_PLAYERS_DELETE_MAX,
+  type ManagedPlayersDeletion,
   type OrgSigningKeyRegistration,
   type ManagedPlayerAssertionClaims,
 } from './domains/managedPlayers.js';
-export { FleetSessionsAPI, type FleetSessionAnswer } from './domains/fleetSessions.js';
+export {
+  FleetSessionsAPI,
+  fleetCurrentServer,
+  type FleetCurrentServer,
+  type FleetSessionAnswer,
+} from './domains/fleetSessions.js';
 export { AppAccessAPI } from './domains/appAccess.js';
 export { BillingAPI } from './domains/billing.js';
 export { PaymentsAPI } from './domains/payments.js';

@@ -100,3 +100,40 @@ test('a fleet session\'s server address: a number and an IP address are shown, a
   assert.deepEqual(fleetServerAddress({ ip4: '203.0.113.7', ip6: '', clientPort: 9091 }), { host: '203.0.113.7', family: 4, port: 9091 });
   assert.deepEqual(fleetServerAddress({ ip4: '', ip6: '2001:db8::7', clientPort: 9091 }), { host: '2001:db8::7', family: 6, port: 9091 });
 });
+
+/** A WebSocket whose error event names the URL it failed on, and holds the socket, as platforms' do. */
+class TellingSocket {
+  constructor(url) {
+    this.url = url;
+    setTimeout(() => this.onerror?.({ type: 'error', target: this, message: `WebSocket connection to '${url}' failed: ECONNREFUSED`, error: new Error(`connect failed for ${url}`) }), 0);
+  }
+  close() {}
+}
+
+test('a failed connection keeps the event\u2019s text as its cause, without the socket or the connect token', async () => {
+  const CONNECT = 'connect-token-' + 'c'.repeat(40);
+  await assert.rejects(
+    ExecConnection.openAsServer('wss://gw.example.test', CONNECT, { WebSocket: TellingSocket }),
+    (error) => {
+      assert.equal(error.message, 'Unavailable: connecting to wss://gw.example.test failed');
+      assert.ok(error.cause instanceof Error, 'the cause is an Error the SDK made');
+      assert.equal(error.cause.message, "WebSocket connection to 'wss://gw.example.test/v1/connect?token=<token>' failed: ECONNREFUSED");
+      // Nothing reachable from the error holds the token: not the cause, not a socket.
+      const seen = new Set();
+      const walk = (value) => {
+        if (typeof value === 'string') assert.ok(!value.includes(CONNECT), 'a string under the error holds the connect token');
+        if (!value || typeof value !== 'object' || seen.has(value)) return;
+        seen.add(value);
+        for (const key of Reflect.ownKeys(value)) walk(value[key]);
+      };
+      walk(error);
+      assert.equal('target' in error.cause, false);
+      return true;
+    },
+  );
+  // An event that says nothing leaves no cause.
+  await assert.rejects(
+    ExecConnection.openAsServer('wss://gw.example.test', CONNECT, { WebSocket: FailingSocket }),
+    (error) => error.cause === undefined,
+  );
+});

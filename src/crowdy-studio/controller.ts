@@ -14,7 +14,7 @@ import type {
   ExecStudioSource,
 } from '../domains/exec.js';
 import { CrowdyError, CrowdyGraphQLError } from '../errors.js';
-import { isDroppedRead, retryAfterMsOf } from '../dropped-read.js';
+import { droppedReadWaitMs, isDroppedRead } from '../dropped-read.js';
 import type { PlayerWalletAPI } from '../domains/playerWallet.js';
 import {
   digestCanonicalJson,
@@ -1854,7 +1854,7 @@ export class CrowdyStudioController {
         if (!isDroppedRead(error)) throw error;
         missed = error;
         this.checkOperation(operation);
-        await this.sleep(Math.max(pollMs, retryAfterMsOf(error)));
+        await this.sleep(droppedReadWaitMs(error, pollMs));
         this.checkOperation(operation);
         continue;
       }
@@ -2498,7 +2498,7 @@ export class CrowdyStudioController {
     } catch (error) {
       if (!isDroppedRead(error)) throw error;
       this.checkOperation(operation);
-      await this.sleep(Math.max(this.options.compilePollMs ?? 1_500, retryAfterMsOf(error)));
+      await this.sleep(droppedReadWaitMs(error, this.options.compilePollMs ?? 1_500));
       this.checkOperation(operation);
       return read();
     }

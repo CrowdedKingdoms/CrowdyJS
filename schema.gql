@@ -1708,6 +1708,10 @@ type AppTokenResponse {
   """The app this token is confined to, as a String."""
   appId: String!
   """
+  The user the token signs in (BigInt as a decimal string): the id `me` returns as userId. A game server that signs a player in with mintManagedPlayerToken reads the player here and needs no `me` call. Every field that answers an app token carries it: mintAppToken, refreshAppToken, mintManagedPlayerToken, exchangeManagedPlayerAssertion, exchangePortalCode and signInWithMinecraft.
+  """
+  userId: BigInt!
+  """
   ISO-8601 UTC expiry. Call `refreshAppToken` (same app) before this. A different app needs its own token: a hosted sign-in for that app, or mintAppToken with the session.
   """
   expiresAt: String!
@@ -1861,6 +1865,48 @@ type ProvisionManagedPlayersResult {
   """Players that already existed and were left as they were."""
   existing: Int!
   players: [ManagedPlayer!]!
+}
+
+"""One player of a deleteManagedPlayers call, and what was done."""
+type ManagedPlayerDeletionResult {
+  """The externalId as it was sent."""
+  externalId: String!
+  """DELETED, NOT_FOUND or LEGAL_HOLD."""
+  outcome: ManagedPlayerDeletion!
+}
+
+"""What deleteManagedPlayers did with one player."""
+enum ManagedPlayerDeletion {
+  """
+  The player is deleted: its sessions are ended, its externalId and gamertag are removed, and its content is erased within minutes.
+  """
+  DELETED
+  """
+  The organization has no managed player with that externalId. Nothing changed.
+  """
+  NOT_FOUND
+  """
+  A legal hold covers the player or the organization, or an open or escalated safety report about the player set one. The player is kept as it was: disable it with updateManagedPlayer.
+  """
+  LEGAL_HOLD
+}
+
+"""
+What deleteManagedPlayers did: a count of each outcome, and every player in the order sent.
+"""
+type DeleteManagedPlayersResult {
+  """Players this call deleted."""
+  deleted: Int!
+  """External ids the organization has no managed player for."""
+  notFound: Int!
+  """
+  Players a legal hold covers, which were kept as they were. Zero when none is held.
+  """
+  held: Int!
+  """
+  Each externalId sent, once, in the order it first appeared, with its outcome.
+  """
+  players: [ManagedPlayerDeletionResult!]!
 }
 
 """
@@ -10739,6 +10785,10 @@ type Mutation {
     externalId: String!
   ): Boolean!
   """
+  Delete up to 100 managed players in one call. Each is deleted as deleteManagedPlayer deletes one: its sessions end, its externalId and gamertag are removed, and its player-side content is erased within minutes. The answer names every externalId sent with its outcome: DELETED, NOT_FOUND when the organization has no such player, or LEGAL_HOLD when a legal hold covers the player or the organization (an open or escalated safety report about a player sets one first). A held player is kept as it was and the others are still deleted, so read the outcomes: the call succeeds when some players are held. Deleting writes the same table a new player's first sign-in does and takes its turn with them, so a busy moment answers PLATFORM_BUSY with extensions.retryAfterMs and has deleted nothing: send the same call again after that wait. A call is safe to send again: a player already deleted answers NOT_FOUND. An org token with players:manage, or an org admin with manage_players.
+  """
+  deleteManagedPlayers(input: DeleteManagedPlayersInput!): DeleteManagedPlayersResult!
+  """
   OPERATOR ONLY. Enable or disable an organization's org-managed players and set its limits. Disabling refuses new sign-ins; sessions already running last until they lapse (end them with endManagedPlayerSessions). Enabling does not accept the addendum: an admin of the organization does that (acceptManagedPlayerTerms).
   """
   setOrgManagedPlayerSettings(input: SetOrgManagedPlayerSettingsInput!): OrgManagedPlayerSettings! @requiresPermission(scope: "operator", permission: "is_operator")
@@ -13142,6 +13192,16 @@ input UpdateManagedPlayerInput {
   disabled: Boolean
 }
 
+"""The players of one organization to delete in one call."""
+input DeleteManagedPlayersInput {
+  """The organization (an org token's own, if one is used)."""
+  orgId: BigInt!
+  """
+  The ids your organization knows the players by: 1 to 100 of them, each 1 to 256 characters. One sent twice is deleted once.
+  """
+  externalIds: [String!]!
+}
+
 input SetOrgManagedPlayerSettingsInput {
   orgId: BigInt!
   enabled: Boolean!
@@ -13214,9 +13274,25 @@ input RefreshFleetSessionInput {
   """The session's gameTokenId, from openFleetSession."""
   gameTokenId: BigInt!
   """
-  The realtime server the session is connected to (the ip4 and clientPort it was given). When that server still serves the app the session stays on it. Leave it out, or name one that no longer serves, and the answer names a new server to connect to: use that after a realtime server told the session to move.
+  The realtime server the session is connected to: the ip4 or the ip6 it was given, and the clientPort. When that server still serves the app the session stays on it. Leave it out, or name one that no longer serves, and the answer names a new server to connect to: use that after a realtime server told the session to move. An address that is not a valid IPv4 or IPv6 address is refused BAD_REQUEST, and the session is left as it was.
   """
-  currentServer: CurrentServerInput
+  currentServer: FleetCurrentServerInput
+}
+
+"""
+The realtime server a fleet session is connected to, named by the address the session connected to and its port. Give ip4 or ip6, the one the session connected to. Giving both, or neither, is refused BAD_REQUEST.
+"""
+input FleetCurrentServerInput {
+  """
+  The server's `ip4` as openFleetSession or refreshFleetSession returned it, when the session connected over IPv4. Dotted decimal, such as 203.0.113.10.
+  """
+  ip4: String
+  """
+  The server's `ip6` as openFleetSession or refreshFleetSession returned it, when the session connected over IPv6. An IPv6 address with no zone, brackets or port, such as 2001:db8::10.
+  """
+  ip6: String
+  """The server's `clientPort`, 1 to 65535."""
+  clientPort: Int!
 }
 
 """The fleet session to end."""

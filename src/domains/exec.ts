@@ -4,8 +4,8 @@ import type { DecoderOptions } from '@msgpack/msgpack';
 import { isSameEstate } from '../binary-relay.js';
 import type { GraphQLClient } from '../client.js';
 import { CROWDY_DEFAULT_HTTP_ORIGIN } from '../default-origin.js';
-import { isDroppedRead, retryAfterMsOf } from '../dropped-read.js';
-import { CrowdyError, CrowdyProtocolError } from '../errors.js';
+import { droppedReadWaitMs, isDroppedRead } from '../dropped-read.js';
+import { CrowdyError, CrowdyProtocolError, retryWaitMs } from '../errors.js';
 import {
   ExecActivateVersionDocument,
   ExecAppStatusDocument,
@@ -142,7 +142,10 @@ export class CrowdyExecError extends CrowdyError {
   readonly retryable: boolean;
   /** The caller's call limit refused it (`Busy` "rate limited …", or `RateLimited`). */
   readonly rateLimited: boolean;
-  /** How long to wait before calling again, when the refusal says (`retry in N ms`). */
+  /**
+   * How long to wait before calling again, when the refusal says (`retry in N ms`): never
+   * below 0 or above `MAX_RETRY_AFTER_WAIT_MS` (30 s), whatever the gateway's text said.
+   */
   readonly retryAfterMs: number | undefined;
 
   constructor(status: ExecStatus, message: string, cause?: unknown) {
@@ -152,7 +155,7 @@ export class CrowdyExecError extends CrowdyError {
     this.rateLimited =
       status === 'RateLimited' || (status === 'Busy' && message.startsWith('rate limited'));
     const retryIn = this.rateLimited ? RETRY_IN.exec(message) : null;
-    this.retryAfterMs = retryIn ? Number(retryIn[1]) : undefined;
+    this.retryAfterMs = retryIn ? retryWaitMs(Number(retryIn[1])) : undefined;
   }
 }
 
@@ -530,6 +533,23 @@ function closedError(ev: { code: number; reason?: string }): CrowdyExecError {
   );
 }
 
+/**
+ * What a socket's error event says, as a cause an error may keep: its message as an `Error`,
+ * with the connect token and anything from `?token=` on taken out, cut at 200 characters. Never
+ * the event: its target is the socket, and the socket's URL holds the token. `undefined` when
+ * the event says nothing.
+ */
+function socketFailureText(ev: unknown, token: string): Error | undefined {
+  const said = (ev as { message?: unknown; error?: { message?: unknown } } | null) ?? {};
+  const raw = typeof said.message === 'string' && said.message ? said.message : said.error?.message;
+  if (typeof raw !== 'string' || !raw) return undefined;
+  let text = raw;
+  if (token) text = text.split(token).join('<token>');
+  if (token) text = text.split(encodeURIComponent(token)).join('<token>');
+  text = text.replace(/([?&]token=)[^\s'"&#]*/gi, '$1<token>');
+  return new Error(text.replace(/\s+/g, ' ').trim().slice(0, 200));
+}
+
 const REFUSAL_REASON_MAX_CHARS = 500;
 const REFUSAL_BODY_WAIT_MS = 1_000;
 
@@ -731,7 +751,15 @@ export class ExecConnection {
       };
       ws.onerror = (ev: Event) => {
         clearTimeout(timer);
-        reject(new CrowdyExecError('Unavailable', `connecting to ${gatewayName(endpoint.gatewayUrl)} failed`, ev));
+        // The event's target is the socket, whose URL ends in the connect token: the cause is
+        // the event's own text and nothing that holds the socket.
+        reject(
+          new CrowdyExecError(
+            'Unavailable',
+            `connecting to ${gatewayName(endpoint.gatewayUrl)} failed`,
+            socketFailureText(ev, endpoint.token),
+          ),
+        );
       };
       ws.onclose = (ev: CloseEvent) => {
         clearTimeout(timer);
@@ -1708,7 +1736,7 @@ export class ExecAPI {
         b = await this.modBuildStatus(appId, buildId);
       } catch (error) {
         if (!isDroppedRead(error) || Date.now() > until) throw error;
-        await new Promise((r) => setTimeout(r, Math.max(intervalMs, retryAfterMsOf(error))));
+        await new Promise((r) => setTimeout(r, droppedReadWaitMs(error, intervalMs)));
         continue;
       }
       if (b.status === 'succeeded' || b.status === 'failed') return b;

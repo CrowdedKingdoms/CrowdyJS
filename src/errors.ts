@@ -726,8 +726,27 @@ export function fleetSessionNotFoundOf(value: unknown): boolean {
 }
 
 /**
+ * The longest the SDK waits on a server's `retryAfterMs`, in milliseconds. The platform's own
+ * hints run from 200 ms to 10 s; this is three times the longest of them.
+ */
+export const MAX_RETRY_AFTER_WAIT_MS = 30_000;
+
+/**
+ * How long to wait on a server's `retryAfterMs` hint, in milliseconds: 0 for a hint of 0 or
+ * below (or one that is not a number), the hint up to {@link MAX_RETRY_AFTER_WAIT_MS}, and
+ * {@link MAX_RETRY_AFTER_WAIT_MS} for anything longer. Every wait the SDK makes on a server's
+ * hint goes through it. {@link retryAfterMsOf} and {@link platformBusyOf} return what the
+ * server sent: pass that through here before you wait on it.
+ */
+export function retryWaitMs(hintMs: number | null | undefined): number {
+  if (typeof hintMs !== 'number' || !(hintMs > 0)) return 0;
+  return hintMs > MAX_RETRY_AFTER_WAIT_MS ? MAX_RETRY_AFTER_WAIT_MS : hintMs;
+}
+
+/**
  * The wait an error's `extensions.retryAfterMs` asks for, in milliseconds, or 0 when it names
- * none. The one reader of that field: `platformBusyOf` and the SDK's own retries use it.
+ * none. The one reader of that field: `platformBusyOf` and the SDK's own retries use it. It
+ * returns what the server sent, however long: wait {@link retryWaitMs} of it.
  */
 export function retryAfterMsOf(error: unknown): number {
   const extensions = (error as { extensions?: Record<string, unknown> } | null)?.extensions;
