@@ -30,6 +30,7 @@ so it needs that Application API or newer; promote the Application API before th
 
 | CrowdyJS | Needs the Application API (ck-api) |
 | --- | --- |
+| 18.41.0 | v2.90.0 or later: every call that answers an app token selects `userId` (`portal.mintAppToken`, `exchangeCode`, `refresh`, `exchangeManagedPlayerAssertion`, `signInWithMinecraft`), and `managedPlayers.deleteMany` is new. Through 18.40.1 those token calls needed v2.85.0. `managedPlayers.settings` selects the fleet limits of v2.89.0, and `exec.orgComputeCeiling` reads v2.88.0's. A fleet session's not-present reports need realtime servers v0.51.0 |
 | 18.40.1 | as 18.40.0 |
 | 18.40.0 | as 18.39.0; `client.fleetSessions` and `exec.connectAsServer` need v2.89.0 or later (see [Game servers: fleet sessions](#game-servers-fleet-sessions)) |
 | 18.39.1 | as 18.39.0 |
@@ -225,6 +226,10 @@ Notes:
 - `portal.mintAppToken(appId)` returns the token plus `applicationApiUrl` /
   `applicationApiWsUrl` / `expiresAt`; it does **not** store the token on the identity
   client — set it on the per-game client.
+- Every app-token answer carries `userId` (18.41.0, Application API v2.90.0): the user the
+  token signs in, the id `users.me()` returns. `portal.mintAppToken`, `exchangeCode`,
+  `refresh`, `exchangeManagedPlayerAssertion`, and `signInWithMinecraft` all return it, so
+  no `me` call is needed to learn it.
 - Each client's `AuthState` is observed by both its HTTP client and its
   realtime socket, so HTTP and WebSocket auth never drift within a client.
 - `client.session.restore()` reads from the configured `tokenStore`.
@@ -252,7 +257,8 @@ sign-in, refresh and `provision` answers `ORG_LEGAL_ACCEPTANCE_REQUIRED`
 (`orgLegalAcceptanceRequiredOf(err)`), which neither the player nor your server can fix.
 `managedPlayers.settings(orgId)` reports `termsAccepted`, the current `termsVersion` and its
 `termsUrl`. The SDK does not wrap the acceptance: it binds the organization, so a person makes
-it in Studio.
+it in Studio. From 18.41.0 the same call reports the organization's fleet limits, and needs
+Application API v2.89.0: `fleetSessionsEnabled`, `maxFleetSessions`, and `maxFleetPlayers`.
 
 **From the organization's server, with an org token.** Create the token in Studio (or
 `organizations.createToken({ orgId, scopes: ['players:mint'], appIds: [appId] })`) and keep it
@@ -266,7 +272,7 @@ const res = await fetch('https://ck.dev.crowdedkingdoms.com/graphql', {
   headers: { 'content-type': 'application/json', authorization: `Bearer ${process.env.CK_ORG_TOKEN}` },
   body: JSON.stringify({
     query: `mutation($i: MintManagedPlayerTokenInput!) { mintManagedPlayerToken(input: $i) {
-      token gameTokenId appId expiresAt applicationApiUrl applicationApiWsUrl discoveryUrl launchUrl } }`,
+      token gameTokenId userId appId expiresAt applicationApiUrl applicationApiWsUrl discoveryUrl launchUrl } }`,
     variables: {
       i: {
         appId,
@@ -329,7 +335,11 @@ Each assertion works once; a refusal reads with `assertionRejectedOf(err)?.reaso
 launch) / `update` (rename, disable, enable) / `endSessions` / `delete`, `settings` (the
 operator-set limits and the addendum), `signingKeys` / `registerSigningKey` / `revokeSigningKey`, and
 `appModsEnabled` / `setAppMods` (`manage_billing`). From your server, an org token with
-`players:manage` also works for the six player operations. `organizations.revokeToken(id, { endSessions: true })`
+`players:manage` also works for the player operations.
+`deleteMany(orgId, externalIds)` (18.41.0, Application API v2.90.0) deletes 1 to 100 players
+in one call, with the authorization `delete` takes. Its answer counts `deleted`, `notFound`,
+and `held`, and lists each external id with its outcome: `DELETED`, `NOT_FOUND`, or
+`LEGAL_HOLD`. A held player is kept and does not fail the call, so read the outcomes. `organizations.revokeToken(id, { endSessions: true })`
 also ends the sessions a token signed in.
 
 ### Token refresh during gameplay
@@ -457,13 +467,13 @@ is refused `FORBIDDEN`.
 | `client.teleport` | Teleport requests. |
 | `client.inputLog` | The input log (18.6.0): `sessions(appId)` and `messages(appId, gameTokenId)` read the client inputs recorded for an app with replay logging on (`apps.update(appId, { replayLoggingEnabled: true })`). A player reads their own; `manage_apps` reads every session. Keep paging while `hasNextPage` is true. |
 | `client.channels`, `client.teams` | Messaging channels and app-scoped player teams (membership + roles). |
-| `client.exec` | **ck-exec:** an app's server code as hubs and spokes. `connect(appId, { nodeType, key })` opens a player's connection to an execution host; the `ExecConnection` it returns has `call`, `callRaw`, `subscribe`, `ping`, `onReconnect` and `close`, with MessagePack payloads, and it reconnects and renews subscriptions by itself. `starters` / `build` / `deploy` build and deploy an app (`manage_compute`); `logs`, `instances`, `versions`, `activateVersion`, `setEnabled`, `restartType` and `status` operate it; `mod*` are players' mods on grids they own, and `modClient*`, `gridClientMods`, `consentClientMod`, `trustAuthor`, `revokeClientModConsent` and `revokeAuthorTrust` their CLIENT halves. See [ck-exec](#ck-exec). |
+| `client.exec` | **ck-exec:** an app's server code as hubs and spokes. `connect(appId, { nodeType, key })` opens a player's connection to an execution host; the `ExecConnection` it returns has `call`, `callRaw`, `subscribe`, `ping`, `onReconnect` and `close`, with MessagePack payloads, and it reconnects and renews subscriptions by itself. `starters` / `build` / `deploy` build and deploy an app (`manage_compute`); `logs`, `instances`, `versions`, `activateVersion`, `setEnabled`, `restartType` and `status` operate it, and `orgComputeCeiling(orgId)` reads what each of the organization's apps may run; `mod*` are players' mods on grids they own, and `modClient*`, `gridClientMods`, `consentClientMod`, `trustAuthor`, `revokeClientModConsent` and `revokeAuthorTrust` their CLIENT halves. See [ck-exec](#ck-exec). |
 | `client.playerWallet` | Player spend: balance, ledger, hourly charges, spend caps, card setup, auto-recharge. A ck-exec mod's compute is billed here, to its owner. |
 | `client.marketplace` | Player-authorized grid claims (`claimGridOwnership`, `claimGridChunk`, `releaseClaimedGrid`, requests and invites) and studio moderation of player code (admission queue, listing administration, claim policy). Mods publish and install through `client.exec`. |
 | `client.crowdyStudio` | Cloud project, personal-library, and common-file APIs for Crowdy Studio: target-scoped files, metadata/module names, optimistic revisions, copy-by-value imports, atomic saves. |
 | `client.crowdyStudioGitHub` | Optional GitHub repository for a Crowdy Studio project: status, `bind` (push the project in, or take the repository), `unbind`, `refresh`, `layout` (with `kind`: a mod or a Construct game), `tree`, `getFile`, batched `getFiles`, commit-guarded `putFile` / `deleteFile`, and `commitFiles` (many changes as one commit). While bound the repository is the working tree and every Studio save commits; the project's `files` are the server's mirror at `github.sha`. Never required. |
 | `client.udp` | UDP proxy subscriptions + spatial mutations (`sendActorUpdate`, `sendVoxelUpdate`, `sendAudioPacket`, `sendVideoPacket` / `sendVideoFrame`, `sendTextPacket`, `sendClientEvent`, `sendSingleActorMessage`, `sendChannelMessage`, `sendRangedChannelMessage`). |
-| `client.realtime` | Connection status, manual `connect()` / `disconnect()`, `onStatus()` listener. |
+| `client.realtime` | Connection status, manual `connect()` / `disconnect()`, `onStatus()` listener, and `receiveStats()`: what the client received and dropped. |
 | `client.refreshGameplayToken()` | Safely rotates an active game client's app token (see [Token refresh](#token-refresh-during-gameplay)). |
 | `client.world(appId)` | Higher-level helpers for browser games (`actor.join`, `actor.sendState`, `actor.sendText`, `actor.sendToActor`). |
 | `client.kit(appId)` | Game Kit: typed clients for the ck-exec starter hubs (world, matchmaking, sessions, NPCs and pets) on one shared connection, their topology, realtime conventions, and parties, guilds and chat (`kit.social`) — see [Game Kit](#game-kit). |
@@ -643,6 +653,68 @@ await client.udp.sendGenericSpatial({
 Off the relay `sendGenericSpatial` throws `CrowdyRealtimeError` (`BINARY_RELAY_UNAVAILABLE`,
 `retryable: false`) and sends nothing; a payload over `GENERIC_SPATIAL_MAX_PAYLOAD_BYTES`
 throws `RangeError`.
+
+### The client checks what it receives before a handler runs
+
+From 18.41.0 a player's realtime client makes the checks a
+[fleet session](#game-servers-fleet-sessions) makes. What it can check depends on the
+transport.
+
+**On the binary relay** (`realtime: { binaryTransport: true }`) the client receives each
+datagram as the realtime server sent it, so it verifies the datagram's HMAC with the player's
+app token before a handler runs. No option turns the check off. In this table a *spatial
+notification* is any notification except a channel message, channel audio, and a refused
+send.
+
+| What arrives | What the client does | Counter |
+| --- | --- | --- |
+| A signed bundle whose HMAC fails | Drops the whole bundle | `hmacFailures` |
+| A spatial notification whose own HMAC fails | Drops it | `hmacFailures` |
+| A spatial notification with no signature, outside a signed bundle | Drops it. The realtime servers sign every spatial notification they send. | `unsigned` |
+| A frame the client cannot read | Drops it | `malformed` |
+| A channel message or channel audio outside a signed bundle | Delivers it. These two have no field for a signature. | none |
+| A refused send | Delivers it to `genericError`, with `verified` | `errorsReceived`, `unverifiedErrorsReceived` |
+
+**On the GraphQL subscription** (the default transport) the client receives objects that the
+Application API read from those datagrams. No signature reaches the client, so on this
+transport the client trusts the Application API, over TLS.
+
+**On both transports** the client drops a notification that names another app than the one
+you subscribed for, and counts it (`wrongApp`). Such a notification settles no awaited send
+and reaches no handler. A channel message, a refused send, and a connection event name no
+app, and the client delivers them. The Application API applies the same rule to the GraphQL
+subscription before it sends.
+
+`genericError` receives a second argument, `verified`:
+
+```ts
+client.udp.subscribe(
+  {
+    genericError: (event, verified) => {
+      console.warn(event.sequenceNumber, event.errorCode, verified);
+    },
+  },
+  appId,
+);
+```
+
+- **`verified` is true** when the refusal arrived on the binary relay inside a bundle the
+  client verified.
+- **`verified` is false today on both transports.** The realtime servers send a player's
+  session each refusal alone, as 3 bytes with no room for a signature.
+- **A refusal changes one thing.** It rejects the awaited send whose sequence number it names.
+  The connection, the status, and the token stay as they were, whatever the code.
+- **Treat an unverified `TOKEN_EXPIRED` as a hint.** Refresh the app token through the
+  Application API and act on that answer.
+
+`client.realtime.receiveStats()` returns the seven counters: `hmacFailures`, `unsigned`,
+`malformed`, `wrongApp`, `errorsReceived`, `unauthorizedReceived`, and
+`unverifiedErrorsReceived`. Report a count above 0 in `wrongApp`, `unsigned`, or
+`hmacFailures` to Crowded Kingdoms. The SDK logs a warning at the first drop it counts in one
+of those three, and again each time that count doubles.
+
+The relay's check is asynchronous, so a notification reaches its handler after the check, in
+the order the datagrams arrived.
 
 ### Surviving the loss of an instance (direct connect)
 
@@ -1117,6 +1189,18 @@ exec.onReconnect((host) => console.log('moved to', host));
   `endpointStats(appId, { nodeType, sinceMinutes })`, calls per endpoint by outcome (`calls`,
   `appErrors`, `busy`, `denied`, `deadlineExceeded`, `otherErrors`) with latency over
   `timedCalls` (default the last 60 minutes, at most 7 days).
+- The organization's compute ceiling (18.41.0, Application API v2.88.0):
+  `orgComputeCeiling(orgId)` reads what each of the organization's apps may run in one
+  datacenter once the organization is funded. It needs `view_compute_diagnostics` on the
+  organization.
+
+  | Field | Meaning |
+  | --- | --- |
+  | `maxInstances` | Instances one app may have placed at once |
+  | `maxReservedMb` | Memory, in MB, one app's instances may reserve at once |
+  | `operatorSet`, `reason`, `updatedAt` | Whether a Crowded Kingdoms operator set the two numbers for this organization, why, and when |
+  | `defaultMaxInstances`, `defaultMaxReservedMb` | The platform's numbers for a funded organization |
+  | `funded` | Whether the organization is funded now. While it is false, its apps keep the free tier limits, which `status(appId)` reports. |
 
 Integers above 2^53 decode as `number` and lose precision unless you pass
 `{ decode: { useBigInt64: true } }`. A call's whole numbers outside 32 bits (a timestamp in
@@ -1280,8 +1364,8 @@ Workers runtime and Vercel's Edge Runtime).
   after it was opened or last refreshed.
 - **Limits.** An organization holds at most 512 fleet sessions at once, and a session
   carries at most 256 players, unless an operator set other numbers for the organization.
-  The answer's `maxPlayers` is the session's own number. Open one session for each game
-  server.
+  `managedPlayers.settings(orgId)` reports the organization's numbers (18.41.0), and the
+  answer's `maxPlayers` is the session's own number. Open one session for each game server.
 - **The fleet token is a signing key.** The Application API does not accept it as a bearer.
 
 `FleetSession` makes no Application API call. A server that calls the API with its own HTTP
@@ -1398,6 +1482,49 @@ until you call `fleet.forgetActor(player, uuid)` or the carry ends. A heartbeat 
 gameplay input, and neither is voice or video. A carried player who sends no gameplay input
 for the app's idle timeout is released with reason 5, and the session stays.
 
+### A refused keepalive is reported once
+
+Realtime servers from v0.51.0 accept a keepalive only where the player's actor update would
+be accepted. v0.51.0 has been on the dev tier since November 27, 2026; test and production
+follow.
+Where a carried player has no access, the server answers every keepalive for the player's
+actor `UNAUTHORIZED`, inside the session's signed bundle. The actor is not present there,
+other players are not told of it, and the session is sent nothing of the place. The session
+stays connected and still carries the player.
+
+From 18.41.0 the session makes one report for the player, the actor, and the place, an
+`ActorNotPresent` (`uuid`, `chunk`, `sequence`, `verified`, `playerGameTokenId`):
+
+| | When | What you get |
+| --- | --- | --- |
+| `notPresent(report)` | Once, at the first refused keepalive | The report. `fleet.notPresent(player, uuid)` returns it while it stands |
+| `notPresentEnded(report, 'accepted')` | A keepalive there had no refusal for 3 seconds | The actor is present |
+| `notPresentEnded(report, 'moved')` | The actor's next keepalive or update named another chunk | Nothing is known of the new place yet |
+| `notPresentEnded(report, 'stopped')` | No keepalive left for the actor there for 30 seconds, you called `forgetActor`, or the session no longer holds the player | The report is over |
+
+- **`genericError` still receives every refusal.** Its third argument, `keepalive`, is true
+  for one that answers a keepalive, so a handler that reads every refusal can tell the
+  repeats. `fleet.stats()` counts them in `keepalivesRefused` and the reports in
+  `notPresentReports`.
+- **The session keeps the keepalives at the same rate:** one every 2 seconds for each actor,
+  never faster, and it does not stop. Once access is granted, the next keepalive is accepted
+  within about 6 seconds, with no new sign-in.
+- **Nothing else changes.** The session's status, its server, and the carry stay as they
+  were, and the session carries nobody again because of a refused keepalive.
+- **A report needs a verified refusal** whose sequence number only that keepalive used in
+  the last 3 seconds. The sequence number is one byte shared by everything the session
+  sends, so a session that sends more than about 85 messages a second makes no report, and
+  `keepalivesRefused` still counts.
+- **Access that is removed** takes effect at the player's next token refresh, at most 30
+  minutes later, as it does for updates.
+- **Unchanged:** apps where every region is open, paused apps, an idle player's first
+  keepalive after a move or a reconnect, and the session's own keepalive. The server does
+  not count a refused keepalive as gameplay input or as data in.
+
+A player's own client (`client.udp`, World Stores, the Game Kit) sends no keepalive message.
+It keeps an actor present with actor updates, which the realtime servers judge as before,
+so v0.51.0 changes nothing for it.
+
 ### State arrives once, and a delivery names its players
 
 Each handler receives the notification and the players it is for.
@@ -1430,9 +1557,11 @@ which the next section covers. The largest datagram a fleet session is sent is 1
 
 ### A refused send is signed, and the handler says so
 
-The `genericError` handler receives a refused send and a second argument, `verified`. A
-refusal is 3 bytes: the message type, the sequence number of the send, and a code. It names
-no player, so match its sequence number against the numbers your sends resolved with.
+The `genericError` handler receives a refused send and two more arguments: `verified`, and
+`keepalive` (true when the refusal answers a keepalive; see
+[A refused keepalive is reported once](#a-refused-keepalive-is-reported-once)). A refusal is
+3 bytes: the message type, the sequence number of the send, and a code. It names no player,
+so match its sequence number against the numbers your sends resolved with.
 
 - **`verified` is true for a refusal that arrived inside a bundle the session verified with
   the fleet token.** Realtime servers from v0.50.3 send a fleet session every refusal that
@@ -1485,7 +1614,10 @@ makes a refresh due.
 
 - **`refreshInput()` names the server the session is on**, so the session stays there
   while that server still serves the app. After a move order it names no server, and the
-  answer's `server` is the next one.
+  answer's `server` is the next one. `currentServer` holds one address and the port: the
+  server's `ip4`, or its `ip6` when it has no `ip4` (18.41.0; naming an `ip6` needs
+  Application API v2.90.0). `fleetSessions.refresh` sends one address when you pass a
+  session answer's whole `server`.
 - **The same server:** the carries stand. The session sends its capabilities at once,
   because after a refresh the server sends the session nothing until it hears from it.
 - **Another server**, or the same one after it released the session or went quiet: the
@@ -1812,6 +1944,9 @@ before entering the world. For org-managed players: `assertionRejectedOf(err)`
 For an organization's game servers: `orgTokenRequiredOf(err)` (`ORG_TOKEN_REQUIRED`),
 `fleetSessionLimitOf(err)` (`FLEET_SESSION_LIMIT`), `fleetSessionNotFoundOf(err)` (`NOT_FOUND`
 on a fleet session's refresh), and `platformBusyOf(err)` (`PLATFORM_BUSY`, with `retryAfterMs`).
+The platform's `retryAfterMs` runs from 200 ms to 10 seconds. `retryWaitMs(retryAfterMs)`
+(18.41.0) is the wait to make on it: 0 for a hint of 0 or below, and 30 seconds
+(`MAX_RETRY_AFTER_WAIT_MS`) at most. The SDK's own waits on a server's hint go through it.
 
 The player gate and player safety (18.24.0): `legalAcceptanceRequiredOf(err)`
 (`LEGAL_ACCEPTANCE_REQUIRED`, with the `missingDocuments`), `ageRequiredOf(err)` (`AGE_REQUIRED`),

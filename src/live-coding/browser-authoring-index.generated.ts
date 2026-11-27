@@ -4,7 +4,7 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
   "rustVersion": "1.97.1",
   "sdkVersion": "0.1.0",
   "abiVersion": 0,
-  "contentHash": "3664277698c5c9e5fded80eecb14d32f5fa605991e9d72c8fb4f6990a20156ae",
+  "contentHash": "9419f4c53e57c56a42440c0a3ff97a397bfc63729d2fce405047bb1fd5725163",
   "crates": [
     {
       "name": "alloc",
@@ -13,8 +13,8 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "name": "ckx-sdk",
-      "version": "0.14.0",
-      "sourceHash": "e5a2ac34a7ea75dd4bbc37310767fcbec007739f1551697cb2469435cb6f2590"
+      "version": "0.15.0",
+      "sourceHash": "277ba1afd18dbc39203263adfcaf542b2e4197d50fc60423690c26c685a07b2e"
     },
     {
       "name": "core",
@@ -100,6 +100,13 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "ckx_sdk",
+      "name": "Call::org",
+      "kind": "method",
+      "signature": "pub fn org(&self) -> Result<Option<u64>>",
+      "docs": "The organization's own game server calling, with the player it says it acts for (`None`: itself), or an error when the caller is not one: the guard for an endpoint only the organization's servers should reach."
+    },
+    {
+      "module": "ckx_sdk",
       "name": "Call::payload",
       "kind": "field",
       "signature": "pub payload: &'a [u8]",
@@ -110,7 +117,14 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "name": "Call::player",
       "kind": "method",
       "signature": "pub fn player(&self) -> Result<u64>",
-      "docs": "The calling player, or an error when the caller is not a player."
+      "docs": "The calling player, or an error when the caller is not a player. The player's own session, which the platform saw: an organization's server naming a player ([`Caller::Org`]) is refused here; [`Call::player_or_org`] takes its word."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Call::player_or_org",
+      "kind": "method",
+      "signature": "pub fn player_or_org(&self) -> Result<u64>",
+      "docs": "The player the call is for: the calling player, or the one the organization's own game server says it acts for. An error for anyone else, the server calling for itself included. The first is the platform's word and the second the organization's: see [`Caller::Org`]."
     },
     {
       "module": "ckx_sdk",
@@ -144,7 +158,7 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "module": "ckx_sdk",
       "name": "Caller",
       "kind": "enum",
-      "signature": "pub enum Caller { Platform, Instance(u64), Player(u64), /// A developer of the app (the org's `manage_compute`), by user id, connected with /// `execConnectAsDeveloper`: studio tools, manual runs and admin endpoints. It may call any /// type, not only `client` ones, so check for it in handlers only developers should reach. Developer(u64), }",
+      "signature": "pub enum Caller { Platform, Instance(u64), Player(u64), /// A developer of the app (the org's `manage_compute`), by user id, connected with /// `execConnectAsDeveloper`: studio tools, manual runs and admin endpoints. It may call any /// type, not only `client` ones, so check for it in handlers only developers should reach. Developer(u64), /// The app's organization's own game server, connected with `execConnectAsServer`. It may /// call any type, not only `client` ones. `player` is who the server says the call is for; /// `None` is the server itself. /// /// The platform checked that the connection is the organization's. It did **not** check the /// player: `Org { player: Some(p) }` is \"this organization's server says player `p`\", and /// [`Caller::Player`]`(p)` is \"the platform saw `p`'s own session\". The organization vouches /// for who its players are, so a hub that trusts its organization's servers may take either /// as `p` ([`Call::player_or_org`]); one that must hear from the player's own device takes /// only [`Caller::Player`] ([`Call::player`]). The player may be any id at all: the /// platform does not check that the organization manages them, or that they exist. Org { player: Option<u64>, }, }",
       "docs": "Who is calling. The platform sets this; a handler can trust it for authorization."
     },
     {
@@ -163,6 +177,13 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
     },
     {
       "module": "ckx_sdk",
+      "name": "Caller::Org",
+      "kind": "variant",
+      "signature": "Org { player: Option<u64>, }",
+      "docs": "The app's organization's own game server, connected with `execConnectAsServer`. It may call any type, not only `client` ones. `player` is who the server says the call is for; `None` is the server itself. The platform checked that the connection is the organization's. It did **not** check the player: `Org { player: Some(p) }` is \"this organization's server says player `p`\", and [`Caller::Player`]`(p)` is \"the platform saw `p`'s own session\". The organization vouches for who its players are, so a hub that trusts its organization's servers may take either as `p` ([`Call::player_or_org`]); one that must hear from the player's own device takes only [`Caller::Player`] ([`Call::player`]). The player may be any id at all: the platform does not check that the organization manages them, or that they exist."
+    },
+    {
+      "module": "ckx_sdk",
       "name": "Caller::Platform",
       "kind": "variant",
       "signature": "Platform",
@@ -174,6 +195,27 @@ export const GENERATED_BROWSER_AUTHORING_INDEX: unknown = {
       "kind": "variant",
       "signature": "Player(u64)",
       "docs": ""
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Caller::is_org",
+      "kind": "method",
+      "signature": "pub fn is_org(&self) -> bool",
+      "docs": "Whether the caller is the organization's own game server, acting for a player or not."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Caller::player_or_org",
+      "kind": "method",
+      "signature": "pub fn player_or_org(&self) -> Option<u64>",
+      "docs": "The player the call is for, on the platform's word ([`Caller::Player`]) or on the organization's ([`Caller::Org`] naming one)."
+    },
+    {
+      "module": "ckx_sdk",
+      "name": "Caller::verified_player",
+      "kind": "method",
+      "signature": "pub fn verified_player(&self) -> Option<u64>",
+      "docs": "The player whose own session the platform saw making this call: `Some` for [`Caller::Player`] alone, never for what an organization's server says."
     },
     {
       "module": "ckx_sdk",
