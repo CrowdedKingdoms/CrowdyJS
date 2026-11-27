@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.40.1** (18.0.0 was published only as
+**Current package:** `package.json` is **18.41.0** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -30,8 +30,10 @@ directly. So, before adding a wrapper:
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
 
-**Unreleased, toward 18.41.0 (2026-11-27, branch `feat/18.41-player-connection-checks`; no
-version bump and no schema sync yet).** Four things, and what the release pass still owes.
+**18.41.0: a player's client checks what it receives; Application API v2.90.0; a refused
+keepalive (2026-11-27, #367 and the release pass on `release/18.41.0`).** It needs Application
+API v2.90.0 (every app-token answer selects `userId`), and realtime servers v0.51.0 for the
+not-present reports. First what #367 built, then what the release pass added.
 
 - **A player's own realtime client checks what it receives (OI-2026-11-26-005).** CrowdyJS
   receives a player's notifications by two paths, and there is no Node UDP path for a player
@@ -83,9 +85,8 @@ version bump and no schema sync yet).** Four things, and what the release pass s
     older tests changed: `channel-audio.test.mjs` awaits `settled()` (delivery is
     asynchronous now), and `generic-spatial.test.mjs` sent a bare 140 with no HMAC, which is
     the one case that is now dropped, so it sends it as the signed bundle member it is.
-    **Not run live:** the relay suites (`two-client-generic-spatial`,
-    `ranged-channel-message`, `idle-release`, `managed-players-communication`) must pass on
-    dev before the tag.
+    **Live:** the relay suites passed on dev from #367's branch before it merged (15 of
+    15, run by the operator).
 - **The embedded authoring index is ckx-sdk 0.15.0's, and a test fails a stale one
   (OI-2026-11-26-010 item 6).** `test/unit/authoring-index-fresh.test.mjs`: every Rust path
   `schema.gql` names (`Caller::Org`, `Hub::on_world`, `Caller::Developer`) is a symbol of the
@@ -110,17 +111,75 @@ version bump and no schema sync yet).** Four things, and what the release pass s
   build ids, revision ids; a numeric argument that sits beside no token (`voxel.x`,
   `frameId`, `maxDistance`); the server's own text (`CrowdyHttpError`'s body, a gateway's
   close reason, a build log); `portal.ts`'s endpoint (a configured origin, and a code
-  owner's file). **Seen and not changed:** `dialOnce` keeps the WebSocket's error event as
-  the `cause` of "connecting to … failed", and that event's target is the socket whose URL
-  ends in the connect token. Tests: `test/unit/error-messages-no-values.test.mjs`.
-- **The release pass owes:** the version; the schema sync and codegen from Application API
-  v2.90.0 with its new fields (`userId` on the app-token answers, a bulk delete of managed
-  players, an IPv6 `currentServer`); the README's "unreleased (18.41.0)" row and
-  MIGRATION.md's "Unreleased (18.41.0)" heading turned into the version;
-  `CROWDY_AUTHORING_INDEX_SOURCE` set for one run of the unit suite; the live relay suites on
-  dev. CrowdyCPP is making the same checks on its `Connection` in parallel (its counters
-  today: `wrongApp`, `unsignedNotifications`, `hmacFailures`, `malformed`); keep the cases the
-  same when either side changes.
+  owner's file). **`dialOnce`'s cause** was the WebSocket's error event, whose target is the
+  socket whose URL ends in the connect token: the release pass made it an `Error` with the
+  event's text and the token taken out (`socketFailureText`). **A message or a cause the SDK
+  builds never carries a token or a URL that holds one.** Tests:
+  `test/unit/error-messages-no-values.test.mjs`. CrowdyCPP 0.95 makes the same checks on its
+  `Connection` (its `unsigned` is `unsignedNotifications`); keep the cases the same when
+  either side changes.
+
+**The release pass (2026-11-27).** `schema.gql` is cks-game-api `dev`'s at 3aabc3d1
+(`dev/v2.90.0`), by `schema:sync:local`. What it wraps of v2.90.0, and the rest:
+
+- **`userId` on every app-token answer** (`AppTokenResponse.userId`, `APP_TOKEN_FIELDS` in
+  `src/domains/portal.ts`, a code owner's file: the PR carries the security review). One
+  field list serves `mintAppToken`, `exchangePortalCode`, `refreshAppToken` (both forms),
+  `exchangeManagedPlayerAssertion` and `signInWithMinecraft`. **The floor rises, the
+  repository's way:** a release selects what the Application API it was built against has
+  and needs that API or newer (the README's compatibility table), so these calls need
+  v2.90.0 where they needed v2.85.0. Nothing selects the field conditionally: a GraphQL
+  document cannot, and a retry without it would double every sign-in against an old API.
+- **`managedPlayers.deleteMany(orgId, externalIds)`** wraps `deleteManagedPlayers`: 1 to 100
+  ids (`MANAGED_PLAYERS_DELETE_MAX`, refused locally with a count and no id), each answered
+  `DELETED`, `NOT_FOUND` or `LEGAL_HOLD`. It sits where `delete` sits and takes what `delete`
+  takes: an org admin's session or an org token, so it has no `assertOrganizationServer`
+  (Studio calls the single delete from a page).
+- **`refreshFleetSession`'s `currentServer`** is `FleetCurrentServerInput` (`ip4` or `ip6`,
+  exactly one). `fleetCurrentServer(server)` picks `ip4` when there is one, as
+  `fleetServerAddress` picks what the session dials; `fleetSessions.refresh` passes every
+  `currentServer` through it, and `FleetSession.refreshInput()` names the address it
+  connected to. An `ip6` needs v2.90.0; an `ip4` is what v2.89.0 took.
+- **`retryWaitMs` / `MAX_RETRY_AFTER_WAIT_MS` (30 s, CrowdyCPP's `kMaxRetryAfterWaitMs`).**
+  The platform's `retryAfterMs` now comes from its queue (200 ms to 10 s). Every wait the SDK
+  makes on a server's hint goes through it: `droppedReadWaitMs` (`src/dropped-read.ts`: the
+  Studio controller's two waits and `exec.waitForModBuild`) and the kit runtime's
+  `budget.hold`; `CrowdyExecError.retryAfterMs` is bounded too. `retryAfterMsOf` and
+  `platformBusyOf` return what the server sent. A new wait on a server's number goes through
+  `retryWaitMs`.
+- **A refused keepalive (realtime servers v0.51.0).** From v0.51.0 a keepalive (26) is
+  accepted only where the player's actor update would be; elsewhere each is answered
+  `[3][seq][7]`, unsigned to a player's session and inside a fleet session's signed bundle.
+  - **A player's client sends no keepalive at all:** `client.udp` has no heartbeat send, and
+    World Stores (`keyframeEveryMs`) and the kit's `SpectatorHeartbeat` keep an actor present
+    with actor updates, at a fixed rate whatever the server answers. `host.heartbeat` is a
+    GraphQL presence call. So nothing applies on the relay or the GraphQL path, and
+    `UdpNotificationHandlers` has no `notPresent`. If a keepalive send is ever added to
+    `client.udp`, give it CrowdyCPP `Connection`'s reports.
+  - **`FleetSession`** sends them (`heartbeatActors` every `actorHeartbeatMs`, and
+    `sendHeartbeat`). It already kept its rate and changed no state on a refusal; it handed
+    `genericError` one refusal every 2 seconds for each actor. Now `sentUnder[256]` holds the
+    last message sent under each sequence number (cleared in `open()`: a new connection),
+    `dispatchError` passes `keepalive` as `genericError`'s third argument, and a **verified**
+    `UNAUTHORIZED` for a carried player's keepalive makes one `ActorNotPresent`
+    (`handlers.notPresent`, `fleet.notPresent(player, uuid)`), which ends once
+    (`notPresentEnded`): `accepted` (`KEEPALIVE_ANSWER_WAIT_MS`, 3 s, with no refusal),
+    `moved` (the next keepalive or update names another chunk), `stopped`
+    (`NOT_PRESENT_IDLE_MS`, 30 s, without a keepalive; `forgetActor`; the row gone). The
+    first report needs a sequence number only that keepalive used in the last 3 seconds, so
+    a session above about 85 messages a second makes none (`keepalivesRefused` still
+    counts). Names and rules are CrowdyCPP 0.95's (`notPresent`, `notPresentEnded`,
+    `ActorNotPresent`, `keepalivesRefused`, `notPresentReports`); its `NotPresentEnd` enum is
+    a string union here, and its `GenericError::keepalive` is the handler's third argument.
+    Tests: `test/unit/fleet-not-present.test.mjs`.
+- **The gates the release ran:** the unit suite once with
+  `CROWDY_AUTHORING_INDEX_SOURCE=../cks-game-api/compute-toolchain/browser-authoring-index.json`
+  (no drift at 3aabc3d1; the host catalog neither). Before #367 merged, the operator ran the
+  live relay suites on dev from its branch (15 of 15) and the live fleet suite with the hub
+  step against realtime servers v0.51.0 (16 pass, 1 skipped).
+- **To publish:** merge the release PR into `dev`, tag the merge commit `dev/v18.41.0`
+  (`18.41.0-dev.1` on `@dev`) once Application API v2.90.0 is on the dev tier; test and prod
+  follow their Application API with `promote.mjs` and their own tags.
 
 **18.40.1: an id that is not a number is described in the error and never shown (2026-11-27).**
 `idString` (`src/fleet/session.ts`) and `int64` (`src/fleet-wire.ts`) ended their `RangeError`
@@ -158,7 +217,7 @@ servers v0.50.3). Four parts:
   `platformBusyOf` (`retryAfterMsOf` moved from `dropped-read.ts` to `errors.ts`, one reader).
   **18.40.0's `OrgManagedPlayerSettings.graphql` did not select `fleetSessionsEnabled` /
   `maxFleetSessions` / `maxFleetPlayers`,** to keep every existing call at 18.39.0's v2.85.0.
-  The next release selects them (see "Unreleased, toward 18.41.0"), so
+  18.41.0 selects them, so
   `managedPlayers.settings` needs v2.89.0 there.
 - **The hub server role** (`src/domains/exec.ts`): `ExecConnection.callAs` / `callAsRaw` (client
   frame `0x05`, `rid:u32 player:u64 …`), `openAsServer`, `isServer`; refused locally `Denied` on any
