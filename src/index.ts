@@ -80,6 +80,7 @@ export {
   IDLE_TIMEOUT_CODE,
   RealtimeClient,
   type RealtimeConfig,
+  type RealtimeReceiveStats,
   type RealtimeStatus,
   type SpatialNotification,
   type UdpNotification,
@@ -91,6 +92,7 @@ export {
   RELAY_SUBPROTOCOL,
   type BinaryRelayCallbacks,
   type BinaryRelayConfig,
+  type BinaryRelayDropped,
   type BinaryRelaySendStats,
 } from './binary-relay.js';
 export {
@@ -123,11 +125,14 @@ export {
   serializeClientCapabilities,
   serializeClientMediaSpeakers,
   parseNotification,
+  parsePlayerDatagram,
   ClientCapability,
   CONTROL_NONCE_BYTES,
   SpeakerListMode,
   MAX_MEDIA_SPEAKERS,
   type ChannelSendInput,
+  type PlayerDatagram,
+  type PlayerInbound,
   type RelaySignContext,
   type SpeakerListChange,
 } from './binary-wire.js';
