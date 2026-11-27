@@ -160,6 +160,9 @@ test('RealtimeClient hands a relayed 36 to channelAudio and any, and counts it',
     await settle();
     const frame = channelAudioNotification(Uint8Array.from([1, 2]));
     ws.onmessage?.({ data: frame.buffer.slice(frame.byteOffset, frame.byteOffset + frame.byteLength) });
+    // 18.41.0: the relay reads every datagram through the verifying reader, which is
+    // asynchronous. A channel notification alone carries no signature and is still delivered.
+    await realtime.settled();
     assert.equal(seen.audio.length, 1);
     assert.equal(seen.audio[0].audioData, 'AQI=');
     assert.equal(seen.audio[0].channelId, '9');

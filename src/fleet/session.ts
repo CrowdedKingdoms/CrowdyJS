@@ -174,6 +174,60 @@ export type FleetPlayers = readonly string[] | null;
 type Notified<K extends keyof UdpNotificationHandlers> = Parameters<NonNullable<UdpNotificationHandlers[K]>>[0];
 
 /**
+ * How long a keepalive's refusal may take to arrive, in milliseconds. A keepalive that has had
+ * no refusal for this long was accepted: the realtime servers answer an accepted keepalive
+ * with nothing and a refused one at once. It is longer than the 2 seconds between two
+ * keepalives, so one lost refusal does not read as acceptance.
+ */
+export const KEEPALIVE_ANSWER_WAIT_MS = 3_000;
+
+/**
+ * A not-present report ends by itself when no keepalive was sent for the actor there for this
+ * long, in milliseconds: whoever sent them stopped keeping the actor present.
+ */
+export const NOT_PRESENT_IDLE_MS = 30_000;
+
+/** The most not-present reports a session holds at once; past it a refusal is only counted. */
+const MAX_NOT_PRESENT_REPORTS = 4_096;
+
+/**
+ * A carried player's keepalive was answered `UNAUTHORIZED`: the player's actor is not present
+ * at `chunk` (realtime servers v0.51.0). From v0.51.0 a keepalive is accepted only where the
+ * player's actor update would be, so where the player has no access every keepalive is
+ * refused: other players there are not told of the actor, and the session is sent nothing of
+ * the place. The session stays connected and still carries the player. Keep sending
+ * keepalives at the same rate: never faster, and never stop. Once access is granted the next
+ * keepalive is accepted within about 6 seconds, with no new sign-in.
+ *
+ * One report stands for a player's actor. It is made once, at the first refused keepalive
+ * (`notPresent`), stays readable (`FleetSession.notPresent`), and ends once
+ * (`notPresentEnded`).
+ */
+export interface ActorNotPresent {
+  /** The actor. */
+  uuid: string;
+  /** The place: the chunk the refused keepalive named. */
+  chunk: { x: string; y: string; z: string };
+  /** The sequence number of the first refused keepalive. */
+  sequence: number;
+  /** Whether that refusal was verified. A fleet session reports only refusals that were. */
+  verified: boolean;
+  /** The carried player whose keepalive it was: the game token id the keepalive was sent for. */
+  playerGameTokenId: string;
+}
+
+/**
+ * Why a not-present report ended.
+ * - `accepted`: a keepalive for the actor there went {@link KEEPALIVE_ANSWER_WAIT_MS} without
+ *   a refusal, so the actor is present.
+ * - `moved`: the actor's next keepalive or update named another chunk. Nothing is known of
+ *   the new place yet: a refused keepalive there makes a new report.
+ * - `stopped`: no keepalive was sent for the actor there for {@link NOT_PRESENT_IDLE_MS}, the
+ *   session was told to forget the actor, or the session no longer holds the player.
+ */
+export type NotPresentEnd = 'accepted' | 'moved' | 'stopped';
+
+/**
  * A fleet session's callbacks: the realtime client's notification handlers, each with the
  * players the notification is for ({@link FleetPlayers}), and the session's own events. Every
  * handler is optional. A handler that throws is reported to {@link error} and stops nothing.
@@ -212,8 +266,28 @@ export interface FleetHandlers {
    * check the player's access through the Application API, and act on that answer. The
    * session itself changes no state on a refusal, whatever its code: the signed word that
    * the session's own token ended is `sessionReleased`.
+   *
+   * `keepalive` is true when the refusal answers a keepalive: the last message the session
+   * sent under that sequence number was one, within {@link KEEPALIVE_ANSWER_WAIT_MS}.
+   * `UNAUTHORIZED` for a carried player's keepalive means the player's actor is not present
+   * where the keepalive named, and the realtime servers answer every keepalive there the same
+   * way, every few seconds. The session reports that once, through {@link notPresent}; a
+   * handler that reads every refusal can tell the repeats by this.
    */
-  genericError?(notification: Notified<'genericError'>, verified: boolean): void;
+  genericError?(notification: Notified<'genericError'>, verified: boolean, keepalive: boolean): void;
+  /**
+   * A carried player's keepalive was refused `UNAUTHORIZED`, in a frame that verified: that
+   * player's actor is not present where the keepalive named ({@link ActorNotPresent}; realtime
+   * servers v0.51.0). This is what a player with no access at a place looks like. Called once
+   * for the player, the actor and the place, after `genericError` for the same frame; the
+   * refusals that follow every few seconds reach `genericError` only. The session carries the
+   * player as before and keeps sending the keepalives at the same rate. The first report
+   * needs a refusal whose sequence number only that keepalive can have used in the last 3
+   * seconds; once it stands, any refusal of the player's keepalive there keeps it standing.
+   */
+  notPresent?(report: ActorNotPresent): void;
+  /** That report ended ({@link NotPresentEnd}). Once for each report. */
+  notPresentEnded?(report: ActorNotPresent, end: NotPresentEnd): void;
   /**
    * Every carry the server answered or that timed out, including the carries made again
    * after the session moved. A carry ended here before it was sent (`'tableFull'`,
@@ -365,6 +439,13 @@ export interface FleetSessionStats {
   unverifiedErrorsReceived: number;
   /** Carries refused here because the table was full (`'tableFull'`). */
   carriesRefusedTableFull: number;
+  /**
+   * Keepalives answered `UNAUTHORIZED` (realtime servers v0.51.0): every one, the first of a
+   * report and the repeats alike.
+   */
+  keepalivesRefused: number;
+  /** Not-present reports made ({@link FleetHandlers.notPresent}). */
+  notPresentReports: number;
 }
 
 /**
@@ -422,6 +503,26 @@ interface Actor {
   lastSentAt: number;
 }
 
+/** What the session last sent under one sequence number. */
+interface SentUnder {
+  /** When it was sent. */
+  at: number;
+  /** When the message before it under the same number was sent, if any was. */
+  previousAt: number | null;
+  /** Set when the message was a keepalive that left. `row` is null for the session's own. */
+  keepalive: { row: Player | null; playerGameTokenId: string; uuid: string; chunk: { x: string; y: string; z: string } } | null;
+}
+
+/** A not-present report that stands. */
+interface Standing {
+  row: Player;
+  report: ActorNotPresent;
+  /** When a keepalive for the actor there last left. */
+  lastKeepaliveAt: number;
+  /** When the oldest keepalive there that no refusal has answered left; 0 when there is none. */
+  unansweredSince: number;
+}
+
 interface Player {
   /** The newest game token id the player was carried or asked for under: the table's key. */
   gameTokenId: string;
@@ -439,6 +540,8 @@ interface Player {
   /** The time the last `FLEET_CARRY` for this player carried: the next one is later. */
   lastCarryEpoch: number;
   actors: Map<string, Actor>;
+  /** The not-present reports that stand for this player's actors, by actor. */
+  notPresent: Map<string, Standing>;
   voice: readonly string[] | null | undefined;
   video: readonly string[] | null | undefined;
 }
@@ -600,6 +703,10 @@ export class FleetSession {
   private ticking = false;
   private inbound: Promise<void> = Promise.resolve();
   private connecting: Promise<void> | null = null;
+  /** The last message sent under each of the 256 sequence numbers, on this connection. */
+  private sentUnder: Array<SentUnder | null> = new Array<SentUnder | null>(256).fill(null);
+  /** Every not-present report that stands. */
+  private readonly standing = new Set<Standing>();
 
   private readonly counters: FleetSessionStats = {
     datagramsSent: 0,
@@ -621,6 +728,8 @@ export class FleetSession {
     unauthorizedReceived: 0,
     unverifiedErrorsReceived: 0,
     carriesRefusedTableFull: 0,
+    keepalivesRefused: 0,
+    notPresentReports: 0,
   };
 
   constructor(config: FleetSessionConfig) {
@@ -699,6 +808,16 @@ export class FleetSession {
     this.handlers = handlers;
   }
 
+  /**
+   * The not-present report that stands for one of a carried player's actors, or null: the
+   * player's keepalive for that actor was refused `UNAUTHORIZED` and nothing has ended the
+   * report since ({@link FleetHandlers.notPresent}).
+   */
+  notPresent(player: FleetId, uuid: string): ActorNotPresent | null {
+    const standing = this.rowOf(idString(player, 'the player gameTokenId'))?.notPresent.get(uuid);
+    return standing ? { ...standing.report, chunk: { ...standing.report.chunk } } : null;
+  }
+
   /** A copy of the session's counters. */
   stats(): FleetSessionStats {
     return { ...this.counters, sentByType: { ...this.counters.sentByType } };
@@ -745,6 +864,8 @@ export class FleetSession {
 
   private async open(server: FleetServer): Promise<void> {
     const generation = ++this.generation;
+    // What was sent to the server the session left gets no answer here.
+    this.sentUnder = new Array<SentUnder | null>(256).fill(null);
     this.ctx ??= await createFleetSignContext(this.grant.gameTokenId, this.grant.token);
     const nonce = new Uint8Array(CONTROL_NONCE_BYTES);
     crypto.getRandomValues(nonce);
@@ -831,14 +952,22 @@ export class FleetSession {
    * server still serves the app. After a move was ordered it names none, and the answer's
    * server is the next one.
    *
-   * `currentServer` is an IPv4 address and a port, which is all the Application API takes.
-   * Every realtime server has an IPv4 address. A session that was given none (it connected
-   * over `ip6`) sends no `currentServer`, so each refresh may answer another server.
+   * `currentServer` is the address the session connected to and the port: the server's `ip4`
+   * when it has one, its `ip6` otherwise (18.41.0; naming an `ip6` needs Application API
+   * v2.90.0, and until 18.41.0 a session that connected over `ip6` named no server).
    */
-  refreshInput(): { appId: string; gameTokenId: string; currentServer?: { ip4: string; clientPort: number } } {
+  refreshInput(): {
+    appId: string;
+    gameTokenId: string;
+    currentServer?: { ip4: string; clientPort: number } | { ip6: string; clientPort: number };
+  } {
     const input = { appId: this.appId, gameTokenId: this.gameTokenId };
-    if (this.moveWasOrdered || !this.server.ip4) return input;
-    return { ...input, currentServer: { ip4: this.server.ip4, clientPort: this.server.clientPort } };
+    if (this.moveWasOrdered) return input;
+    const { host, family, port } = fleetServerAddress(this.server);
+    return {
+      ...input,
+      currentServer: family === 4 ? { ip4: host, clientPort: port } : { ip6: host, clientPort: port },
+    };
   }
 
   /**
@@ -1004,6 +1133,7 @@ export class FleetSession {
         attempt: null,
         lastCarryEpoch: 0,
         actors: new Map(),
+        notPresent: new Map(),
         voice: undefined,
         video: undefined,
       };
@@ -1247,8 +1377,11 @@ export class FleetSession {
    * idle timeout.
    */
   async sendHeartbeat(player: FleetId, actor: { chunk: { x: string; y: string; z: string }; uuid: string }): Promise<number> {
-    const seq = await this.sendFor(player, (ctx, sequenceNumber) =>
-      serializeActorHeartbeat(ctx, { appId: this.appId, chunk: actor.chunk, uuid: actor.uuid, sequenceNumber }),
+    const seq = await this.sendFor(
+      player,
+      (ctx, sequenceNumber) =>
+        serializeActorHeartbeat(ctx, { appId: this.appId, chunk: actor.chunk, uuid: actor.uuid, sequenceNumber }),
+      { uuid: actor.uuid, chunk: actor.chunk },
     );
     this.touchActor(player, actor.uuid, actor.chunk);
     return seq;
@@ -1256,7 +1389,11 @@ export class FleetSession {
 
   /** Stop keeping one of the player's actors present. It leaves about 5 seconds later. */
   forgetActor(player: FleetId, uuid: string): void {
-    this.rowOf(idString(player, 'the player gameTokenId'))?.actors.delete(uuid);
+    const row = this.rowOf(idString(player, 'the player gameTokenId'));
+    if (!row) return;
+    row.actors.delete(uuid);
+    const standing = row.notPresent.get(uuid);
+    if (standing) this.endReport(standing, 'stopped');
   }
 
   /**
@@ -1311,7 +1448,11 @@ export class FleetSession {
   private touchActor(player: FleetId, uuid: string, chunk: { x: string; y: string; z: string }): void {
     const row = this.rowOf(idString(player, 'the player gameTokenId'));
     if (!row?.carried || !uuid) return;
-    row.actors.set(uuid, { chunk: { x: String(chunk.x), y: String(chunk.y), z: String(chunk.z) }, lastSentAt: this.now() });
+    const place = { x: String(chunk.x), y: String(chunk.y), z: String(chunk.z) };
+    row.actors.set(uuid, { chunk: place, lastSentAt: this.now() });
+    // An update or a keepalive that names another chunk: the report was about the place left.
+    const standing = row.notPresent.get(uuid);
+    if (standing && !sameChunk(standing.report.chunk, place)) this.endReport(standing, 'moved');
   }
 
   // ----- The wire ---------------------------------------------------------------------------
@@ -1319,6 +1460,8 @@ export class FleetSession {
   private sequence(): number {
     const seq = this.nextSequence;
     this.nextSequence = (this.nextSequence + 1) & 0xff;
+    // Whatever was sent under this number before, a refusal with it now answers this message.
+    this.sentUnder[seq] = { at: this.now(), previousAt: this.sentUnder[seq]?.at ?? null, keepalive: null };
     return seq;
   }
 
@@ -1336,6 +1479,8 @@ export class FleetSession {
   private async sendFor(
     player: FleetId,
     build: (ctx: RelaySignContext, sequenceNumber: number) => Promise<Uint8Array>,
+    /** Set for a keepalive: the actor and the place it names. */
+    keepalive?: { uuid: string; chunk: { x: string | number | bigint; y: string | number | bigint; z: string | number | bigint } },
   ): Promise<number> {
     const id = idString(player, 'the player gameTokenId');
     const row = this.rowOf(id);
@@ -1345,6 +1490,7 @@ export class FleetSession {
     }
     const generation = this.generation;
     const seq = this.sequence();
+    const sent = this.sentUnder[seq];
     let ctx = row.ctx;
     let datagram = await build(ctx, seq);
     // The id the player's sends name can change while a message is being signed (a carry with
@@ -1357,6 +1503,12 @@ export class FleetSession {
     if (!row.carried || this.table.get(row.gameTokenId) !== row) throw new FleetNotCarriedError(id);
     if (!this.transmit(generation, datagram)) {
       throw new CrowdyRealtimeError('the fleet session is not connected', { code: 'FLEET_NOT_CONNECTED', retryable: true });
+    }
+    if (keepalive && sent && this.sentUnder[seq] === sent) {
+      const place = { x: String(keepalive.chunk.x), y: String(keepalive.chunk.y), z: String(keepalive.chunk.z) };
+      sent.at = this.now();
+      sent.keepalive = { row, playerGameTokenId: ctx.gameTokenId.toString(), uuid: keepalive.uuid, chunk: place };
+      this.keepaliveLeft(row, keepalive.uuid, place, sent.at);
     }
     return seq;
   }
@@ -1379,13 +1531,24 @@ export class FleetSession {
     // A connection's first datagram is its capabilities: nothing else goes out before them.
     if (this.binding && type !== WireMessageType.CLIENT_CAPABILITIES) return false;
     const generation = this.generation;
-    const datagram = await build(ctx, this.sequence());
+    const seq = this.sequence();
+    const sent = this.sentUnder[seq];
+    const datagram = await build(ctx, seq);
     if (datagram[0] !== type) {
       throw new CrowdyError({ message: `built a message of type ${datagram[0]} where ${type} was meant` });
     }
     if (!this.socket || generation !== this.generation) return false;
     beforeTransmit?.();
-    return this.transmit(generation, datagram);
+    const left = this.transmit(generation, datagram);
+    if (left && type === WireMessageType.CLIENT_ACTOR_HEARTBEAT) {
+      // The session's own keepalive names no actor: a refusal of it is a keepalive's, and
+      // makes no report.
+      if (sent && this.sentUnder[seq] === sent) {
+        sent.at = this.now();
+        sent.keepalive = { row: null, playerGameTokenId: this.gameTokenId, uuid: '', chunk: { x: '0', y: '0', z: '0' } };
+      }
+    }
+    return left;
   }
 
   private sendCapabilities(): Promise<boolean> {
@@ -1433,6 +1596,7 @@ export class FleetSession {
       }
       await this.driveCarries(now);
       if (this.actorHeartbeatMs > 0) await this.heartbeatActors(now);
+      this.presencePass(this.now());
       // A replaced id's late frames arrive within seconds: a minute on, it can be forgotten.
       for (const [id, at] of this.replaced) if (now - at > 60_000) this.replaced.delete(id);
     } catch (error) {
@@ -1523,8 +1687,13 @@ export class FleetSession {
         if (now - actor.lastSentAt < this.actorHeartbeatMs) continue;
         actor.lastSentAt = now;
         try {
-          await this.sendFor(row.gameTokenId, (ctx, sequenceNumber) =>
-            serializeActorHeartbeat(ctx, { appId: this.appId, chunk: actor.chunk, uuid, sequenceNumber }),
+          // The same rate whatever the server answers: a refused keepalive is sent again at
+          // the next interval, never sooner and never dropped.
+          await this.sendFor(
+            row.gameTokenId,
+            (ctx, sequenceNumber) =>
+              serializeActorHeartbeat(ctx, { appId: this.appId, chunk: actor.chunk, uuid, sequenceNumber }),
+            { uuid, chunk: actor.chunk },
           );
         } catch (error) {
           if (!(error instanceof FleetNotCarriedError)) throw error;
@@ -1806,12 +1975,85 @@ export class FleetSession {
     if (announce) this.call(() => this.handlers.carryResult?.(result));
   }
 
-  /** A refusal of one send. It reaches the handler either way, with whether it was verified. */
+  /**
+   * A refusal of one send. It reaches the handler either way, with whether it was verified and
+   * whether it answers a keepalive. It changes no state of the session; a carried player's
+   * refused keepalive makes one not-present report, after the handler.
+   */
   private dispatchError(notification: Notified<'genericError'>, verified: boolean): void {
+    const unauthorized = (notification.errorCode as string) === 'UNAUTHORIZED';
     this.counters.errorsReceived += 1;
-    if ((notification.errorCode as string) === 'UNAUTHORIZED') this.counters.unauthorizedReceived += 1;
+    if (unauthorized) this.counters.unauthorizedReceived += 1;
     if (!verified) this.counters.unverifiedErrorsReceived += 1;
-    this.call(() => this.handlers.genericError?.(notification, verified));
+    const now = this.now();
+    const sent = this.sentUnder[notification.sequenceNumber & 0xff];
+    const answered = sent?.keepalive && now - sent.at <= KEEPALIVE_ANSWER_WAIT_MS ? sent : null;
+    if (answered && unauthorized) this.counters.keepalivesRefused += 1;
+    this.call(() => this.handlers.genericError?.(notification, verified, answered !== null));
+    if (answered && unauthorized) this.keepaliveRefused(answered, notification.sequenceNumber & 0xff, verified, now);
+  }
+
+  // ----- Not-present reports ------------------------------------------------------------------
+
+  /** A keepalive for one of `row`'s actors left. */
+  private keepaliveLeft(row: Player, uuid: string, chunk: { x: string; y: string; z: string }, now: number): void {
+    const standing = row.notPresent.get(uuid);
+    if (!standing) return;
+    if (!sameChunk(standing.report.chunk, chunk)) {
+      this.endReport(standing, 'moved');
+      return;
+    }
+    standing.lastKeepaliveAt = now;
+    if (standing.unansweredSince === 0) standing.unansweredSince = now;
+  }
+
+  /** That keepalive was refused `UNAUTHORIZED`: the report stands, or is made. */
+  private keepaliveRefused(sent: SentUnder, sequence: number, verified: boolean, now: number): void {
+    const keepalive = sent.keepalive;
+    // A fleet session reports only what the realtime server signed, and only for a player's
+    // actor: its own keepalive names none.
+    if (!keepalive?.row || !keepalive.uuid || !verified) return;
+    const row = keepalive.row;
+    if (this.table.get(row.gameTokenId) !== row) return;
+    const standing = row.notPresent.get(keepalive.uuid);
+    if (standing && sameChunk(standing.report.chunk, keepalive.chunk)) {
+      standing.unansweredSince = 0; // answered, and refused again: it stands
+      return;
+    }
+    if (standing) this.endReport(standing, 'moved');
+    // The first report needs a sequence number that only this keepalive can have used in the
+    // last 3 seconds: the number is one byte shared by everything the session sends.
+    if (sent.previousAt !== null && now - sent.previousAt <= KEEPALIVE_ANSWER_WAIT_MS) return;
+    if (this.standing.size >= MAX_NOT_PRESENT_REPORTS) return;
+    const report: ActorNotPresent = {
+      uuid: keepalive.uuid,
+      chunk: { ...keepalive.chunk },
+      sequence,
+      verified,
+      playerGameTokenId: keepalive.playerGameTokenId,
+    };
+    const made: Standing = { row, report, lastKeepaliveAt: sent.at, unansweredSince: 0 };
+    row.notPresent.set(keepalive.uuid, made);
+    this.standing.add(made);
+    this.counters.notPresentReports += 1;
+    this.call(() => this.handlers.notPresent?.({ ...report, chunk: { ...report.chunk } }));
+  }
+
+  private endReport(standing: Standing, end: NotPresentEnd): void {
+    if (!this.standing.delete(standing)) return;
+    if (standing.row.notPresent.get(standing.report.uuid) === standing) standing.row.notPresent.delete(standing.report.uuid);
+    const report = { ...standing.report, chunk: { ...standing.report.chunk } };
+    this.call(() => this.handlers.notPresentEnded?.(report, end));
+  }
+
+  /** End the reports whose keepalive was accepted, whose keepalives stopped, or whose player is gone. */
+  private presencePass(now: number): void {
+    for (const standing of [...this.standing]) {
+      if (this.table.get(standing.row.gameTokenId) !== standing.row) this.endReport(standing, 'stopped');
+      else if (standing.unansweredSince !== 0 && now - standing.unansweredSince >= KEEPALIVE_ANSWER_WAIT_MS) {
+        this.endReport(standing, 'accepted');
+      } else if (now - standing.lastKeepaliveAt >= NOT_PRESENT_IDLE_MS) this.endReport(standing, 'stopped');
+    }
   }
 
   /** A verified notification, and the players it is for. */
@@ -1885,6 +2127,10 @@ export class FleetSession {
       /* the error handler's own failure has nowhere to go */
     }
   }
+}
+
+function sameChunk(a: { x: string; y: string; z: string }, b: { x: string; y: string; z: string }): boolean {
+  return a.x === b.x && a.y === b.y && a.z === b.z;
 }
 
 function expiryOf(expiresAt: string | null | undefined): number | null {

@@ -142,8 +142,19 @@ test('RealtimeClient hands a relayed 140 to genericSpatial and any', async () =>
     ws.onopen?.({});
     ws.onmessage?.({ data: JSON.stringify({ type: 'ready', gameTokenId: '5' }) });
     await settle();
-    const frame = unsignedGenericSpatial(Uint8Array.from([9, 8]));
+    // 18.41.0: the relay verifies what it receives. A 140 with no HMAC of its own is a
+    // MESSAGE_BUNDLE_SIGNED member, so it arrives as one, signed with the player's token.
+    // (Until 18.41.0 this test sent the member alone, which no tier's realtime server does.)
+    const member = unsignedGenericSpatial(Uint8Array.from([9, 8]));
+    const body = Buffer.concat([
+      Buffer.from([wire.WireMessageType.MESSAGE_BUNDLE_SIGNED]),
+      Buffer.from([member.length & 0xff, member.length >> 8]),
+      Buffer.from(member),
+    ]);
+    const ctx = await wire.createSignContext(5n, 'a'.repeat(64));
+    const frame = Uint8Array.from(Buffer.concat([body, Buffer.from(await wire.signWithToken(ctx, body))]));
     ws.onmessage?.({ data: frame.buffer.slice(frame.byteOffset, frame.byteOffset + frame.byteLength) });
+    await realtime.settled();
     assert.equal(seen.generic.length, 1);
     assert.equal(seen.generic[0].payload, 'CQg=');
     assert.equal(seen.generic[0].uuid, 'h'.repeat(32));

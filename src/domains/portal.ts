@@ -65,6 +65,12 @@ export interface AppTokenResponse {
   /** Opaque app-scoped gameplay token. Send to the app's Game API as a Bearer. */
   token: string;
   gameTokenId: string;
+  /**
+   * The user the token signs in (decimal string): the id `users.me()` returns as `userId`
+   * (18.41.0, Application API v2.90.0). A game server that signs a player in reads the player
+   * here and needs no `me` call. Every call that answers an app token carries it.
+   */
+  userId: string;
   /** The app this token is confined to (decimal string). */
   appId: string;
   /** ISO-8601 UTC expiry. Refresh (same app) or re-portal before this. */
@@ -150,7 +156,7 @@ export class BrowserSessionPkceStore implements PkceStore {
 }
 
 const APP_TOKEN_FIELDS =
-  'token gameTokenId appId expiresAt applicationApiUrl applicationApiWsUrl gameApiUrl: applicationApiUrl gameApiWsUrl: applicationApiWsUrl discoveryUrl launchUrl runtimeGate { status reason }';
+  'token gameTokenId userId appId expiresAt applicationApiUrl applicationApiWsUrl gameApiUrl: applicationApiUrl gameApiWsUrl: applicationApiWsUrl discoveryUrl launchUrl runtimeGate { status reason }';
 
 const MintAppTokenDocument = parse(
   `mutation MintAppToken($input: MintAppTokenInput!) { mintAppToken(input: $input) { ${APP_TOKEN_FIELDS} } }`,

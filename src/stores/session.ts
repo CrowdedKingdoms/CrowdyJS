@@ -197,12 +197,13 @@ export class WorldSessionCore implements WorldSessionContext {
     if (this.unsubscribe || this.disposed) return;
     const handlers: UdpNotificationHandlers = {};
     for (const key of BUS_KEYS) {
-      (handlers as Record<string, unknown>)[key] = (notification: never) => {
+      // `rest` carries what a handler gets beside the notification (`genericError`'s `verified`).
+      (handlers as Record<string, unknown>)[key] = (notification: never, ...rest: never[]) => {
         const set = this.listeners.get(key);
         if (!set) return;
         for (const listener of [...set]) {
           try {
-            listener(notification);
+            (listener as (n: never, ...more: never[]) => void)(notification, ...rest);
           } catch {
             // One listener's throw must not starve the others.
           }

@@ -49,11 +49,26 @@ export interface NodeFleetSocketOptions {
   sendBufferSize?: number;
 }
 
+/**
+ * A value of the server's address as an error message may show it. The address reaches a
+ * session through the caller (the answer of `openFleetSession`, which holds the fleet token
+ * beside it), so a field filled from the wrong one must not put a token into a message: a
+ * number is shown, an IP address is shown, and anything else is described.
+ */
+function shown(value: unknown): string {
+  if (typeof value === 'number') return String(value);
+  if (typeof value === 'string') {
+    if (/^(?:\d{1,3}\.){3}\d{1,3}$/.test(value) || (value.length <= 45 && /^[0-9a-fA-F:.]*:[0-9a-fA-F:.]*$/.test(value))) return value;
+    return `a string of ${value.length} characters`;
+  }
+  return value === null ? 'null' : `a value of type ${typeof value}`;
+}
+
 /** The address a session dials for `server`: IPv4 when it has one, IPv6 otherwise. */
 export function fleetServerAddress(server: FleetServer): { host: string; family: 4 | 6; port: number } {
   const port = server.clientPort;
   if (!Number.isInteger(port) || port <= 0 || port > 65535) {
-    throw new CrowdyError({ message: `the realtime server names no usable clientPort: ${String(port)}` });
+    throw new CrowdyError({ message: `the realtime server names no usable clientPort: ${shown(port)}` });
   }
   if (server.ip4) return { host: server.ip4, family: 4, port };
   if (server.ip6) return { host: server.ip6, family: 6, port };
@@ -133,7 +148,7 @@ export function nodeFleetSocket(options: NodeFleetSocketOptions = {}): FleetSock
         } catch {
           /* never opened */
         }
-        reject(new CrowdyError({ message: `could not open a UDP socket to ${host}:${port}`, cause: error }));
+        reject(new CrowdyError({ message: `could not open a UDP socket to ${shown(host)}, port ${port}`, cause: error }));
       };
       socket.once('error', failed);
       socket.connect(port, host, () => {

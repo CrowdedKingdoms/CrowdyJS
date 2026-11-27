@@ -4,6 +4,7 @@ import {
   CrowdyTimeoutError,
   playerFaultOf,
   retryAfterMsOf,
+  retryWaitMs,
   type CrowdyGraphQLErrorPayload,
 } from './errors.js';
 
@@ -30,6 +31,15 @@ export function isDroppedRead(error: unknown): boolean {
 
 /** The wait the API asked for before the next read (`extensions.retryAfterMs`), or 0. */
 export { retryAfterMsOf };
+
+/**
+ * How long to wait before reading again after a dropped read: the API's `retryAfterMs`, never
+ * below `floorMs` (the caller's own poll interval) and never more than the SDK waits on a
+ * server's hint (`MAX_RETRY_AFTER_WAIT_MS`, or `floorMs` when that is longer).
+ */
+export function droppedReadWaitMs(error: unknown, floorMs: number): number {
+  return Math.max(floorMs, retryWaitMs(retryAfterMsOf(error)));
+}
 
 function isBusy(value: unknown): boolean {
   const fault = playerFaultOf(value);

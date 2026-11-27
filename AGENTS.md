@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.40.1** (18.0.0 was published only as
+**Current package:** `package.json` is **18.41.0** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -29,6 +29,157 @@ directly. So, before adding a wrapper:
 - 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
+
+**18.41.0: a player's client checks what it receives; Application API v2.90.0; a refused
+keepalive (2026-11-27, #367 and the release pass on `release/18.41.0`).** It needs Application
+API v2.90.0 (every app-token answer selects `userId`), and realtime servers v0.51.0 for the
+not-present reports. First what #367 built, then what the release pass added.
+
+- **A player's own realtime client checks what it receives (OI-2026-11-26-005).** CrowdyJS
+  receives a player's notifications by two paths, and there is no Node UDP path for a player
+  (`FleetSession` is the only UDP socket).
+  - **The binary relay** (`BinaryRelayTransport`, `/realtime`): the Application API forwards
+    each datagram its UDP socket received, verbatim, so only the HMAC shows the realtime
+    server made a frame for this session. The transport reads every datagram with
+    `parsePlayerDatagram` (`src/binary-wire.ts`, exported) and the session's own context (the
+    app token and the `gameTokenId` of `ready`), one at a time in arrival order
+    (`inbound`, as `FleetSession` does; `settled()` waits for it). **Dropped:** a
+    `MESSAGE_BUNDLE_SIGNED` whose HMAC fails, whole (`hmacFailures`); a long-spatial
+    notification whose own HMAC fails (`hmacFailures`); a long-spatial notification with
+    `containsAuth` 0 outside a signed bundle (`unsigned`: the realtime servers sign every one
+    they send, on every tier); what cannot be read (`malformed`). **Still delivered, on
+    purpose:** an error frame (`[3][seq][code]`) and a channel notification (18, 36) outside a
+    signed bundle, because neither has room for an HMAC and a correct server sends them so
+    (every error frame to a player's session travels alone; a session whose capabilities have
+    not landed gets its channel notifications plain). Control frames and a fleet session's
+    frames are skipped. No option turns verification off: do not add one.
+    `parseRelayFrame` stays as it was (pure, verifies nothing) for tools and tests.
+  - **The GraphQL subscription** (`udpNotifications`): the Application API has already read
+    the datagram, so no signature reaches the client and the API is the trust boundary. The
+    one check that means anything there is the app.
+  - **Both paths: `wrongApp`.** `RealtimeClient.dispatch` drops a notification whose `appId`
+    is a number other than the subscribed app's, before the metrics, before
+    `resolvePending`, and before any handler. It is the rule the Application API applies
+    to the GraphQL subscription before it sends: no `appId` (a refusal, a channel message, a
+    connection event) passes, and an app id that is not a number judges nothing. So a player
+    whose session may stand in several apps is not given another app's state through a
+    client subscribed for this one, on either transport, which is what the GraphQL path
+    always did: one client for each app.
+  - **Refusals.** `genericError(notification, verified)`; `verified` is true only inside a
+    bundle the relay verified, which no server sends a player today, so it is false on both
+    paths. **Nothing in a player's client acts on `TOKEN_EXPIRED` or any other code:** a
+    refusal settles the awaited send with its sequence number (`resolvePending`, which the
+    first-send `UNAUTHORIZED` retry and the stores' per-send records hang from) and nothing
+    else. That stays so for an unverified refusal, because every refusal to a player is
+    unverified: withholding it would turn each refused `...AndWait` into a timeout. If a
+    later change makes the client act on a code (refresh, reconnect), gate it on `verified`.
+  - **Stats:** `client.realtime.receiveStats()` (`RealtimeReceiveStats`: `hmacFailures`,
+    `unsigned`, `malformed`, `wrongApp`, `errorsReceived`, `unauthorizedReceived`,
+    `unverifiedErrorsReceived`, `FleetSession`'s names). The transport reports drops through
+    `BinaryRelayCallbacks.onDropped`, so the counts outlive a relay that is rebuilt. A warning
+    at the first drop of a kind and at each doubling names the counter and the count only.
+  - **Tests:** `test/unit/player-connection-checks.test.mjs`. Its first half sends every
+    downlink fixture of `binary-wire-fixtures.json` in each form a server sends it (a signed
+    bundle, alone with its own HMAC, in a plain bundle) and gets the fixture's `expected`
+    back with nothing counted: that is the proof that nothing a server sends is dropped. Two
+    older tests changed: `channel-audio.test.mjs` awaits `settled()` (delivery is
+    asynchronous now), and `generic-spatial.test.mjs` sent a bare 140 with no HMAC, which is
+    the one case that is now dropped, so it sends it as the signed bundle member it is.
+    **Live:** the relay suites passed on dev from #367's branch before it merged (15 of
+    15, run by the operator).
+- **The embedded authoring index is ckx-sdk 0.15.0's, and a test fails a stale one
+  (OI-2026-11-26-010 item 6).** `test/unit/authoring-index-fresh.test.mjs`: every Rust path
+  `schema.gql` names (`Caller::Org`, `Hub::on_world`, `Caller::Developer`) is a symbol of the
+  index, the index's ckx-sdk is at least the newest one README.md and MIGRATION.md name, and
+  with `CROWDY_AUTHORING_INDEX_SOURCE=<compute-toolchain/browser-authoring-index.json>` the
+  bytes are the same. CI has no toolchain checkout, so the first two are what CI can know;
+  **a release sets the variable** (or runs `authoring-index:drift`). The gate is a unit test
+  because `/scripts/` and `/.github/` are the code owner's.
+  `live-coding-analysis.test.mjs` pins the symbol count and the content hash: they move with
+  the index.
+- **`managedPlayers.settings` selects `fleetSessionsEnabled`, `maxFleetSessions` and
+  `maxFleetPlayers`** (it needs Application API v2.89.0 now, v2.85.0 before), and
+  **`exec.orgComputeCeiling(orgId)`** wraps the read of v2.88.0 (OI-2026-11-25-006;
+  `setOrgComputeCeiling` is on `sdk-audience.test.mjs`'s list). Tests:
+  `test/unit/org-compute-ceiling.test.mjs`.
+- **The 18.40.1 rule, applied to the rest of `src/`.** Changed: `callAs`'s `player`
+  (`notAPlayerId`), the gateway URL in three `CrowdyExecError`s (`gatewayName`: scheme, host
+  and port only; `ExecConnection.open` / `openAsServer` take the URL beside a connect token),
+  a WebSocket constructor's own error in `dialOnce` (it names the URL with `?token=`, so it
+  is replaced and not kept as the cause), and a fleet server's `clientPort` and address
+  (`shown`). Left: counts, lengths, limits and constants; file paths, node types, mod and
+  build ids, revision ids; a numeric argument that sits beside no token (`voxel.x`,
+  `frameId`, `maxDistance`); the server's own text (`CrowdyHttpError`'s body, a gateway's
+  close reason, a build log); `portal.ts`'s endpoint (a configured origin, and a code
+  owner's file). **`dialOnce`'s cause** was the WebSocket's error event, whose target is the
+  socket whose URL ends in the connect token: the release pass made it an `Error` with the
+  event's text and the token taken out (`socketFailureText`). **A message or a cause the SDK
+  builds never carries a token or a URL that holds one.** Tests:
+  `test/unit/error-messages-no-values.test.mjs`. CrowdyCPP 0.95 makes the same checks on its
+  `Connection` (its `unsigned` is `unsignedNotifications`); keep the cases the same when
+  either side changes.
+
+**The release pass (2026-11-27).** `schema.gql` is cks-game-api `dev`'s at 3aabc3d1
+(`dev/v2.90.0`), by `schema:sync:local`. What it wraps of v2.90.0, and the rest:
+
+- **`userId` on every app-token answer** (`AppTokenResponse.userId`, `APP_TOKEN_FIELDS` in
+  `src/domains/portal.ts`, a code owner's file: the PR carries the security review). One
+  field list serves `mintAppToken`, `exchangePortalCode`, `refreshAppToken` (both forms),
+  `exchangeManagedPlayerAssertion` and `signInWithMinecraft`. **The floor rises, the
+  repository's way:** a release selects what the Application API it was built against has
+  and needs that API or newer (the README's compatibility table), so these calls need
+  v2.90.0 where they needed v2.85.0. Nothing selects the field conditionally: a GraphQL
+  document cannot, and a retry without it would double every sign-in against an old API.
+- **`managedPlayers.deleteMany(orgId, externalIds)`** wraps `deleteManagedPlayers`: 1 to 100
+  ids (`MANAGED_PLAYERS_DELETE_MAX`, refused locally with a count and no id), each answered
+  `DELETED`, `NOT_FOUND` or `LEGAL_HOLD`. It sits where `delete` sits and takes what `delete`
+  takes: an org admin's session or an org token, so it has no `assertOrganizationServer`
+  (Studio calls the single delete from a page).
+- **`refreshFleetSession`'s `currentServer`** is `FleetCurrentServerInput` (`ip4` or `ip6`,
+  exactly one). `fleetCurrentServer(server)` picks `ip4` when there is one, as
+  `fleetServerAddress` picks what the session dials; `fleetSessions.refresh` passes every
+  `currentServer` through it, and `FleetSession.refreshInput()` names the address it
+  connected to. An `ip6` needs v2.90.0; an `ip4` is what v2.89.0 took.
+- **`retryWaitMs` / `MAX_RETRY_AFTER_WAIT_MS` (30 s, CrowdyCPP's `kMaxRetryAfterWaitMs`).**
+  The platform's `retryAfterMs` now comes from its queue (200 ms to 10 s). Every wait the SDK
+  makes on a server's hint goes through it: `droppedReadWaitMs` (`src/dropped-read.ts`: the
+  Studio controller's two waits and `exec.waitForModBuild`) and the kit runtime's
+  `budget.hold`; `CrowdyExecError.retryAfterMs` is bounded too. `retryAfterMsOf` and
+  `platformBusyOf` return what the server sent. A new wait on a server's number goes through
+  `retryWaitMs`.
+- **A refused keepalive (realtime servers v0.51.0).** From v0.51.0 a keepalive (26) is
+  accepted only where the player's actor update would be; elsewhere each is answered
+  `[3][seq][7]`, unsigned to a player's session and inside a fleet session's signed bundle.
+  - **A player's client sends no keepalive at all:** `client.udp` has no heartbeat send, and
+    World Stores (`keyframeEveryMs`) and the kit's `SpectatorHeartbeat` keep an actor present
+    with actor updates, at a fixed rate whatever the server answers. `host.heartbeat` is a
+    GraphQL presence call. So nothing applies on the relay or the GraphQL path, and
+    `UdpNotificationHandlers` has no `notPresent`. If a keepalive send is ever added to
+    `client.udp`, give it CrowdyCPP `Connection`'s reports.
+  - **`FleetSession`** sends them (`heartbeatActors` every `actorHeartbeatMs`, and
+    `sendHeartbeat`). It already kept its rate and changed no state on a refusal; it handed
+    `genericError` one refusal every 2 seconds for each actor. Now `sentUnder[256]` holds the
+    last message sent under each sequence number (cleared in `open()`: a new connection),
+    `dispatchError` passes `keepalive` as `genericError`'s third argument, and a **verified**
+    `UNAUTHORIZED` for a carried player's keepalive makes one `ActorNotPresent`
+    (`handlers.notPresent`, `fleet.notPresent(player, uuid)`), which ends once
+    (`notPresentEnded`): `accepted` (`KEEPALIVE_ANSWER_WAIT_MS`, 3 s, with no refusal),
+    `moved` (the next keepalive or update names another chunk), `stopped`
+    (`NOT_PRESENT_IDLE_MS`, 30 s, without a keepalive; `forgetActor`; the row gone). The
+    first report needs a sequence number only that keepalive used in the last 3 seconds, so
+    a session above about 85 messages a second makes none (`keepalivesRefused` still
+    counts). Names and rules are CrowdyCPP 0.95's (`notPresent`, `notPresentEnded`,
+    `ActorNotPresent`, `keepalivesRefused`, `notPresentReports`); its `NotPresentEnd` enum is
+    a string union here, and its `GenericError::keepalive` is the handler's third argument.
+    Tests: `test/unit/fleet-not-present.test.mjs`.
+- **The gates the release ran:** the unit suite once with
+  `CROWDY_AUTHORING_INDEX_SOURCE=../cks-game-api/compute-toolchain/browser-authoring-index.json`
+  (no drift at 3aabc3d1; the host catalog neither). Before #367 merged, the operator ran the
+  live relay suites on dev from its branch (15 of 15) and the live fleet suite with the hub
+  step against realtime servers v0.51.0 (16 pass, 1 skipped).
+- **To publish:** merge the release PR into `dev`, tag the merge commit `dev/v18.41.0`
+  (`18.41.0-dev.1` on `@dev`) once Application API v2.90.0 is on the dev tier; test and prod
+  follow their Application API with `promote.mjs` and their own tags.
 
 **18.40.1: an id that is not a number is described in the error and never shown (2026-11-27).**
 `idString` (`src/fleet/session.ts`) and `int64` (`src/fleet-wire.ts`) ended their `RangeError`
@@ -64,11 +215,10 @@ servers v0.50.3). Four parts:
   that opened a session refreshes and closes it (another of the same organization gets `NOT_FOUND`
   / `false`). Readers: `orgTokenRequiredOf`, `fleetSessionLimitOf`, `fleetSessionNotFoundOf`,
   `platformBusyOf` (`retryAfterMsOf` moved from `dropped-read.ts` to `errors.ts`, one reader).
-  **`OrgManagedPlayerSettings.graphql` does not select `fleetSessionsEnabled` / `maxFleetSessions`
-  / `maxFleetPlayers` on purpose:** selecting them makes `managedPlayers.settings` need
-  v2.89.0, and 18.40.0 keeps every existing call at 18.39.0's v2.85.0. Test and prod have
-  v2.89.1 since 2026-11-26, so a later release may select them; its README compatibility row
-  then says v2.89.0 or later for the whole release.
+  **18.40.0's `OrgManagedPlayerSettings.graphql` did not select `fleetSessionsEnabled` /
+  `maxFleetSessions` / `maxFleetPlayers`,** to keep every existing call at 18.39.0's v2.85.0.
+  18.41.0 selects them, so
+  `managedPlayers.settings` needs v2.89.0 there.
 - **The hub server role** (`src/domains/exec.ts`): `ExecConnection.callAs` / `callAsRaw` (client
   frame `0x05`, `rid:u32 player:u64 …`), `openAsServer`, `isServer`; refused locally `Denied` on any
   other connection, because a gateway closes one that sends the frame. `player` is the user id
@@ -172,9 +322,9 @@ repo that compares `schema.gql` with the Application API's: `npm run check:schem
 generated types with the committed copy, and the copy against a sibling is a `cmp` by hand
 (or the no-change result of `schema:sync:local`). The live suite's last run before the release
 was on dev against realtime servers v0.50.3: 16 pass, 0 fail, 1 skipped (the release pass did
-not run it, and it has not run on test or prod). **The embedded browser authoring index is still
-ckx-sdk 0.14.0's;** cks-game-api `dev` has 0.15.0's (with `Caller::Org`), `authoring-index:drift`
-says so, no CI gate does, and the release did not move it. To publish: merge #362 into `dev`,
+not run it, and it has not run on test or prod). **18.40.0 shipped the embedded browser authoring
+index of ckx-sdk 0.14.0** while cks-game-api `dev` had 0.15.0's (with `Caller::Org`); the next
+release embeds 0.15.0's and adds the test that fails a stale one. To publish: merge #362 into `dev`,
 then tag the merge commit `dev/v18.40.0` (`18.40.0-dev.1` on `@dev`); test and prod follow with
 `promote.mjs` and their own tags.
 

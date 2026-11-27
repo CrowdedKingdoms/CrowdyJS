@@ -1,0 +1,11 @@
+mutation DeleteManagedPlayers($input: DeleteManagedPlayersInput!) {
+  deleteManagedPlayers(input: $input) {
+    deleted
+    notFound
+    held
+    players {
+      externalId
+      outcome
+    }
+  }
+}

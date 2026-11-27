@@ -1372,6 +1372,8 @@ export type AppTokenResponse = {
   runtimeGate: Maybe<AppRuntimeGate>;
   /** Opaque app-scoped gameplay token. Send to the target app's Application API as `Authorization: Bearer <token>` (and in the realtime `connectionParams`). Do NOT send it to the Management API for anything other than `me`/`refreshAppToken`. */
   token: Scalars['String']['output'];
+  /** The user the token signs in (BigInt as a decimal string): the id `me` returns as userId. A game server that signs a player in with mintManagedPlayerToken reads the player here and needs no `me` call. Every field that answers an app token carries it: mintAppToken, refreshAppToken, mintManagedPlayerToken, exchangeManagedPlayerAssertion, exchangePortalCode and signInWithMinecraft. */
+  userId: Scalars['BigInt']['output'];
 };
 
 /** End-of-month egress projection for one shared app from linear extrapolation of calendar-month usage so far. */
@@ -3913,6 +3915,27 @@ export type DeleteGridResponse = {
   gridId: Maybe<Scalars['BigInt']['output']>;
 };
 
+/** The players of one organization to delete in one call. */
+export type DeleteManagedPlayersInput = {
+  /** The ids your organization knows the players by: 1 to 100 of them, each 1 to 256 characters. One sent twice is deleted once. */
+  externalIds: Array<Scalars['String']['input']>;
+  /** The organization (an org token's own, if one is used). */
+  orgId: Scalars['BigInt']['input'];
+};
+
+/** What deleteManagedPlayers did: a count of each outcome, and every player in the order sent. */
+export type DeleteManagedPlayersResult = {
+  __typename?: 'DeleteManagedPlayersResult';
+  /** Players this call deleted. */
+  deleted: Scalars['Int']['output'];
+  /** Players a legal hold covers, which were kept as they were. Zero when none is held. */
+  held: Scalars['Int']['output'];
+  /** External ids the organization has no managed player for. */
+  notFound: Scalars['Int']['output'];
+  /** Each externalId sent, once, in the order it first appeared, with its outcome. */
+  players: Array<ManagedPlayerDeletionResult>;
+};
+
 /** Everything this API knows about whether an address can be emailed, and why. */
 export type EmailDeliverability = {
   __typename?: 'EmailDeliverability';
@@ -4453,6 +4476,16 @@ export type FileSafetyReportInput = {
   reportedActorUuid?: InputMaybe<Scalars['String']['input']>;
   /** The player reported. */
   reportedUserId: Scalars['BigInt']['input'];
+};
+
+/** The realtime server a fleet session is connected to, named by the address the session connected to and its port. Give ip4 or ip6, the one the session connected to. Giving both, or neither, is refused BAD_REQUEST. */
+export type FleetCurrentServerInput = {
+  /** The server's `clientPort`, 1 to 65535. */
+  clientPort: Scalars['Int']['input'];
+  /** The server's `ip4` as openFleetSession or refreshFleetSession returned it, when the session connected over IPv4. Dotted decimal, such as 203.0.113.10. */
+  ip4?: InputMaybe<Scalars['String']['input']>;
+  /** The server's `ip6` as openFleetSession or refreshFleetSession returned it, when the session connected over IPv6. An IPv6 address with no zone, brackets or port, such as 2001:db8::10. */
+  ip6?: InputMaybe<Scalars['String']['input']>;
 };
 
 /** A fleet session: one realtime session an organization's game server opens for itself, in which it carries the players who are on it. A player still signs in once, when they join (mintManagedPlayerToken); moving to another of the organization's servers is that server starting to carry them, with no call to this API. The session's token never goes to a player's device. */
@@ -5416,6 +5449,25 @@ export type ManagedPlayer = {
   userId: Scalars['BigInt']['output'];
 };
 
+/** What deleteManagedPlayers did with one player. */
+export enum ManagedPlayerDeletion {
+  /** The player is deleted: its sessions are ended, its externalId and gamertag are removed, and its content is erased within minutes. */
+  Deleted = 'DELETED',
+  /** A legal hold covers the player or the organization, or an open or escalated safety report about the player set one. The player is kept as it was: disable it with updateManagedPlayer. */
+  LegalHold = 'LEGAL_HOLD',
+  /** The organization has no managed player with that externalId. Nothing changed. */
+  NotFound = 'NOT_FOUND'
+}
+
+/** One player of a deleteManagedPlayers call, and what was done. */
+export type ManagedPlayerDeletionResult = {
+  __typename?: 'ManagedPlayerDeletionResult';
+  /** The externalId as it was sent. */
+  externalId: Scalars['String']['output'];
+  /** DELETED, NOT_FOUND or LEGAL_HOLD. */
+  outcome: ManagedPlayerDeletion;
+};
+
 export type ManagedPlayerSpecInput = {
   /** The id your organization knows the player by. */
   externalId: Scalars['String']['input'];
@@ -5627,6 +5679,8 @@ export type Mutation = {
   deleteGrid: DeleteGridResponse;
   /** Delete a managed player, as an account deletion is: its sessions end, its externalId and gamertag are removed, and its player-side content is erased within minutes (Crowdy Studio projects, libraries and agent sessions, mods, what the app’s ck-exec hubs hold of it, actors, avatars and saved state, access grants, communication settings, contacts and blocks, grid claims, team and channel memberships). Usage and billing records stay; world edits stay, under the account’s now anonymous id; recorded inputs age out with the input log’s retention. Refused with LEGAL_HOLD while a legal hold covers the player or the organization, and an open or escalated safety report about the player sets one first: disable it instead (updateManagedPlayer), which keeps everything. Signing the same external id in again creates a new player. False when there was no such player. An org token with players:manage, or an org admin with manage_players. */
   deleteManagedPlayer: Scalars['Boolean']['output'];
+  /** Delete up to 100 managed players in one call. Each is deleted as deleteManagedPlayer deletes one: its sessions end, its externalId and gamertag are removed, and its player-side content is erased within minutes. The answer names every externalId sent with its outcome: DELETED, NOT_FOUND when the organization has no such player, or LEGAL_HOLD when a legal hold covers the player or the organization (an open or escalated safety report about a player sets one first). A held player is kept as it was and the others are still deleted, so read the outcomes: the call succeeds when some players are held. Deleting writes the same table a new player's first sign-in does and takes its turn with them, so a busy moment answers PLATFORM_BUSY with extensions.retryAfterMs and has deleted nothing: send the same call again after that wait. A call is safe to send again: a player already deleted answers NOT_FOUND. An org token with players:manage, or an org admin with manage_players. */
+  deleteManagedPlayers: DeleteManagedPlayersResult;
   /** DESTRUCTIVE self-service: deletes the authenticated caller's OWN account. Every session, app token, realtime connection and ck-exec socket ends; the email, password, gamertag and profile state are removed from the account; and its player-side content is erased within minutes: Crowdy Studio projects, libraries and agent sessions, mods, what the apps' ck-exec hubs hold of it, actors, avatars and saved state, access grants, communication settings, contacts and blocks, grid claims, and team and channel memberships. An open or escalated safety report about the account puts it under a legal hold first: the account still closes, but its content and identity are kept until the report is resolved. Wallet, billing, usage, audit and legal records stay, and so does everything the account owns as a developer (organizations, apps, published games); world edits stay, under the account's now anonymous id; recorded inputs age out with the input log's retention. Acts only on the caller (no target argument). Requires a valid token. */
   deleteMyAccount: Scalars['Boolean']['output'];
   /** Deletes an organization role. Requires the 'manage_members' permission on the role's org (super admins bypass). DESTRUCTIVE: removes the role and unassigns it from all members. Returns false if the role does not exist. */
@@ -6426,6 +6480,11 @@ export type MutationDeleteGridArgs = {
 export type MutationDeleteManagedPlayerArgs = {
   externalId: Scalars['String']['input'];
   orgId: Scalars['BigInt']['input'];
+};
+
+
+export type MutationDeleteManagedPlayersArgs = {
+  input: DeleteManagedPlayersInput;
 };
 
 
@@ -10451,8 +10510,8 @@ export type RecordPlayerAgeInput = {
 export type RefreshFleetSessionInput = {
   /** The app the session is in (BigInt as a decimal string). */
   appId: Scalars['BigInt']['input'];
-  /** The realtime server the session is connected to (the ip4 and clientPort it was given). When that server still serves the app the session stays on it. Leave it out, or name one that no longer serves, and the answer names a new server to connect to: use that after a realtime server told the session to move. */
-  currentServer?: InputMaybe<CurrentServerInput>;
+  /** The realtime server the session is connected to: the ip4 or the ip6 it was given, and the clientPort. When that server still serves the app the session stays on it. Leave it out, or name one that no longer serves, and the answer names a new server to connect to: use that after a realtime server told the session to move. An address that is not a valid IPv4 or IPv6 address is refused BAD_REQUEST, and the session is left as it was. */
+  currentServer?: InputMaybe<FleetCurrentServerInput>;
   /** The session's gameTokenId, from openFleetSession. */
   gameTokenId: Scalars['BigInt']['input'];
 };
