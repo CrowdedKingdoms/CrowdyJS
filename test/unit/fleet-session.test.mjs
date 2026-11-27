@@ -355,6 +355,35 @@ test('each refusal of a carry reads as itself and leaves the player not carried'
   assert.equal(h.sentOfType(49).length, 0);
 });
 
+test('a token given where an id belongs is refused and never shown in the error', async () => {
+  // Messages are logged. A game server that passes a player's token, or the fleet token, where
+  // the game token id belongs must not find the token in what it logs.
+  const h = harness();
+  await h.connect();
+  const attempts = [
+    () => h.fleet.carry({ token: PLAYER_TOKEN, gameTokenId: PLAYER_TOKEN }),
+    () => h.fleet.carry({ token: PLAYER_TOKEN, gameTokenId: String(PLAYER_ID), replaces: FLEET_TOKEN }),
+    () => h.fleet.release(PLAYER_TOKEN),
+    async () => h.fleet.carries(FLEET_TOKEN),
+    () => h.fleet.sendActorUpdate(PLAYER_TOKEN, { chunk: { x: 1, y: 2, z: 3 }, uuid: UUID, state: 'AA==' }),
+  ];
+  for (const attempt of attempts) {
+    await assert.rejects(attempt, (error) => {
+      assert.ok(error instanceof RangeError);
+      assert.match(error.message, /must be a whole 64-bit number, and was a string of 64 characters$/);
+      for (const secret of [PLAYER_TOKEN, FLEET_TOKEN]) {
+        assert.ok(!error.message.includes(secret));
+        assert.ok(!String(error.stack).includes(secret));
+      }
+      return true;
+    });
+  }
+  await assert.rejects(h.fleet.release(1.5), /and was a number that is not a safe integer$/);
+  await assert.rejects(h.fleet.release(null), /and was null$/);
+  assert.equal(h.sentOfType(49).length, 0);
+  assert.equal(h.sentOfType(50).length, 0);
+});
+
 test('carries are paced under 64 a second, first sends and retries together', async () => {
   const h = harness();
   await h.connect();
