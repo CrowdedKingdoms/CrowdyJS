@@ -4,7 +4,7 @@ CrowdyJS is the browser-first TypeScript SDK for **Crowded Kingdoms**. It wraps
 **one GraphQL API** (management and game surfaces) and the UDP replication
 service (via that API's GraphQL UDP proxy).
 
-**Current package:** `package.json` is **18.40.0** (18.0.0 was published only as
+**Current package:** `package.json` is **18.40.1** (18.0.0 was published only as
 `18.0.0-dev.1`; 18.0.1 is the first 18.x meant to leave dev). Whether that is *published* is
 not answerable from this page, and the paragraph this replaces proved it: it read
 "nothing is published at that number yet" for a day after 15.1.0 shipped.
@@ -29,6 +29,15 @@ directly. So, before adding a wrapper:
 - 18.0.1 removed the last ones (MIGRATION.md lists them). A published release tag is never
   moved: a change after `dev/vX.Y.Z` shipped is a new version (operator, 2026-09-28). The per-release default origin
   (`src/default-origin.ts`) is unaffected: the operator chose to keep it.
+
+**18.40.1: an id that is not a number is described in the error and never shown (2026-11-27).**
+`idString` (`src/fleet/session.ts`) and `int64` (`src/fleet-wire.ts`) ended their `RangeError`
+with `String(id)`, so a token passed where a game token id belongs was in the message, and
+messages are logged. CrowdyPy's security review found the same line there first (CrowdyPy #161).
+Both now say what kind of value was given (`notAnId`, a private copy in each file: a new export
+would be a parity difference in CrowdyCPP and CrowdyPy). **A message built from a caller's value
+names its kind or its length, never the value**; the tests in `fleet-session.test.mjs` and
+`fleet-wire.test.mjs` hold a token against the message and the stack.
 
 **18.40.0: fleet sessions, for an organization's own game servers (2026-11-26, #362).** They need
 Application API v2.89.0 or later, realtime servers v0.50.3 and, for the hub connection, ck-exec

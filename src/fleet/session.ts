@@ -468,13 +468,24 @@ const CARRY_OUTCOMES: Record<number, FleetCarryOutcome> = {
   [FleetCarryStatus.SESSION_FULL]: 'sessionFull',
 };
 
+/**
+ * What was given where an id belongs, described and never shown: a token passed by mistake
+ * would otherwise be in the error's message, and messages are logged.
+ */
+function notAnId(id: unknown): string {
+  if (typeof id === 'string') return `a string of ${id.length} characters`;
+  if (typeof id === 'number') return Number.isFinite(id) ? 'a number that is not a safe integer' : 'a number that is not finite';
+  if (typeof id === 'bigint') return 'an integer outside the 64-bit range';
+  return id === null ? 'null' : `a value of type ${typeof id}`;
+}
+
 function idString(id: FleetId, what: string): string {
   try {
     if (typeof id === 'number' && !Number.isSafeInteger(id)) throw new RangeError();
     if (typeof id === 'string' && !/^-?\d+$/.test(id)) throw new RangeError();
     return BigInt(id).toString();
   } catch {
-    throw new RangeError(`${what} must be a whole 64-bit number: ${String(id)}`);
+    throw new RangeError(`${what} must be a whole 64-bit number, and was ${notAnId(id)}`);
   }
 }
 
