@@ -120,51 +120,89 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
-## Unreleased (18.41.0): a player's client checks what it receives
+## 18.41.0: a player's client checks what it receives, and Application API v2.90.0
 
-Most games need no change. A game on the binary relay reads the first point, and a test that
-matches an error message reads the seventh.
+This release needs Application API v2.90.0 or later, because every call that answers an app
+token now selects `userId`. Most games need no other change. Read the points that name what
+you use: the binary relay (1), a game server's fleet session (6, 7), tests that match an
+error message (9), and code that waits on `retryAfterMs` (8).
 
-- **The binary relay verifies what it receives.** With `realtime: { binaryTransport: true }`
-  the client checks each datagram's HMAC with the player's app token before a handler runs.
-  It drops a signed bundle or a spatial notification whose HMAC fails, and a spatial
-  notification that nothing signed. It still delivers channel messages, channel audio, and
-  refused sends, which have no field for a signature. The client drops nothing the
-  realtime servers send a player for the app the client subscribed for. Two things change
-  for your code: a notification reaches its handler after an asynchronous check (in arrival
-  order), and a test that feeds the relay an unsigned spatial notification must sign it. The
-  README's
-  [The client checks what it receives before a handler runs](README.md#the-client-checks-what-it-receives-before-a-handler-runs)
-  has the table.
-- **The client drops a notification of another app on both transports.** It drops and
-  counts a notification that names another app than the one you subscribed for. The
-  Application API already applied that rule to the GraphQL subscription, and the binary relay
-  now behaves the same. Run one client for each app, as before.
-- **`genericError` receives `(notification, verified)`.** `verified` is false for every
-  refusal today, because the realtime servers send a player's session each refusal alone and
-  unsigned. A refusal still rejects the awaited send whose sequence number it names, and
-  changes nothing else in the client.
-- **`client.realtime.receiveStats()`** returns `hmacFailures`, `unsigned`, `malformed`,
-  `wrongApp`, `errorsReceived`, `unauthorizedReceived`, and `unverifiedErrorsReceived`.
-  `parsePlayerDatagram(ctx, datagram)` is the reader the relay uses, exported with its types
-  `PlayerDatagram` and `PlayerInbound`. `parseRelayFrame` is unchanged and verifies nothing.
-- **`managedPlayers.settings(orgId)` reports the organization's fleet limits:**
-  `fleetSessionsEnabled`, `maxFleetSessions`, and `maxFleetPlayers`. The call now needs
-  Application API v2.89.0 or later; through 18.40.1 it needed v2.85.0. Every tier has run
-  v2.89.1 since November 26, 2026.
-- **`exec.orgComputeCeiling(orgId)`** is new: what each of the organization's apps may run in
-  one datacenter once the organization is funded (`maxInstances`, `maxReservedMb`), and
-  whether a Crowded Kingdoms operator set those numbers (`operatorSet`). It needs
-  `view_compute_diagnostics` on the organization and Application API v2.88.0 or later.
-- **Three kinds of error message no longer contain a value you passed.** `callAs` with a
-  `player` that is not a whole number says what kind of value it was given
-  (`and was a string of 64 characters`). A hub connection error names the gateway's scheme,
-  host, and port, and leaves out the path and the query. A fleet session's error about its
-  server's address shows a number or an IP address, and describes anything else. Change a
-  test that matched the old text.
-- **Crowdy Studio's editor knows ckx-sdk 0.15.0.** The embedded authoring index is the
-  compute toolchain's with ckx-sdk 0.15.0, so completion and hover offer `Caller::Org`,
-  `Call::org`, and `Call::player_or_org`.
+1. **The binary relay verifies what it receives.** With `realtime: { binaryTransport: true }`
+   the client checks each datagram's HMAC with the player's app token before a handler runs.
+   It drops a signed bundle or a spatial notification whose HMAC fails, and a spatial
+   notification that nothing signed. It still delivers channel messages, channel audio, and
+   refused sends, which have no field for a signature. The client drops nothing the realtime
+   servers send a player for the app the client subscribed for. Two things change for your
+   code: a notification reaches its handler after an asynchronous check (in arrival order),
+   and a test that feeds the relay an unsigned spatial notification must sign it. The
+   README's
+   [The client checks what it receives before a handler runs](README.md#the-client-checks-what-it-receives-before-a-handler-runs)
+   has the table.
+2. **The client drops a notification of another app on both transports.** It drops and
+   counts a notification that names another app than the one you subscribed for. The
+   Application API already applied that rule to the GraphQL subscription, and the binary
+   relay now behaves the same. Run one client for each app, as before.
+3. **`genericError` receives `(notification, verified)`.** `verified` is false for every
+   refusal today, because the realtime servers send a player's session each refusal alone
+   and unsigned. A refusal still rejects the awaited send whose sequence number it names,
+   and changes nothing else in the client. `client.realtime.receiveStats()` returns
+   `hmacFailures`, `unsigned`, `malformed`, `wrongApp`, `errorsReceived`,
+   `unauthorizedReceived`, and `unverifiedErrorsReceived`. `parsePlayerDatagram(ctx,
+   datagram)` is the reader the relay uses, exported with its types `PlayerDatagram` and
+   `PlayerInbound`. `parseRelayFrame` is unchanged and verifies nothing.
+4. **Every app-token answer carries `userId`.** `portal.mintAppToken`, `exchangeCode`,
+   `refresh`, `exchangeManagedPlayerAssertion`, and `signInWithMinecraft` return
+   `AppTokenResponse.userId`: the user the token signs in, as `users.me()` returns it. A
+   game server reads the player from the answer and makes no `me` call. These calls needed
+   Application API v2.85.0 through 18.40.1 and need v2.90.0 now: an earlier API refuses the
+   selection. Every tier gets v2.90.0 before this release reaches it.
+5. **`managedPlayers` gains two things.** `deleteMany(orgId, externalIds)` deletes 1 to 100
+   players in one call (Application API v2.90.0, the authorization `delete` takes) and
+   answers `deleted`, `notFound`, `held`, and each external id's outcome: `DELETED`,
+   `NOT_FOUND`, or `LEGAL_HOLD`. A held player is kept and does not fail the call.
+   `settings(orgId)` reports the organization's fleet limits: `fleetSessionsEnabled`,
+   `maxFleetSessions`, and `maxFleetPlayers` (Application API v2.89.0).
+6. **A fleet session reports a refused keepalive once.** Realtime servers from v0.51.0
+   answer a carried player's keepalive `UNAUTHORIZED` where the player has no access.
+   `FleetSession` calls `notPresent(report)` once for the player, the actor, and the place,
+   and `notPresentEnded(report, end)` once when that ends (`accepted`, `moved`, or
+   `stopped`). `genericError` still receives every refusal, with a third argument
+   `keepalive`. `fleet.notPresent(player, uuid)` reads the report, and `fleet.stats()` adds
+   `keepalivesRefused` and `notPresentReports`. The session keeps its keepalives at the same
+   rate and changes nothing else. Code that counted a carried player's refused keepalives
+   from `genericError` reads `keepalive` to tell them apart. The README's
+   [A refused keepalive is reported once](README.md#a-refused-keepalive-is-reported-once)
+   has the table. A player's own client sends no keepalive message, so nothing changes for
+   it.
+7. **A fleet refresh names an `ip4` or an `ip6`.** `FleetSession.refreshInput()` names the
+   address the session connected to: the server's `ip4`, or its `ip6` when it has no `ip4`.
+   Through 18.40.1 a session that connected over `ip6` named no server. Naming an `ip6`
+   needs Application API v2.90.0. `fleetSessions.refresh` sends exactly one address
+   (`fleetCurrentServer(server)`), so you can pass a session answer's whole `server`.
+8. **The SDK waits 30 seconds at most on a server's `retryAfterMs`.** The platform's hints
+   run from 200 ms to 10 seconds. `retryWaitMs(hint)` returns 0 for a hint of 0 or below,
+   the hint up to `MAX_RETRY_AFTER_WAIT_MS` (30,000), and 30,000 for anything longer. It
+   bounds the wait before a dropped build-status read is read again (Crowdy Studio's
+   deploys, `exec.waitForModBuild`) and the Game Kit's hold after a rate-limit refusal.
+   `CrowdyExecError.retryAfterMs` is bounded the same way. `platformBusyOf(err).retryAfterMs`
+   still holds what the API sent: pass it through `retryWaitMs` before you wait on it.
+9. **Four kinds of error no longer contain a value you passed.** `callAs` with a `player`
+   that is not a whole number says what kind of value it was given
+   (`and was a string of 64 characters`). A hub connection error names the gateway's scheme,
+   host, and port, and leaves out the path and the query. Its `cause` is an `Error` with the
+   socket event's text, with the connect token taken out; through 18.40.1 it was the event,
+   which holds the socket and its URL. A fleet session's error about its server's address
+   shows a number or an IP address, and describes anything else. Change a test that matched
+   the old text or read the event from `cause`.
+10. **`exec.orgComputeCeiling(orgId)`** is new: what each of the organization's apps may run
+    in one datacenter once the organization is funded (`maxInstances`, `maxReservedMb`), and
+    whether a Crowded Kingdoms operator set those numbers (`operatorSet`). It needs
+    `view_compute_diagnostics` on the organization and Application API v2.88.0 or later.
+11. **Crowdy Studio's editor knows ckx-sdk 0.15.0.** The embedded authoring index is the
+    compute toolchain's with ckx-sdk 0.15.0, so completion and hover offer `Caller::Org`,
+    `Call::org`, and `Call::player_or_org`.
+
+`schema.gql` and the generated types are the Application API's at v2.90.0.
 
 ## 18.40.1: a fleet session's error for a bad id no longer contains the value
 
