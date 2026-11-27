@@ -30,6 +30,7 @@ so it needs that Application API or newer; promote the Application API before th
 
 | CrowdyJS | Needs the Application API (ck-api) |
 | --- | --- |
+| 18.40.1 | as 18.40.0 |
 | 18.40.0 | as 18.39.0; `client.fleetSessions` and `exec.connectAsServer` need v2.89.0 or later (see [Game servers: fleet sessions](#game-servers-fleet-sessions)) |
 | 18.39.1 | as 18.39.0 |
 | 18.39.0 | v2.85.0 or later (selects `applicationApiUrl`, `applicationApiWsUrl` and `platformConfig`'s `sharedApplicationApi*`; the `gameApi*` names stay as deprecated aliases until January 1, 2027) |

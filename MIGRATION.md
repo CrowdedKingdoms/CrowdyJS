@@ -120,6 +120,21 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## 18.40.1: a fleet session's error for a bad id no longer contains the value
+
+Your code needs no change. Update a game server that runs a fleet session.
+
+- **What changed.** `FleetSession` and the `fleet-wire` helpers refuse an id that is not a whole
+  64-bit number with a `RangeError`. In 18.40.0 the error's message ended with the value that
+  was passed. A game server that passed a player's token or the fleet token where a
+  `gameTokenId` belongs would have written the token to wherever it logs errors.
+- **Now** the message says what kind of value was given and nothing of it:
+  `the player gameTokenId must be a whole 64-bit number, and was a string of 64 characters`.
+- **What you do:** update to 18.40.1. If your logs from 18.40.0 hold a `RangeError` that ends
+  with a 64-character value, treat that token as exposed: a player's app token expires within
+  30 minutes, and a fleet session ends when you call `fleetSessions.close`.
+- Code that matched the old message's ending needs the new text. The error's type is unchanged.
+
 ## 18.40.0: fleet sessions for an organization's game servers
 
 Your code needs no change, and nothing here changes a client that does not use it. This
