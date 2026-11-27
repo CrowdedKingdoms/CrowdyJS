@@ -103,6 +103,17 @@ export type FleetId = string | bigint | number;
 const INT64_MIN = -(1n << 63n);
 const INT64_MAX = (1n << 63n) - 1n;
 
+/**
+ * What was given where an id belongs, described and never shown: a token passed by mistake
+ * would otherwise be in the error's message, and messages are logged.
+ */
+function notAnId(id: unknown): string {
+  if (typeof id === 'string') return `a string of ${id.length} characters`;
+  if (typeof id === 'number') return Number.isFinite(id) ? 'a number that is not a safe integer' : 'a number that is not finite';
+  if (typeof id === 'bigint') return 'an integer outside the 64-bit range';
+  return id === null ? 'null' : `a value of type ${typeof id}`;
+}
+
 /** `id` as the 64-bit integer the wire carries. */
 function int64(id: FleetId, what: string): bigint {
   let value: bigint;
@@ -111,10 +122,10 @@ function int64(id: FleetId, what: string): bigint {
     if (typeof id === 'string' && !/^-?\d+$/.test(id)) throw new RangeError();
     value = BigInt(id);
   } catch {
-    throw new RangeError(`${what} must be a whole 64-bit number: ${String(id)}`);
+    throw new RangeError(`${what} must be a whole 64-bit number, and was ${notAnId(id)}`);
   }
   if (value < INT64_MIN || value > INT64_MAX) {
-    throw new RangeError(`${what} must be a whole 64-bit number: ${String(id)}`);
+    throw new RangeError(`${what} must be a whole 64-bit number, and was an integer outside the 64-bit range`);
   }
   return value;
 }
