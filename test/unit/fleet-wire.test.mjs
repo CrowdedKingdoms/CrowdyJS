@@ -241,6 +241,15 @@ test('FLEET_RELEASE (50) names the player under the fleet id', async () => {
   const built = await fleetWire.serializeFleetRelease(fleet, { appId: 7, playerGameTokenId: PLAYER_ID, sequenceNumber: 2 });
   assert.equal(hex(built), GOLDEN.release);
   await assert.rejects(fleetWire.serializeFleetRelease(fleet, { appId: 7, playerGameTokenId: 'nobody' }), RangeError);
+  // What was given is described and never shown: a token passed as an id is not in the message.
+  await assert.rejects(
+    fleetWire.serializeFleetRelease(fleet, { appId: 7, playerGameTokenId: FLEET_TOKEN }),
+    (error) => error instanceof RangeError && !error.message.includes(FLEET_TOKEN) && /a string of 64 characters$/.test(error.message),
+  );
+  await assert.rejects(
+    fleetWire.serializeFleetRelease(fleet, { appId: 7, playerGameTokenId: '9223372036854775808' }),
+    /and was an integer outside the 64-bit range$/,
+  );
 });
 
 test('a carried player\u2019s message: the player\u2019s id in the tail, the HMAC keyed with the fleet token', async () => {
