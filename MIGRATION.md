@@ -120,6 +120,52 @@ super-admin's session). There is no SDK replacement.
 `dev`'s SDL after #417 merged (`npm run schema:sync:paths -- --schema <that schema.gql>`, then
 `npm run codegen`).
 
+## Unreleased (18.41.0): a player's client checks what it receives
+
+Most games need no change. A game on the binary relay reads the first point, and a test that
+matches an error message reads the seventh.
+
+- **The binary relay verifies what it receives.** With `realtime: { binaryTransport: true }`
+  the client checks each datagram's HMAC with the player's app token before a handler runs.
+  It drops a signed bundle or a spatial notification whose HMAC fails, and a spatial
+  notification that nothing signed. It still delivers channel messages, channel audio, and
+  refused sends, which have no field for a signature. The client drops nothing the
+  realtime servers send a player for the app the client subscribed for. Two things change
+  for your code: a notification reaches its handler after an asynchronous check (in arrival
+  order), and a test that feeds the relay an unsigned spatial notification must sign it. The
+  README's
+  [The client checks what it receives before a handler runs](README.md#the-client-checks-what-it-receives-before-a-handler-runs)
+  has the table.
+- **The client drops a notification of another app on both transports.** It drops and
+  counts a notification that names another app than the one you subscribed for. The
+  Application API already applied that rule to the GraphQL subscription, and the binary relay
+  now behaves the same. Run one client for each app, as before.
+- **`genericError` receives `(notification, verified)`.** `verified` is false for every
+  refusal today, because the realtime servers send a player's session each refusal alone and
+  unsigned. A refusal still rejects the awaited send whose sequence number it names, and
+  changes nothing else in the client.
+- **`client.realtime.receiveStats()`** returns `hmacFailures`, `unsigned`, `malformed`,
+  `wrongApp`, `errorsReceived`, `unauthorizedReceived`, and `unverifiedErrorsReceived`.
+  `parsePlayerDatagram(ctx, datagram)` is the reader the relay uses, exported with its types
+  `PlayerDatagram` and `PlayerInbound`. `parseRelayFrame` is unchanged and verifies nothing.
+- **`managedPlayers.settings(orgId)` reports the organization's fleet limits:**
+  `fleetSessionsEnabled`, `maxFleetSessions`, and `maxFleetPlayers`. The call now needs
+  Application API v2.89.0 or later; through 18.40.1 it needed v2.85.0. Every tier has run
+  v2.89.1 since November 26, 2026.
+- **`exec.orgComputeCeiling(orgId)`** is new: what each of the organization's apps may run in
+  one datacenter once the organization is funded (`maxInstances`, `maxReservedMb`), and
+  whether a Crowded Kingdoms operator set those numbers (`operatorSet`). It needs
+  `view_compute_diagnostics` on the organization and Application API v2.88.0 or later.
+- **Three kinds of error message no longer contain a value you passed.** `callAs` with a
+  `player` that is not a whole number says what kind of value it was given
+  (`and was a string of 64 characters`). A hub connection error names the gateway's scheme,
+  host, and port, and leaves out the path and the query. A fleet session's error about its
+  server's address shows a number or an IP address, and describes anything else. Change a
+  test that matched the old text.
+- **Crowdy Studio's editor knows ckx-sdk 0.15.0.** The embedded authoring index is the
+  compute toolchain's with ckx-sdk 0.15.0, so completion and hover offer `Caller::Org`,
+  `Call::org`, and `Call::player_or_org`.
+
 ## 18.40.1: a fleet session's error for a bad id no longer contains the value
 
 Your code needs no change. Update a game server that runs a fleet session.
