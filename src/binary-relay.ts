@@ -22,7 +22,8 @@ import {
   ClientCapability,
   createSignContext,
   packMessageBundle,
-  parseRelayFrame,
+  parsePlayerDatagram,
+  type PlayerInbound,
   RELAY_MAX_BUNDLE_MEMBER_BYTES,
   RELAY_MAX_BUNDLE_MEMBERS,
   RELAY_MAX_DATAGRAM_BYTES,
@@ -57,9 +58,26 @@ const UNAVAILABLE_AFTER_FAILURES = 2;
  */
 const UNAVAILABLE_AFTER_RECONNECT_FAILURES = 3;
 
+/** What the relay transport dropped from one datagram (see {@link parsePlayerDatagram}). */
+export interface BinaryRelayDropped {
+  /** Frames whose HMAC did not verify with the player's token. */
+  hmacFailures: number;
+  /** Frames that could not be read. */
+  malformed: number;
+  /** Long-spatial notifications that nothing signed. */
+  unsigned: number;
+}
+
 export interface BinaryRelayCallbacks {
   getToken(): string | null;
-  onNotification(notification: UdpNotification): void;
+  /**
+   * One notification the transport verified with the player's token, or one of the two
+   * kinds that carry no signature of their own (an error frame, a channel notification).
+   * `verified` says which: see {@link PlayerInbound.verified}.
+   */
+  onNotification(notification: UdpNotification, verified: boolean): void;
+  /** Frames of one datagram were dropped and never delivered. */
+  onDropped?(dropped: BinaryRelayDropped): void;
   onError(error: CrowdyRealtimeError): void;
   onStatus(
     status:
@@ -238,6 +256,8 @@ export class BinaryRelayTransport {
   private everReady = false;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private generation = 0;
+  /** The chain that reads downlink datagrams one at a time, in arrival order. */
+  private inbound: Promise<void> = Promise.resolve();
 
   // Outbound MESSAGE_BUNDLE (config.bundleSends). sendFrame() appends the
   // signed datagram it is given; the bundle leaves when the window timer fires,
@@ -500,16 +520,22 @@ export class BinaryRelayTransport {
       if (generation !== this.generation) return;
       const data: unknown = event.data;
       if (typeof data === 'string') {
-        this.handleControlFrame(data, generation).catch((error) => {
+        const handled = this.handleControlFrame(data, generation).catch((error) => {
           this.logger.error?.('Binary relay handshake failed', error);
         });
+        // A datagram that follows `ready` is read with the context `ready` makes.
+        this.inbound = this.inbound.then(() => handled);
         if (!sawReady) sawReady = true;
         return;
       }
       if (data instanceof ArrayBuffer) {
-        for (const notification of parseRelayFrame(new Uint8Array(data))) {
-          this.callbacks.onNotification(notification);
-        }
+        // Verified one at a time, so notifications reach the handlers in arrival order.
+        const datagram = new Uint8Array(data);
+        this.inbound = this.inbound
+          .then(() => this.receive(datagram, generation))
+          .catch((error) => {
+            this.logger.error?.('Binary relay datagram could not be read', error);
+          });
       }
     };
 
@@ -577,6 +603,44 @@ export class BinaryRelayTransport {
 
       this.maybeRetry(generation);
     };
+  }
+
+  /**
+   * Read one downlink datagram: verify it with the player's token, deliver what verified
+   * and the two kinds that carry no signature, and report what was dropped. The relay
+   * forwards what its UDP socket received, so only the HMAC shows that the realtime server
+   * made a frame for this session.
+   */
+  private async receive(datagram: Uint8Array, generation: number): Promise<void> {
+    if (generation !== this.generation) return;
+    const ctx = this.signContext;
+    if (!ctx) {
+      // Before `ready` there is no key, and the relay sends `ready` first: nothing a
+      // correct relay sends arrives here.
+      this.callbacks.onDropped?.({ hmacFailures: 0, malformed: 0, unsigned: 1 });
+      return;
+    }
+    const read = await parsePlayerDatagram(ctx, datagram);
+    if (generation !== this.generation) return;
+    if (read.hmacFailures + read.malformed + read.unsigned > 0) {
+      this.callbacks.onDropped?.({
+        hmacFailures: read.hmacFailures,
+        malformed: read.malformed,
+        unsigned: read.unsigned,
+      });
+    }
+    for (const message of read.messages as PlayerInbound[]) {
+      if (generation !== this.generation) return;
+      this.callbacks.onNotification(message.notification, message.verified);
+    }
+  }
+
+  /**
+   * Resolves once every datagram received so far has been verified and its notifications
+   * delivered. For tests and tools: a game has no need to wait.
+   */
+  settled(): Promise<void> {
+    return this.inbound;
   }
 
   private async handleControlFrame(
